@@ -1,0 +1,480 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Every gate below runs to completion and writes reports/quality/gate-*.json.
+  # An agent reads that file instead of scraping thirteen text formats.
+  static:
+    name: Static analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.18.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.9
+
+      - name: Restore Bun package cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Restore scanner image and rule cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          # Trivy's database and Semgrep's hash-verified rule pack live here, not
+          # in ~/.cache. The scanner images are saved here too: a `docker pull`
+          # per run costs more than restoring them.
+          path: .security-cache
+          key: security-cache-${{ runner.os }}-${{ hashFiles('scripts/security/config.ts') }}
+          restore-keys: security-cache-${{ runner.os }}-
+
+      - name: Warm pinned scanner images
+        run: bun run security:images actionlint
+
+      - name: Run static gate
+        run: bun scripts/quality/gate.ts ci --job static
+
+      - name: Upload static reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: static-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            reports/
+
+  unit:
+    name: Unit, component, and mutation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.18.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.9
+
+      - name: Restore Bun package cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Restore Playwright browser cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('bun.lock') }}
+
+      - name: Install browser runtimes
+        run: bunx playwright install --with-deps chromium
+
+      - name: Restore Stryker incremental state
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: reports/mutation/stryker-incremental.json
+          key: stryker-${{ runner.os }}-${{ github.sha }}
+          restore-keys: stryker-${{ runner.os }}-
+
+      - name: Run coverage and mutation gates
+        run: bun scripts/quality/gate.ts ci --job unit
+
+      - name: Upload unit reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unit-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            coverage/
+            reports/
+
+  build:
+    name: Build and bundle budget
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.18.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.9
+
+      - name: Restore Bun package cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run build gate
+        run: bun scripts/quality/gate.ts ci --job build
+
+      - name: Upload build reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            reports/
+
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      E2E_ALL_BROWSERS: '1'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.18.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.9
+
+      - name: Restore Bun package cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Restore Playwright browser cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-firefox-webkit-${{ hashFiles('bun.lock') }}
+
+      - name: Install browser runtimes
+        run: bunx playwright install --with-deps chromium firefox webkit
+
+      - name: Run end-to-end gate
+        run: bun scripts/quality/gate.ts ci --job e2e
+
+      - name: Upload e2e reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            playwright-report/
+            reports/
+            test-results/
+
+  security:
+    name: Security (blocking)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.18.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.9
+
+      - name: Restore Bun package cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Restore scanner image and rule cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          # Trivy's database and Semgrep's hash-verified rule pack live here, not
+          # in ~/.cache. The scanner images are saved here too: a `docker pull`
+          # per run costs more than restoring them.
+          path: .security-cache
+          key: security-cache-${{ runner.os }}-${{ hashFiles('scripts/security/config.ts') }}
+          restore-keys: security-cache-${{ runner.os }}-
+
+      - name: Warm pinned scanner images
+        run: bun run security:images gitleaks semgrep
+
+      # Gitleaks and Semgrep are code-derived and deterministic, so they block a
+      # merge. Trivy and ZAP depend on feeds that change without a code change;
+      # gating on them would contradict the determinism this repo promises. They
+      # run in nightly.yml instead.
+      - name: Run blocking security gate
+        run: bun scripts/quality/gate.ts ci --job security
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: security-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            reports/
+
+  self-test:
+    name: Gate self-test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24.18.0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.9
+
+      - name: Restore Bun package cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Restore scanner image and rule cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .security-cache
+          key: security-cache-${{ runner.os }}-${{ hashFiles('scripts/security/config.ts') }}
+          restore-keys: security-cache-${{ runner.os }}-
+
+      - name: Warm pinned scanner images
+        run: bun run security:images actionlint gitleaks semgrep
+
+      - name: Restore Playwright browser cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-firefox-${{ hashFiles('bun.lock') }}
+
+      - name: Install browser runtimes
+        run: bunx playwright install --with-deps chromium firefox
+
+      # Proves each gate rejects input it claims to reject. Without this, every
+      # threshold in the repository is an assertion nobody has tested.
+      - name: Run gate self-test
+        run: bun scripts/quality/gate.ts ci --job self-test
+
+      - name: Upload self-test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: self-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            reports/
+
+  all-green:
+    name: Quality and security
+    if: always()
+    needs: [static, unit, build, e2e, security, self-test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every gate to pass
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Gate results: $RESULTS"
+          for result in $RESULTS; do
+            if [[ "$result" != "success" ]]; then
+              echo "::error::A required gate did not succeed."
+              exit 1
+            fi
+          done
+
+  codex-review:
+    name: Codex advisory review
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    needs: all-green
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      review: ${{ steps.codex.outputs.final-message }}
+
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check Codex configuration
+        id: configured
+        shell: bash
+        env:
+          REVIEW_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [[ -n "$REVIEW_API_KEY" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Codex review is disabled until OPENAI_API_KEY is configured."
+          fi
+
+      - name: Prepare trusted review prompt
+        if: steps.configured.outputs.enabled == 'true'
+        id: prompt
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          prompt_path="$RUNNER_TEMP/codex-review-prompt.md"
+          git show "$BASE_SHA:.github/codex/prompts/review.md" > "$prompt_path"
+          {
+            echo
+            echo "Base commit: $BASE_SHA"
+            echo "Head commit: $HEAD_SHA"
+          } >> "$prompt_path"
+          echo "path=$prompt_path" >> "$GITHUB_OUTPUT"
+
+      - name: Run read-only Codex review
+        if: steps.configured.outputs.enabled == 'true'
+        id: codex
+        continue-on-error: true
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ steps.prompt.outputs.path }}
+          output-file: ${{ runner.temp }}/codex-review.md
+          codex-version: 0.144.6
+          model: gpt-5.6-sol
+          effort: high
+          codex-args: '["--ephemeral"]'
+          permission-profile: ':read-only'
+          safety-strategy: drop-sudo
+
+  post-codex-review:
+    name: Post Codex review
+    if: needs.codex-review.outputs.review != ''
+    needs: codex-review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Create or update advisory review comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          CODEX_REVIEW: ${{ needs.codex-review.outputs.review }}
+        with:
+          script: |
+            const marker = '<!-- codex-advisory-review -->';
+            const body = `${marker}\n## Codex advisory review\n\n${process.env.CODEX_REVIEW}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const previous = comments.find(
+              (comment) => comment.user?.login === 'github-actions[bot]' && comment.body?.includes(marker)
+            );
+
+            if (previous) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

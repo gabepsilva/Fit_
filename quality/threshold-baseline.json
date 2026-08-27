@@ -1,0 +1,16 @@
+{
+	"coverage.lines": 80,
+	"coverage.functions": 80,
+	"coverage.branches": 80,
+	"coverage.statements": 80,
+	"coverage.perFile": true,
+	"mutation.break": 80,
+	"mutation.low": 80,
+	"mutation.high": 90,
+	"bundle.clientCssBytes": 51200,
+	"bundle.clientJavaScriptBytes": 153600,
+	"bundle.largestAssetBytes": 76800,
+	"duplication.threshold": 5,
+	"duplication.maxClones": 0,
+	"suppressions.maxUnjustified": 0
+}

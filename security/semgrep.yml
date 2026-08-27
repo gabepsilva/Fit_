@@ -1,0 +1,18 @@
+rules:
+  - id: project.javascript.no-dynamic-code-execution
+    message: Dynamic code execution can turn untrusted data into executable code.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+  - id: project.javascript.no-disabled-tls-verification
+    message: TLS certificate verification must not be disabled.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern: '{..., rejectUnauthorized: false, ...}'
+  - id: project.browser.no-document-write
+    message: document.write can introduce script injection and destructive DOM replacement.
+    severity: ERROR
+    languages: [javascript, typescript]
+    pattern: document.write(...)

@@ -1,0 +1,17 @@
+{
+	"coverage": {
+		"lines": 80,
+		"functions": 80,
+		"branches": 80,
+		"statements": 80,
+		"perFile": true
+	},
+	"mutation": {
+		"break": 80,
+		"low": 80,
+		"high": 90
+	},
+	"duplication": {
+		"maxClones": 0
+	}
+}

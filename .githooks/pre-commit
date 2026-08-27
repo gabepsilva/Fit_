@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Ring 2: the cheapest checks, fail-fast, before anything is shared.
+# Installed by `bun install` via the prepare script (git config core.hooksPath .githooks).
+# Bypass deliberately with `git commit --no-verify` when mid-refactor.
+set -euo pipefail
+
+if ! command -v bun >/dev/null 2>&1; then
+	echo "pre-commit: bun not on PATH; skipping. Run 'bun run precommit' before pushing." >&2
+	exit 0
+fi
+
+exec bun run precommit
