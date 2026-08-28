@@ -34,6 +34,7 @@ add more maintenance and noise than useful protection.
 | Mutation coverage                 | Strong        | Reusable TypeScript logic must reach an 80 percent mutation score.            | Extend mutation targets when meaningful domain or server logic exists outside the current target.                                                                                                       |
 | Gate self-test                    | Strong        | Every gate is proven to reject the input it claims to reject.                 | Add a fixture with every new gate. A gate without one is unfinished work.                                                                                                                               |
 | Threshold governance              | Strong        | A ratchet blocks silenced diagnostics and a guard blocks lowered thresholds.  | No action now. These exist precisely so the bar cannot be moved instead of met.                                                                                                                         |
+| Runtime pinning                   | Strong        | `.tool-versions` drives mise and both CI workflows from one file.             | Add a `check:runtimes` gate only if someone actually runs the gates on an unpinned runtime.                                                                                                             |
 | E2E behavior                      | Partial       | A mobile viewport runs by default; CI adds iOS WebKit and desktop engines.    | Add only critical user flows as they are implemented; do not create speculative browser tests.                                                                                                          |
 | Accessibility                     | Partial       | Svelte diagnostics and runtime Axe checks cover exercised pages.              | Add scans for each new interactive page, modal, error state, and keyboard workflow.                                                                                                                     |
 | Dead code and dependencies        | Strong        | Knip rejects unused files, exports, and dependencies.                         | No action now. Configure new entry points only when Knip cannot discover a legitimate framework entry.                                                                                                  |
@@ -298,6 +299,26 @@ None are exploitable while the application has no authentication, user data, for
 **Current state:** Not configured. `main` on this repository accepts direct pushes, and no status check is required. The previous repository had these rules; they did not carry across when the project was re-initialized, because branch protection lives in GitHub settings rather than in the tree.
 
 **Required action:** Protect `main` by requiring a pull request and the `CI / Quality and security` check, then block force pushes and branch deletion. Until that is done, the gate is advisory on `main` in practice: CI reports a failure but nothing stops the push. Approval count can stay at zero, leaving the deterministic gate as the merge authority.
+
+### Runtime pinning
+
+**Purpose:** Ensure the same code produces the same verdict locally and in CI.
+
+**Implementation:** `.tool-versions` pins Node and Bun. `mise` reads it natively, and both
+workflows resolve their versions from the same file through `node-version-file` and
+`bun-version-file`, so a version cannot be raised in one place and forgotten in another.
+
+**Why Node is pinned in a Bun project:** Bun installs dependencies and executes the
+repository's own TypeScript. Every tool that decides a gate, including ESLint, Vitest,
+Vite, Playwright, Stryker, and `tsc`, ships a `#!/usr/bin/env node` shebang, and Bun honors
+shebangs unless `--bun` is passed. The gates therefore run under Node.
+
+**Current limit:** Nothing enforces the pin at install time. `package.json` declares
+`engines`, but Bun does not act on it: with `engine-strict=true` set and an impossible
+`engines.bun` of `>=99.0.0`, `bun install` still succeeds. The `engines` field is accurate
+documentation that other tools honor, not a guarantee. A contributor who does not use a
+version manager can still run the gates on the wrong runtime. Add a `check:runtimes` gate,
+with a self-test fixture, if that ever happens in practice.
 
 ### Suppression ratchet
 

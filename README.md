@@ -7,9 +7,15 @@ deterministic, reviewable quality gates that run before application features are
 
 ## Requirements
 
-- Bun 1.3.9
+- Bun and Node at the versions in `.tool-versions`
 - Docker with a running daemon
 - Chromium, installed through Playwright
+
+`.tool-versions` is the single source of truth for both runtimes. `mise` reads it
+directly, and both CI workflows resolve their versions from it, so local and hosted runs
+cannot drift apart. Bun installs dependencies and runs the project's own TypeScript, but
+every tool that decides whether a gate passes ships a `#!/usr/bin/env node` shebang and
+therefore executes under Node, which is why the Node version is pinned too.
 
 ```bash
 bun install --frozen-lockfile
