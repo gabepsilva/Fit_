@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ProgressBar from '$lib/ui/ProgressBar.svelte';
+
 	let {
 		label,
 		value,
@@ -14,8 +16,6 @@
 		invert?: boolean;
 	} = $props();
 
-	const pct = $derived(target > 0 ? Math.min(100, (value / target) * 100) : 0);
-	const barStyle = $derived(`width: ${pct}%`);
 	// Deliberately not a pass/fail: a note, only once it is clearly off.
 	const note = $derived(
 		invert
@@ -34,7 +34,5 @@
 		<span>{label}</span>
 		<span class="tabular text-muted-foreground">{reading}</span>
 	</div>
-	<div class="bg-secondary mt-1 h-1.5 overflow-hidden rounded-full">
-		<div class="bg-primary h-full rounded-full" style={barStyle}></div>
-	</div>
+	<ProgressBar {value} {target} class="mt-1" />
 </li>

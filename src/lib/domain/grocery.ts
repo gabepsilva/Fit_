@@ -1,11 +1,41 @@
 import { FOOD_BY_ID } from './foods';
-import { groceryAisle, RECIPE_BY_ID } from './recipes';
+import { RECIPE_BY_ID } from './recipes';
 import type { PlannedMeal } from './types';
+
+/** The aisles, in the order they are walked. A grocery list sorts by this. */
+const AISLES = [
+	'Produce',
+	'Meat, fish & alternatives',
+	'Dairy',
+	'Grains & bakery',
+	'Pantry',
+	'Drinks',
+	'Packaged',
+	'Other'
+] as const;
+
+export type Aisle = (typeof AISLES)[number];
+
+const AISLE_BY_CATEGORY: Record<string, Aisle> = {
+	produce: 'Produce',
+	protein: 'Meat, fish & alternatives',
+	dairy: 'Dairy',
+	grain: 'Grains & bakery',
+	fat: 'Pantry',
+	condiment: 'Pantry',
+	drink: 'Drinks',
+	packaged: 'Packaged'
+};
+
+/** A catalog food's category is a kitchen word; an aisle is a shop word. */
+export function groceryAisle(category: string): Aisle {
+	return AISLE_BY_CATEGORY[category] ?? 'Other';
+}
 
 export type GroceryItem = {
 	foodId: string;
 	name: string;
-	aisle: string;
+	aisle: Aisle;
 	servings: number;
 	servingLabel: string;
 	inPantry: boolean;
@@ -34,18 +64,8 @@ export function buildGrocery(plan: PlannedMeal[], pantry: string[]): GroceryItem
 			inPantry: pantry.includes(foodId)
 		});
 	}
-	const aisleOrder = [
-		'Produce',
-		'Meat, fish & alternatives',
-		'Dairy',
-		'Grains & bakery',
-		'Pantry',
-		'Drinks',
-		'Packaged',
-		'Other'
-	];
 	items.sort((a, b) => {
-		const d = aisleOrder.indexOf(a.aisle) - aisleOrder.indexOf(b.aisle);
+		const d = AISLES.indexOf(a.aisle) - AISLES.indexOf(b.aisle);
 		return d !== 0 ? d : a.name.localeCompare(b.name);
 	});
 	return items;

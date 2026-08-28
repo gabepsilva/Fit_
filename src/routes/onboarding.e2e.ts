@@ -53,6 +53,13 @@ test.describe('once onboarded', () => {
 		expect(results.violations).toEqual([]);
 	});
 
+	test('names each destination in the browser tab', async ({ page }) => {
+		await expect(page).toHaveTitle('Today · Fit_');
+		await page.getByRole('button', { name: 'Open menu' }).click();
+		await page.getByRole('link', { name: 'Plan' }).click();
+		await expect(page).toHaveTitle('Plan · Fit_');
+	});
+
 	test('navigates to progress and moves the current marker', async ({ page }) => {
 		await page.getByRole('button', { name: 'Open menu' }).click();
 		await page.getByRole('link', { name: 'Progress' }).click();

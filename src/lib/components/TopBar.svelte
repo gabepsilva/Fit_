@@ -2,6 +2,7 @@
 	import Camera from '@lucide/svelte/icons/camera';
 	import Menu from '@lucide/svelte/icons/menu';
 	import Plus from '@lucide/svelte/icons/plus';
+	import Button from '$lib/ui/Button.svelte';
 
 	/**
 	 * `menuOpen` is reported rather than owned: the shell holds the drawer state,
@@ -24,32 +25,22 @@
 	class="border-border bg-background/95 sticky top-0 z-40 border-b pt-[env(safe-area-inset-top)] backdrop-blur-sm"
 >
 	<div class="flex h-14 items-center gap-2 px-2">
-		<button
-			type="button"
+		<Button
+			variant="ghost"
+			size="icon"
 			onclick={onmenu}
 			aria-label="Open menu"
 			aria-haspopup="dialog"
 			aria-expanded={menuOpen}
-			class="text-foreground hover:bg-secondary flex size-11 items-center justify-center rounded-xl transition-transform duration-150 active:scale-[0.96]"
 		>
 			<Menu class="size-6" />
-		</button>
+		</Button>
 		<span class="font-display flex-1 text-xl tracking-tight">Fit_</span>
-		<button
-			type="button"
-			onclick={onphoto}
-			aria-label="Log from a photo"
-			class="text-foreground hover:bg-secondary flex size-11 items-center justify-center rounded-xl transition-transform duration-150 active:scale-[0.96]"
-		>
+		<Button variant="ghost" size="icon" onclick={onphoto} aria-label="Log from a photo">
 			<Camera class="size-6" />
-		</button>
-		<button
-			type="button"
-			onclick={onlog}
-			aria-label="Log food"
-			class="bg-primary text-primary-foreground flex size-11 items-center justify-center rounded-full shadow-[var(--shadow-border)] transition-transform duration-150 active:scale-[0.96]"
-		>
+		</Button>
+		<Button size="icon" class="shadow-border rounded-full" onclick={onlog} aria-label="Log food">
 			<Plus class="size-5" />
-		</button>
+		</Button>
 	</div>
 </header>

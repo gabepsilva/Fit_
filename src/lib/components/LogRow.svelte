@@ -22,7 +22,7 @@
 	const portion = $derived(`${item.servings} × ${item.servingLabel}`);
 </script>
 
-<li class="bg-card rounded-2xl px-3 py-2.5 shadow-[var(--shadow-border)]">
+<li class="bg-card rounded-2xl px-3 py-2.5 shadow-border">
 	<button
 		type="button"
 		onclick={ontoggle}

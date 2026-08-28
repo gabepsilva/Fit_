@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { emptyProfile } from '$lib/domain/demo-seed';
+import { emptyProfile } from '$lib/domain/profile';
 import { addDaysISO, todayISO, weekdayLong, weekdayShort } from '$lib/domain/utils';
 import { logUi } from '$lib/state/log-ui.svelte';
 import { tend } from '$lib/state/tend.svelte';

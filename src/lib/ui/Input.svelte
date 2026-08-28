@@ -13,7 +13,7 @@
 	bind:value
 	{...rest}
 	class={cn(
-		'border-input bg-card text-foreground placeholder:text-ink-subtle focus-visible:ring-ring flex h-11 w-full rounded-xl border px-3 text-base shadow-[var(--shadow-border)] outline-none focus-visible:ring-2',
+		'border-input bg-card text-foreground placeholder:text-ink-subtle focus-visible:ring-ring flex h-11 w-full rounded-xl border px-3 text-base shadow-border outline-none focus-visible:ring-2',
 		className
 	)}
 />

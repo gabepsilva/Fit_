@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { emptyProfile } from '$lib/domain/demo-seed';
+import { emptyProfile } from '$lib/domain/profile';
 import { logUi } from '$lib/state/log-ui.svelte';
 import { STORAGE_KEY, tend } from '$lib/state/tend.svelte';
 import AppShellHarness from './AppShellHarness.svelte';

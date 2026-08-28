@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { logFromFood, tend } from '$lib/state/tend.svelte';
+import { logFromFood } from '$lib/domain/log-entry';
+import { tend } from '$lib/state/tend.svelte';
 import LogRow from './LogRow.svelte';
 
 function item() {

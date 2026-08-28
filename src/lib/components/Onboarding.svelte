@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { emptyProfile } from '$lib/domain/demo-seed';
+	import { emptyProfile } from '$lib/domain/profile';
 	import type { Activity, Goal, Profile, Restriction } from '$lib/domain/types';
 	import { todayISO, uid } from '$lib/domain/utils';
 	import { tend } from '$lib/state/tend.svelte';
@@ -7,6 +7,7 @@
 	import Input from '$lib/ui/Input.svelte';
 	import Label from '$lib/ui/Label.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
+	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
 	const GOALS: { id: Goal; label: string; hint: string }[] = [
 		{ id: 'lose', label: 'Lose', hint: 'Gentle deficit' },
@@ -134,19 +135,16 @@
 				<p class="text-muted-foreground text-sm font-medium">Aim</p>
 				<div class="mt-2 grid grid-cols-2 gap-2">
 					{#each GOALS as g (g.id)}
-						<button
-							type="button"
-							aria-pressed={goal === g.id}
+						<ToggleButton
+							pressed={goal === g.id}
 							onclick={() => pickGoal(g.id)}
-							class="rounded-2xl px-3 py-3 text-left {goal === g.id
-								? 'bg-primary text-primary-foreground'
-								: 'bg-card'}"
+							class="bg-card rounded-2xl px-3 py-3 text-left"
 						>
 							<span class="block font-medium">{g.label}</span>
 							<span class="block text-xs {goal === g.id ? 'opacity-80' : 'text-muted-foreground'}">
 								{g.hint}
 							</span>
-						</button>
+						</ToggleButton>
 					{/each}
 				</div>
 			</div>
@@ -178,16 +176,14 @@
 				<p class="text-muted-foreground text-sm font-medium">Sex (for formula TDEE)</p>
 				<div class="mt-2 flex gap-2">
 					{#each SEXES as s (s)}
-						<button
-							type="button"
-							aria-pressed={sex === s}
+						<ToggleButton
+							pressed={sex === s}
+							tone="inverse"
 							onclick={() => (sex = s)}
-							class="h-10 flex-1 rounded-xl capitalize {sex === s
-								? 'bg-foreground text-background'
-								: 'bg-card'}"
+							class="bg-card h-10 flex-1 rounded-xl capitalize"
 						>
 							{s}
-						</button>
+						</ToggleButton>
 					{/each}
 				</div>
 			</div>
@@ -196,16 +192,14 @@
 				<p class="text-muted-foreground text-sm font-medium">Movement</p>
 				<div class="mt-2 grid grid-cols-2 gap-2">
 					{#each ACTIVITIES as a (a.id)}
-						<button
-							type="button"
-							aria-pressed={activity === a.id}
+						<ToggleButton
+							pressed={activity === a.id}
+							tone="inverse"
 							onclick={() => (activity = a.id)}
-							class="h-11 rounded-xl text-sm {activity === a.id
-								? 'bg-foreground text-background'
-								: 'bg-card'}"
+							class="bg-card h-11 rounded-xl text-sm"
 						>
 							{a.label}
-						</button>
+						</ToggleButton>
 					{/each}
 				</div>
 			</div>
@@ -215,16 +209,13 @@
 				<div class="mt-2 flex flex-wrap gap-2">
 					{#each RESTRICTIONS as r (r.id)}
 						{@const on = restrictions.includes(r.id)}
-						<button
-							type="button"
-							aria-pressed={on}
+						<ToggleButton
+							pressed={on}
 							onclick={() => toggleRestriction(r.id)}
-							class="h-9 rounded-full px-3 text-sm {on
-								? 'bg-primary text-primary-foreground'
-								: 'bg-card'}"
+							class="bg-card h-9 rounded-full px-3 text-sm"
 						>
 							{r.label}
-						</button>
+						</ToggleButton>
 					{/each}
 				</div>
 			</div>

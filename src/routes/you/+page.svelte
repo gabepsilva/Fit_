@@ -1,18 +1,21 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { resolve } from '$app/paths';
-	import { emptyProfile } from '$lib/domain/demo-seed';
 	import { exportCsv, exportJson, mfpRowsToLogItems, parseMfpCsv } from '$lib/domain/export-data';
+	import { emptyProfile } from '$lib/domain/profile';
 	import { computeTargets } from '$lib/domain/tdee';
 	import type { Injection } from '$lib/domain/types';
 	import { todayISO, uid } from '$lib/domain/utils';
 	import { tend } from '$lib/state/tend.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import { download } from '$lib/ui/download';
 	import Input from '$lib/ui/Input.svelte';
 	import Label from '$lib/ui/Label.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import Textarea from '$lib/ui/Textarea.svelte';
+	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
 	let wipeOpen = $state(false);
 	let mfp = $state('');
@@ -22,15 +25,6 @@
 
 	const profile = $derived(tend.profile);
 	const targets = $derived(profile ? computeTargets(profile) : null);
-
-	function download(filename: string, content: string, type: string) {
-		const url = URL.createObjectURL(new Blob([content], { type }));
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = filename;
-		a.click();
-		URL.revokeObjectURL(url);
-	}
 
 	function setGlp1(on: boolean) {
 		tend.patchActive((p) => ({
@@ -74,29 +68,25 @@
 	}
 </script>
 
+<svelte:head>
+	<title>You · Fit_</title>
+</svelte:head>
+
 {#if profile && targets}
 	<div class="flex flex-col gap-6 pb-10">
-		<header>
-			<p class="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
-				On this device
-			</p>
-			<h1 class="font-display mt-1 text-4xl tracking-tight">You</h1>
-		</header>
+		<PageHeader kicker="On this device" title="You" />
 
-		<section class="bg-card rounded-3xl p-4 shadow-[var(--shadow-border)]">
+		<section class="bg-card rounded-3xl p-4 shadow-border">
 			<h2 class="font-display text-xl tracking-tight">Household</h2>
 			<div class="mt-3 flex flex-wrap gap-2">
 				{#each tend.state.profiles as p (p.id)}
-					<button
-						type="button"
-						aria-pressed={p.id === profile.id}
+					<ToggleButton
+						pressed={p.id === profile.id}
 						onclick={() => tend.setActive(p.id)}
-						class="h-10 rounded-full px-4 text-sm {p.id === profile.id
-							? 'bg-primary text-primary-foreground'
-							: 'bg-secondary'}"
+						class="bg-secondary h-10 rounded-full px-4 text-sm"
 					>
 						{p.name}
-					</button>
+					</ToggleButton>
 				{/each}
 				<button
 					type="button"
@@ -111,7 +101,7 @@
 			</p>
 		</section>
 
-		<section class="bg-card rounded-3xl p-4 shadow-[var(--shadow-border)]">
+		<section class="bg-card rounded-3xl p-4 shadow-border">
 			<div class="flex items-start justify-between gap-3">
 				<div class="min-w-0">
 					<h2 class="font-display text-xl tracking-tight">GLP-1 mode</h2>
@@ -163,7 +153,7 @@
 			{/if}
 		</section>
 
-		<section class="bg-card rounded-3xl p-4 shadow-[var(--shadow-border)]">
+		<section class="bg-card rounded-3xl p-4 shadow-border">
 			<h2 class="font-display text-xl tracking-tight">Targets</h2>
 			<p class="text-muted-foreground mt-1 text-sm">
 				{targets.source === 'adaptive'
@@ -188,7 +178,7 @@
 			</a>
 		</section>
 
-		<section class="bg-card rounded-3xl p-4 shadow-[var(--shadow-border)]">
+		<section class="bg-card rounded-3xl p-4 shadow-border">
 			<h2 class="font-display text-xl tracking-tight">Privacy</h2>
 			<ul class="text-muted-foreground mt-3 flex flex-col gap-2 text-sm">
 				<li>No ad SDKs. No data brokers. No account required.</li>
@@ -217,7 +207,7 @@
 			</div>
 		</section>
 
-		<section class="bg-card rounded-3xl p-4 shadow-[var(--shadow-border)]">
+		<section class="bg-card rounded-3xl p-4 shadow-border">
 			<h2 class="font-display text-xl tracking-tight">Import from MyFitnessPal</h2>
 			<p class="text-muted-foreground mt-1 text-sm">
 				Paste a diary CSV. Rows land on their own dates as custom lines you can correct.

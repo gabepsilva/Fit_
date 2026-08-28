@@ -1,37 +1,7 @@
-import { FOOD_BY_ID, scaleFood } from './foods';
+import { logFromFood } from './log-entry';
+import { emptyProfile } from './profile';
 import type { LogItem, Meal, Profile, WeightEntry } from './types';
 import { addDaysISO, todayISO, uid } from './utils';
-
-type SeedEntry = {
-	date: string;
-	meal: Meal;
-	foodId: string;
-	servings: number;
-	source?: LogItem['source'];
-};
-
-function item({ date, meal, foodId, servings, source = 'manual' }: SeedEntry): LogItem {
-	const food = FOOD_BY_ID[foodId];
-	if (!food) throw new Error(`Seed references unknown food: ${foodId}`);
-	const scaled = scaleFood(food, servings);
-	return {
-		id: uid('l-'),
-		foodId,
-		date,
-		meal,
-		servings,
-		source,
-		name: scaled.name,
-		kcal: scaled.kcal,
-		protein: scaled.protein,
-		carbs: scaled.carbs,
-		fat: scaled.fat,
-		micros: scaled.micros,
-		provenance: scaled.provenance,
-		servingLabel: scaled.servingLabel,
-		brand: scaled.brand
-	};
-}
 
 type DayPlan = [Meal, string, number][];
 
@@ -98,7 +68,7 @@ function seedDay(date: string, dayIndex: number): LogItem[] {
 	// adaptive-TDEE regression look unnaturally clean.
 	const jitter = 0.9 + ((dayIndex * 17) % 7) * 0.02;
 	return plan.map(([meal, foodId, servings]) =>
-		item({
+		logFromFood({
 			date,
 			meal,
 			foodId,
@@ -133,24 +103,33 @@ export function buildAlexProfile(): Profile {
 		});
 	}
 
-	return {
+	return emptyProfile({
 		id: 'alex',
 		name: 'Alex',
 		goal: 'lose',
-		glp1: false,
 		sex: 'female',
 		age: 34,
 		heightCm: 168,
 		activity: 'light',
 		restrictions: ['nut-free'],
 		log,
-		weights,
-		injections: [],
-		calorieOverride: null,
-		proteinOverride: null,
-		fiberOverride: null
-	};
+		weights
+	});
 }
+
+/**
+ * The second plate in the household, seeded or empty. Both entry points state
+ * the same person, so the demographics live in one place.
+ */
+export const HOUSEHOLD_PARTNER = {
+	name: 'Jordan',
+	goal: 'maintain',
+	sex: 'male',
+	age: 36,
+	heightCm: 178,
+	activity: 'moderate',
+	restrictions: ['vegetarian']
+} as const satisfies Partial<Profile> & { name: string };
 
 /** Jordan eats the same vegetarian rotation every day — that is the point. */
 const JORDAN_DAY: [Meal, string, number, LogItem['source']][] = [
@@ -170,48 +149,18 @@ export function buildJordanProfile(): Profile {
 		if (ago === 4) continue;
 		const date = addDaysISO(end, -ago);
 		for (const [meal, foodId, servings, source] of JORDAN_DAY) {
-			log.push({ ...item({ date, meal, foodId, servings, source }) });
+			log.push(logFromFood({ date, meal, foodId, servings, source }));
 		}
 	}
-	return {
+	return emptyProfile({
+		...HOUSEHOLD_PARTNER,
 		id: 'jordan',
-		name: 'Jordan',
-		goal: 'maintain',
-		glp1: false,
-		sex: 'male',
-		age: 36,
-		heightCm: 178,
-		activity: 'moderate',
-		restrictions: ['vegetarian'],
+		restrictions: [...HOUSEHOLD_PARTNER.restrictions],
 		log,
 		weights: [
 			{ id: uid('w-'), date: addDaysISO(end, -10), kg: 81.2 },
 			{ id: uid('w-'), date: addDaysISO(end, -5), kg: 81.0 },
 			{ id: uid('w-'), date: end, kg: 80.8 }
-		],
-		injections: [],
-		calorieOverride: null,
-		proteinOverride: null,
-		fiberOverride: null
-	};
-}
-
-export function emptyProfile(partial: Partial<Profile> & { name: string }): Profile {
-	return {
-		id: uid('p-'),
-		goal: 'lose',
-		glp1: false,
-		sex: 'female',
-		age: 32,
-		heightCm: 168,
-		activity: 'light',
-		restrictions: [],
-		log: [],
-		weights: [],
-		injections: [],
-		calorieOverride: null,
-		proteinOverride: null,
-		fiberOverride: null,
-		...partial
-	};
+		]
+	});
 }

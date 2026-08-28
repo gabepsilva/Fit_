@@ -7,15 +7,8 @@ import {
 	PROVENANCE_LABEL,
 	scaleFood
 } from './foods';
-import { buildGrocery } from './grocery';
-import {
-	groceryAisle,
-	RECIPE_BY_ID,
-	RECIPES,
-	recipeFits,
-	recipeMacros,
-	type Recipe
-} from './recipes';
+import { buildGrocery, groceryAisle } from './grocery';
+import { RECIPE_BY_ID, RECIPES, recipeFits, recipeMacros, type Recipe } from './recipes';
 import type { Food, PlannedMeal } from './types';
 
 /** Look a fixture up loudly, so a catalog rename fails the test it belongs to. */
@@ -132,6 +125,15 @@ describe('recipeMacros', () => {
 			0
 		);
 		expect(recipeMacros(recipe).kcal).toBeCloseTo(total / recipe.servings, 0);
+	});
+
+	it('skips an ingredient the catalog no longer has, rather than counting it as zero-weight', () => {
+		const recipe = firstRecipe();
+		const withGhost: Recipe = {
+			...recipe,
+			ingredients: [...recipe.ingredients, { foodId: 'not-a-food', servings: 1 }]
+		};
+		expect(recipeMacros(withGhost)).toEqual(recipeMacros(recipe));
 	});
 });
 

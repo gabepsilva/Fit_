@@ -13,6 +13,6 @@
 	bind:value
 	{...rest}
 	class={cn(
-		'border-input bg-card text-foreground placeholder:text-ink-subtle focus-visible:ring-ring flex min-h-24 w-full rounded-2xl border px-3 py-3 text-base shadow-[var(--shadow-border)] outline-none focus-visible:ring-2',
+		'border-input bg-card text-foreground placeholder:text-ink-subtle focus-visible:ring-ring flex min-h-24 w-full rounded-2xl border px-3 py-3 text-base shadow-border outline-none focus-visible:ring-2',
 		className
 	)}></textarea>

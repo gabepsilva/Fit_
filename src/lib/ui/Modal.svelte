@@ -24,7 +24,7 @@
 		<Dialog.Overlay class="bg-foreground/30 fixed inset-0 z-50" />
 		<Dialog.Content
 			class={cn(
-				'bg-card text-card-foreground fixed top-1/2 left-1/2 z-50 w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-3xl p-5 shadow-[var(--shadow-border)] outline-none',
+				'bg-card text-card-foreground fixed top-1/2 left-1/2 z-50 w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-3xl p-5 shadow-border outline-none',
 				className
 			)}
 		>

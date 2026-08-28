@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { lastNDates, todayISO, weekdayShort } from '$lib/domain/utils';
 	import { cn } from '$lib/ui/cn';
+	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
 	let { logged, selected = $bindable() }: { logged: Set<string>; selected: string } = $props();
 
@@ -12,14 +13,10 @@
 	{#each days as iso (iso)}
 		{@const isSelected = iso === selected}
 		{@const has = logged.has(iso)}
-		<button
-			type="button"
-			aria-pressed={isSelected}
+		<ToggleButton
+			pressed={isSelected}
 			onclick={() => (selected = iso)}
-			class={cn(
-				'flex h-16 flex-1 flex-col items-center justify-center gap-1 rounded-2xl transition-colors duration-150',
-				isSelected ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground'
-			)}
+			class="bg-card text-foreground flex h-16 flex-1 flex-col items-center justify-center gap-1 rounded-2xl transition-colors duration-150"
 		>
 			<span class={cn('text-xs', isSelected ? 'opacity-80' : 'text-muted-foreground')}>
 				{iso === today ? 'Today' : weekdayShort(iso)}
@@ -36,6 +33,6 @@
 							: 'bg-border'
 				)}
 			></span>
-		</button>
+		</ToggleButton>
 	{/each}
 </div>

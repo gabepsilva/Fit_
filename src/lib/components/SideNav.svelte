@@ -35,7 +35,7 @@
 	<Dialog.Portal>
 		<Dialog.Overlay class="bg-foreground/25 fixed inset-0 z-50" />
 		<Dialog.Content
-			class="bg-card text-card-foreground fixed inset-y-0 left-0 z-50 flex w-[min(17rem,80vw)] flex-col rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-[var(--shadow-border)] outline-none"
+			class="bg-card text-card-foreground fixed inset-y-0 left-0 z-50 flex w-[min(17rem,80vw)] flex-col rounded-r-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-border outline-none"
 		>
 			<div class="flex h-14 items-center justify-between gap-2 px-4">
 				<Dialog.Title class="font-display text-xl tracking-tight">Fit_</Dialog.Title>

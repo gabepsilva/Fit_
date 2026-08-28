@@ -1,4 +1,5 @@
-import type { LogItem, Meal, Micros, Profile, TendState } from './types';
+import type { LogItem, Meal, Profile, TendState } from './types';
+import { MEALS, ZERO_MICROS } from './types';
 import { todayISO } from './utils';
 
 export function exportJson(state: TendState) {
@@ -13,50 +14,35 @@ export function exportJson(state: TendState) {
 	);
 }
 
+/**
+ * The exported columns, in order. Header and value sit together so a new
+ * column cannot land under the wrong heading.
+ */
+const CSV_COLUMNS: { header: string; value: (item: LogItem) => string | number }[] = [
+	{ header: 'date', value: (i) => i.date },
+	{ header: 'meal', value: (i) => i.meal },
+	{ header: 'name', value: (i) => i.name },
+	{ header: 'brand', value: (i) => i.brand ?? '' },
+	{ header: 'servings', value: (i) => i.servings },
+	{ header: 'serving_label', value: (i) => i.servingLabel },
+	{ header: 'kcal', value: (i) => i.kcal },
+	{ header: 'protein_g', value: (i) => i.protein },
+	{ header: 'carbs_g', value: (i) => i.carbs },
+	{ header: 'fat_g', value: (i) => i.fat },
+	{ header: 'fiber_g', value: (i) => i.micros.fiber },
+	{ header: 'sodium_mg', value: (i) => i.micros.sodium },
+	{ header: 'potassium_mg', value: (i) => i.micros.potassium },
+	{ header: 'iron_mg', value: (i) => i.micros.iron },
+	{ header: 'b12_mcg', value: (i) => i.micros.vitaminB12 },
+	{ header: 'provenance', value: (i) => i.provenance ?? '' },
+	{ header: 'source', value: (i) => i.source }
+];
+
 export function exportCsv(profile: Profile) {
-	const header = [
-		'date',
-		'meal',
-		'name',
-		'brand',
-		'servings',
-		'serving_label',
-		'kcal',
-		'protein_g',
-		'carbs_g',
-		'fat_g',
-		'fiber_g',
-		'sodium_mg',
-		'potassium_mg',
-		'iron_mg',
-		'b12_mcg',
-		'provenance',
-		'source'
-	];
 	const rows = [...profile.log]
 		.sort((a, b) => a.date.localeCompare(b.date) || a.meal.localeCompare(b.meal))
-		.map((i) =>
-			[
-				i.date,
-				i.meal,
-				csv(i.name),
-				csv(i.brand ?? ''),
-				i.servings,
-				csv(i.servingLabel),
-				i.kcal,
-				i.protein,
-				i.carbs,
-				i.fat,
-				i.micros.fiber,
-				i.micros.sodium,
-				i.micros.potassium,
-				i.micros.iron,
-				i.micros.vitaminB12,
-				i.provenance ?? '',
-				i.source
-			].join(',')
-		);
-	return [header.join(','), ...rows].join('\n');
+		.map((item) => CSV_COLUMNS.map((column) => csv(String(column.value(item)))).join(','));
+	return [CSV_COLUMNS.map((column) => column.header).join(','), ...rows].join('\n');
 }
 
 function csv(s: string) {
@@ -138,24 +124,6 @@ function splitCsv(line: string) {
 	return out;
 }
 
-const NO_MICROS: Micros = {
-	fiber: 0,
-	sugar: 0,
-	sodium: 0,
-	potassium: 0,
-	iron: 0,
-	calcium: 0,
-	magnesium: 0,
-	zinc: 0,
-	vitaminA: 0,
-	vitaminC: 0,
-	vitaminD: 0,
-	vitaminB12: 0,
-	folate: 0
-};
-
-const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
-
 /** How many imported rows are accepted in one paste. */
 export const MFP_IMPORT_LIMIT = 80;
 
@@ -173,7 +141,7 @@ export function mfpRowsToLogItems(
 		id: makeId(),
 		foodId: null,
 		date: r.date,
-		meal: (MEALS as string[]).includes(r.meal) ? (r.meal as Meal) : 'snack',
+		meal: MEALS.find((m): m is Meal => m === r.meal) ?? 'snack',
 		servings: 1,
 		source: 'manual',
 		name: r.name,
@@ -181,7 +149,7 @@ export function mfpRowsToLogItems(
 		protein: r.protein,
 		carbs: r.carbs,
 		fat: r.fat,
-		micros: { ...NO_MICROS },
+		micros: { ...ZERO_MICROS },
 		servingLabel: 'imported'
 	}));
 }

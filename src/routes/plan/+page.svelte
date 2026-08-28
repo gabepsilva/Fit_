@@ -2,14 +2,16 @@
 	import { toast } from 'svelte-sonner';
 	import { FOOD_BY_ID } from '$lib/domain/foods';
 	import { buildGrocery, type GroceryItem } from '$lib/domain/grocery';
+	import { logFromFood } from '$lib/domain/log-entry';
 	import { RECIPE_BY_ID, recipeMacros } from '$lib/domain/recipes';
+	import type { PlannedMealSlot } from '$lib/domain/types';
+	import { PLANNED_MEALS } from '$lib/domain/types';
 	import { addDaysISO, startOfWeek, todayISO, weekdayShort } from '$lib/domain/utils';
-	import { logFromFood, tend } from '$lib/state/tend.svelte';
+	import { tend } from '$lib/state/tend.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Checkbox from '$lib/ui/Checkbox.svelte';
-
-	type PlannedSlot = 'breakfast' | 'lunch' | 'dinner';
-	const SLOTS: PlannedSlot[] = ['breakfast', 'lunch', 'dinner'];
+	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
 	let tab = $state<'meals' | 'grocery'>('meals');
 
@@ -35,7 +37,7 @@
 		return out;
 	});
 
-	function logRecipe(recipeId: string, date: string, meal: PlannedSlot) {
+	function logRecipe(recipeId: string, date: string, meal: PlannedMealSlot) {
 		const recipe = RECIPE_BY_ID[recipeId];
 		if (!recipe) return;
 		// One person's share of the pot, not the whole recipe.
@@ -55,32 +57,27 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Plan · Fit_</title>
+</svelte:head>
+
 <div class="flex flex-col gap-5 pb-10">
-	<header>
-		<p class="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
-			Household table
-		</p>
-		<h1 class="font-display mt-1 text-4xl tracking-tight">Plan</h1>
-		<p class="text-muted-foreground mt-2 text-sm">
-			One list, {profiles.length}
-			{profiles.length === 1 ? 'person' : 'people'}{restrictions.length
-				? ` · honors ${restrictions.join(', ')}`
-				: ''}.
-		</p>
-	</header>
+	<PageHeader kicker="Household table" title="Plan">
+		One list, {profiles.length}
+		{profiles.length === 1 ? 'person' : 'people'}{restrictions.length
+			? ` · honors ${restrictions.join(', ')}`
+			: ''}.
+	</PageHeader>
 
 	<div class="bg-card flex gap-1 rounded-2xl p-1">
 		{#each ['meals', 'grocery'] as const as t (t)}
-			<button
-				type="button"
-				aria-pressed={tab === t}
+			<ToggleButton
+				pressed={tab === t}
 				onclick={() => (tab = t)}
-				class="h-10 flex-1 rounded-xl text-sm capitalize {tab === t
-					? 'bg-primary text-primary-foreground'
-					: 'text-muted-foreground'}"
+				class="text-muted-foreground h-10 flex-1 rounded-xl text-sm capitalize"
 			>
 				{t}
-			</button>
+			</ToggleButton>
 		{/each}
 	</div>
 
@@ -88,12 +85,12 @@
 		<Button variant="secondary" onclick={() => tend.generatePlan()}>Rebuild this week</Button>
 		<div class="flex flex-col gap-4">
 			{#each days as date (date)}
-				<section class="bg-card rounded-3xl p-4 shadow-[var(--shadow-border)]">
+				<section class="bg-card rounded-3xl p-4 shadow-border">
 					<h2 class="font-display text-lg tracking-tight">
 						{date === today ? 'Today' : weekdayShort(date)}
 					</h2>
 					<ul class="mt-3 flex flex-col gap-3">
-						{#each SLOTS as meal (meal)}
+						{#each PLANNED_MEALS as meal (meal)}
 							{@const slot = plan.find((p) => p.date === date && p.meal === meal)}
 							{@const recipe = slot ? RECIPE_BY_ID[slot.recipeId] : undefined}
 							<li class="bg-background rounded-2xl p-3">

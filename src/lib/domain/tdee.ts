@@ -1,5 +1,6 @@
 import type { Activity, Goal, LogItem, Profile, WeightEntry } from './types';
-import { addDaysISO, lastNDates, parseISODate, todayISO } from './utils';
+import { isGlp1 } from './profile';
+import { addDaysISO, lastNDates, parseISODate, startOfWeek, todayISO } from './utils';
 
 const ACTIVITY_FACTOR: Record<Activity, number> = {
 	sedentary: 1.2,
@@ -27,42 +28,50 @@ export function estimatedTdee(profile: Profile) {
 	return Math.round(mifflinStJeor(profile, kg) * ACTIVITY_FACTOR[profile.activity]);
 }
 
-function dayTotals(log: LogItem[], date: string) {
+/**
+ * A day's nutrition, all zero. The only place the tracked fields are listed:
+ * totals, the empty day and the rolling sum all start from here.
+ */
+function emptyDay() {
+	return {
+		kcal: 0,
+		protein: 0,
+		carbs: 0,
+		fat: 0,
+		fiber: 0,
+		sodium: 0,
+		potassium: 0,
+		iron: 0,
+		calcium: 0,
+		vitaminB12: 0,
+		vitaminD: 0,
+		magnesium: 0,
+		count: 0
+	};
+}
+
+export type DayNutrition = ReturnType<typeof emptyDay>;
+
+/** Null rather than zeroes for an unlogged day: the two must never read alike. */
+function dayTotals(log: LogItem[], date: string): DayNutrition | null {
 	const items = log.filter((i) => i.date === date);
 	if (!items.length) return null;
-	return items.reduce(
-		(acc, i) => {
-			acc.kcal += i.kcal;
-			acc.protein += i.protein;
-			acc.carbs += i.carbs;
-			acc.fat += i.fat;
-			acc.fiber += i.micros.fiber;
-			acc.sodium += i.micros.sodium;
-			acc.potassium += i.micros.potassium;
-			acc.iron += i.micros.iron;
-			acc.calcium += i.micros.calcium;
-			acc.vitaminB12 += i.micros.vitaminB12;
-			acc.vitaminD += i.micros.vitaminD;
-			acc.magnesium += i.micros.magnesium;
-			acc.count += 1;
-			return acc;
-		},
-		{
-			kcal: 0,
-			protein: 0,
-			carbs: 0,
-			fat: 0,
-			fiber: 0,
-			sodium: 0,
-			potassium: 0,
-			iron: 0,
-			calcium: 0,
-			vitaminB12: 0,
-			vitaminD: 0,
-			magnesium: 0,
-			count: 0
-		}
-	);
+	return items.reduce((acc, i) => {
+		acc.kcal += i.kcal;
+		acc.protein += i.protein;
+		acc.carbs += i.carbs;
+		acc.fat += i.fat;
+		acc.fiber += i.micros.fiber;
+		acc.sodium += i.micros.sodium;
+		acc.potassium += i.micros.potassium;
+		acc.iron += i.micros.iron;
+		acc.calcium += i.micros.calcium;
+		acc.vitaminB12 += i.micros.vitaminB12;
+		acc.vitaminD += i.micros.vitaminD;
+		acc.magnesium += i.micros.magnesium;
+		acc.count += 1;
+		return acc;
+	}, emptyDay());
 }
 
 function linearSlope(points: { x: number; y: number }[]) {
@@ -169,9 +178,9 @@ export type Targets = {
 export function computeTargets(profile: Profile): Targets {
 	const tdee = adaptiveTdee(profile);
 	const kg = latestWeight(profile.weights);
-	const proteinPerKg = profile.glp1 || profile.goal === 'glp1' ? 1.8 : 1.6;
+	const proteinPerKg = isGlp1(profile) ? 1.8 : 1.6;
 	const protein = profile.proteinOverride ?? Math.round(Math.max(80, proteinPerKg * kg));
-	const fiber = profile.fiberOverride ?? (profile.sex === 'male' ? 38 : 28);
+	const fiber = profile.fiberOverride ?? fiberTarget(profile);
 	const kcal =
 		profile.calorieOverride ?? Math.round(Math.max(1200, tdee.inferred + goalDelta(profile.goal)));
 	const fat = Math.round((kcal * 0.28) / 9);
@@ -187,59 +196,29 @@ export function computeTargets(profile: Profile): Targets {
 	};
 }
 
-export type DayNutrition = NonNullable<ReturnType<typeof dayTotals>>;
-
 export function nutritionForDay(log: LogItem[], date: string): DayNutrition {
-	return (
-		dayTotals(log, date) ?? {
-			kcal: 0,
-			protein: 0,
-			carbs: 0,
-			fat: 0,
-			fiber: 0,
-			sodium: 0,
-			potassium: 0,
-			iron: 0,
-			calcium: 0,
-			vitaminB12: 0,
-			vitaminD: 0,
-			magnesium: 0,
-			count: 0
-		}
-	);
+	return dayTotals(log, date) ?? emptyDay();
 }
 
+/**
+ * Averages over the days that were actually logged. An unlogged day is left
+ * out of the divisor rather than counted as a zero, so a quiet day never drags
+ * the week's average down.
+ */
 export function rollingAverages(log: LogItem[], days: number, end = todayISO()) {
 	const dates = lastNDates(days, end);
 	const logged = dates.map((d) => dayTotals(log, d)).filter((x): x is DayNutrition => x !== null);
-	const n = logged.length || 1;
-	const sum = logged.reduce(
-		(acc, d) => {
-			for (const k of Object.keys(acc) as (keyof DayNutrition)[]) {
-				acc[k] += d[k];
-			}
-			return acc;
-		},
-		{
-			kcal: 0,
-			protein: 0,
-			carbs: 0,
-			fat: 0,
-			fiber: 0,
-			sodium: 0,
-			potassium: 0,
-			iron: 0,
-			calcium: 0,
-			vitaminB12: 0,
-			vitaminD: 0,
-			magnesium: 0,
-			count: 0
+	const sum = logged.reduce((acc, d) => {
+		for (const k of Object.keys(acc) as (keyof DayNutrition)[]) {
+			acc[k] += d[k];
 		}
-	);
+		return acc;
+	}, emptyDay());
+	const divisor = logged.length || 1;
 	const avg = Object.fromEntries(
-		Object.entries(sum).map(([k, v]) => [k, k === 'count' ? v : v / (logged.length || 1)])
+		Object.entries(sum).map(([k, v]) => [k, k === 'count' ? v : v / divisor])
 	) as DayNutrition;
-	return { avg, loggedDays: logged.length, dates, n };
+	return { avg, loggedDays: logged.length, dates };
 }
 
 export function loggedDatesSet(log: LogItem[]) {
@@ -250,12 +229,7 @@ export function loggedDatesSet(log: LogItem[]) {
 export function calmWeeks(log: LogItem[], minDays = 4, end = todayISO()) {
 	const dates = new Set(log.map((i) => i.date));
 	if (!dates.size) return 0;
-	const earliest = [...dates].sort()[0] ?? end;
-	let cursor = earliest;
-	// align to Monday
-	const day = parseISODate(cursor).getDay();
-	const mondayOffset = day === 0 ? -6 : 1 - day;
-	cursor = addDaysISO(cursor, mondayOffset);
+	let cursor = startOfWeek([...dates].sort()[0] ?? end);
 	let count = 0;
 	while (cursor <= end) {
 		let n = 0;
@@ -268,10 +242,15 @@ export function calmWeeks(log: LogItem[], minDays = 4, end = todayISO()) {
 	return count;
 }
 
+/** The reference intake, before any override the profile carries. */
+function fiberTarget(profile: Pick<Profile, 'sex'>) {
+	return profile.sex === 'male' ? 38 : 28;
+}
+
 export function microTargets(profile: Profile) {
 	const female = profile.sex !== 'male';
 	return {
-		fiber: profile.sex === 'male' ? 38 : 28,
+		fiber: fiberTarget(profile),
 		sodium: 2300,
 		potassium: 3400,
 		iron: female ? 18 : 8,

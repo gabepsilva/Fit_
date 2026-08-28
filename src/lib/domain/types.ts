@@ -1,6 +1,14 @@
 export type Provenance = 'usda' | 'off' | 'lab' | 'brand' | 'community';
 
-export type Meal = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+/** Every meal a log entry can belong to, in the order the interface offers them. */
+export const MEALS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+
+export type Meal = (typeof MEALS)[number];
+
+/** The meals the week plan fills. Snacks are logged, never planned. */
+export const PLANNED_MEALS = ['breakfast', 'lunch', 'dinner'] as const satisfies readonly Meal[];
+
+export type PlannedMealSlot = (typeof PLANNED_MEALS)[number];
 
 export type Goal = 'lose' | 'maintain' | 'gain' | 'glp1';
 
@@ -30,6 +38,26 @@ export type Micros = {
 	vitaminD: number;
 	vitaminB12: number;
 	folate: number;
+};
+
+/**
+ * The zero of `Micros`. Every micronutrient is declared, so adding one to the
+ * type fails here until the new key has a value everywhere it is seeded.
+ */
+export const ZERO_MICROS: Micros = {
+	fiber: 0,
+	sugar: 0,
+	sodium: 0,
+	potassium: 0,
+	iron: 0,
+	calcium: 0,
+	magnesium: 0,
+	zinc: 0,
+	vitaminA: 0,
+	vitaminC: 0,
+	vitaminD: 0,
+	vitaminB12: 0,
+	folate: 0
 };
 
 export type Food = {
@@ -107,7 +135,7 @@ export type Profile = {
 
 export type PlannedMeal = {
 	date: string;
-	meal: Exclude<Meal, 'snack'>;
+	meal: PlannedMealSlot;
 	recipeId: string;
 	forProfileIds: string[];
 };

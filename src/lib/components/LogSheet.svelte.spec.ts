@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { emptyProfile } from '$lib/domain/demo-seed';
+import { emptyProfile } from '$lib/domain/profile';
 import { FOOD_BY_BARCODE } from '$lib/domain/foods';
 import { logUi } from '$lib/state/log-ui.svelte';
 import { tend } from '$lib/state/tend.svelte';
@@ -234,6 +234,25 @@ describe('LogSheet', () => {
 		await page.getByRole('button', { name: 'Increase' }).click();
 		await page.getByRole('button', { name: 'Add to today' }).click();
 		expect(add).toHaveBeenCalledWith([expect.objectContaining({ servings: 2.5 })]);
+	});
+
+	it('commits every matched item in one go', async () => {
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs, one banana');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add.mock.calls[0]?.[0]).toHaveLength(2);
+	});
+
+	it('puts the catalog search away when the match panel is closed again', async () => {
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('xyzzy nonexistent gruel');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await page.getByRole('button', { name: 'Match to catalog' }).click();
+		await expect.element(page.getByLabelText('Find a catalog match')).toBeInTheDocument();
+		await page.getByRole('button', { name: 'Match to catalog' }).click();
+		expect(document.body.textContent).not.toContain('Find a catalog match');
 	});
 
 	it('reports a single item in the singular', async () => {

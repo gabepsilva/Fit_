@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Dumbbell from '@lucide/svelte/icons/dumbbell';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 </script>
 
 <svelte:head>
@@ -7,15 +8,10 @@
 </svelte:head>
 
 <div class="flex flex-col gap-6 pb-10">
-	<header>
-		<p class="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
-			Movement, not penance
-		</p>
-		<h1 class="font-display mt-1 text-4xl tracking-tight">Exercise</h1>
-	</header>
+	<PageHeader kicker="Movement, not penance" title="Exercise" />
 
 	<section
-		class="bg-card flex flex-col items-center gap-3 rounded-3xl px-5 py-10 text-center shadow-[var(--shadow-border)]"
+		class="bg-card flex flex-col items-center gap-3 rounded-3xl px-5 py-10 text-center shadow-border"
 	>
 		<span
 			class="bg-secondary text-muted-foreground flex size-14 items-center justify-center rounded-2xl"

@@ -2,8 +2,10 @@
 	import { CATEGORY_LABEL, FOODS, PROVENANCE_LABEL, scaleFood } from '$lib/domain/foods';
 	import { findFoods } from '$lib/domain/parse-text';
 	import type { Provenance } from '$lib/domain/types';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ProvenanceBadge from '$lib/components/ProvenanceBadge.svelte';
 	import Input from '$lib/ui/Input.svelte';
+	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
 	const FILTERS: (Provenance | 'all')[] = ['all', 'usda', 'off', 'brand', 'community', 'lab'];
 
@@ -16,38 +18,33 @@
 	});
 </script>
 
+<svelte:head>
+	<title>Catalog · Fit_</title>
+</svelte:head>
+
 <div class="flex flex-col gap-5 pb-10">
-	<header>
-		<p class="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
-			Provenance on every row
-		</p>
-		<h1 class="font-display mt-1 text-4xl tracking-tight">Catalog</h1>
-		<p class="text-muted-foreground mt-2 text-sm">
-			USDA is public domain. Open Food Facts is ODbL. They never share an id.
-		</p>
-	</header>
+	<PageHeader kicker="Provenance on every row" title="Catalog">
+		USDA is public domain. Open Food Facts is ODbL. They never share an id.
+	</PageHeader>
 
 	<Input bind:value={query} placeholder="Search the catalog" aria-label="Search the catalog" />
 
 	<div class="flex gap-1 overflow-auto">
 		{#each FILTERS as f (f)}
-			<button
-				type="button"
-				aria-pressed={source === f}
+			<ToggleButton
+				pressed={source === f}
 				onclick={() => (source = f)}
-				class="h-9 shrink-0 rounded-full px-3 text-xs font-medium {source === f
-					? 'bg-primary text-primary-foreground'
-					: 'bg-card text-muted-foreground'}"
+				class="bg-card text-muted-foreground h-9 shrink-0 rounded-full px-3 text-xs font-medium"
 			>
 				{f === 'all' ? 'All' : PROVENANCE_LABEL[f].title}
-			</button>
+			</ToggleButton>
 		{/each}
 	</div>
 
 	<ul class="flex flex-col gap-2">
 		{#each list as food (food.id)}
 			{@const s = scaleFood(food, 1)}
-			<li class="bg-card rounded-2xl px-4 py-3 shadow-[var(--shadow-border)]">
+			<li class="bg-card rounded-2xl px-4 py-3 shadow-border">
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
 						<p class="font-medium">{food.name}</p>

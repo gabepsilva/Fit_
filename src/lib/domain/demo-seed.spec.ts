@@ -1,28 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildAlexProfile, buildJordanProfile, emptyProfile } from './demo-seed';
+import { buildAlexProfile, buildJordanProfile, HOUSEHOLD_PARTNER } from './demo-seed';
 import { FOOD_BY_ID } from './foods';
 import { adaptiveTdee, loggedDatesSet } from './tdee';
-
-describe('emptyProfile', () => {
-	it('starts with nothing logged', () => {
-		const p = emptyProfile({ name: 'New' });
-		expect(p.log).toEqual([]);
-		expect(p.weights).toEqual([]);
-	});
-
-	it('applies the given name', () => {
-		expect(emptyProfile({ name: 'Sam' }).name).toBe('Sam');
-	});
-
-	it('gives each profile a distinct id', () => {
-		expect(emptyProfile({ name: 'A' }).id).not.toBe(emptyProfile({ name: 'B' }).id);
-	});
-
-	it('leaves every target on automatic', () => {
-		const p = emptyProfile({ name: 'New' });
-		expect([p.calorieOverride, p.proteinOverride, p.fiberOverride]).toEqual([null, null, null]);
-	});
-});
 
 describe('buildAlexProfile', () => {
 	const alex = buildAlexProfile();
@@ -60,6 +39,11 @@ describe('buildJordanProfile', () => {
 
 	it('is vegetarian', () => {
 		expect(jordan.restrictions).toContain('vegetarian');
+	});
+
+	it('states the same person the empty household profile does', () => {
+		expect(jordan.name).toBe(HOUSEHOLD_PARTNER.name);
+		expect(jordan.heightCm).toBe(HOUSEHOLD_PARTNER.heightCm);
 	});
 
 	it('seeds a log', () => {

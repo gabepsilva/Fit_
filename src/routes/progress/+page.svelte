@@ -8,6 +8,7 @@
 	} from '$lib/domain/tdee';
 	import { tend } from '$lib/state/tend.svelte';
 	import AvgRow from '$lib/components/AvgRow.svelte';
+	import PageHeader from '$lib/components/PageHeader.svelte';
 	import WeightChart from '$lib/components/WeightChart.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Input from '$lib/ui/Input.svelte';
@@ -29,20 +30,18 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Progress · Fit_</title>
+</svelte:head>
+
 {#if profile && targets && week && micros}
 	{@const tdee = targets.tdee}
 	<div class="flex flex-col gap-6 pb-10">
-		<header>
-			<p class="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
-				Trend, not a streak
-			</p>
-			<h1 class="font-display mt-1 text-4xl tracking-tight">Progress</h1>
-			<p class="text-muted-foreground mt-2 text-sm">
-				{weeks} calm week{weeks === 1 ? '' : 's'} with four or more days logged. A miss never zeroes that.
-			</p>
-		</header>
+		<PageHeader kicker="Trend, not a streak" title="Progress">
+			{weeks} calm week{weeks === 1 ? '' : 's'} with four or more days logged. A miss never zeroes that.
+		</PageHeader>
 
-		<section class="bg-card rounded-3xl p-4 shadow-[var(--shadow-border)]">
+		<section class="bg-card rounded-3xl p-4 shadow-border">
 			<div class="flex items-baseline justify-between">
 				<h2 class="font-display text-xl tracking-tight">Weight</h2>
 				<p class="tabular text-muted-foreground text-sm">
@@ -64,7 +63,7 @@
 			</form>
 		</section>
 
-		<section class="bg-card rounded-3xl p-5 shadow-[var(--shadow-border)]">
+		<section class="bg-card rounded-3xl p-5 shadow-border">
 			<h2 class="font-display text-xl tracking-tight">Adaptive TDEE</h2>
 			<p class="font-display tabular mt-3 text-4xl tracking-tight">{tdee.inferred}</p>
 			<p class="text-muted-foreground text-sm">kcal / day, inferred</p>
@@ -85,7 +84,7 @@
 			</p>
 		</section>
 
-		<section class="bg-card rounded-3xl p-5 shadow-[var(--shadow-border)]">
+		<section class="bg-card rounded-3xl p-5 shadow-border">
 			<h2 class="font-display text-xl tracking-tight">This week’s average</h2>
 			<p class="text-muted-foreground mt-1 text-xs">
 				{week.loggedDays} logged days. No pass/fail coloring.
@@ -97,7 +96,7 @@
 			</ul>
 		</section>
 
-		<section class="bg-card rounded-3xl p-5 shadow-[var(--shadow-border)]">
+		<section class="bg-card rounded-3xl p-5 shadow-border">
 			<h2 class="font-display text-xl tracking-tight">Micronutrients</h2>
 			<p class="text-muted-foreground mt-1 text-xs">
 				USDA values on catalog foods. Quiet bars — a light week is information.

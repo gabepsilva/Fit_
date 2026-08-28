@@ -8,20 +8,23 @@
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import { toast } from 'svelte-sonner';
 	import { FOOD_BY_BARCODE, FOOD_BY_ID } from '$lib/domain/foods';
+	import { logFromFood } from '$lib/domain/log-entry';
 	import { guessMeal, hydrateProposal, parseLocalText } from '$lib/domain/parse-text';
+	import { defaultServings, servingStep } from '$lib/domain/profile';
 	import type { Food, Meal, ProposedItem } from '$lib/domain/types';
+	import { MEALS } from '$lib/domain/types';
 	import { todayISO } from '$lib/domain/utils';
 	import { logUi, type LogTab } from '$lib/state/log-ui.svelte';
-	import { logFromFood, tend } from '$lib/state/tend.svelte';
+	import { tend } from '$lib/state/tend.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Sheet from '$lib/ui/Sheet.svelte';
 	import Textarea from '$lib/ui/Textarea.svelte';
+	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 	import FoodSearch from './FoodSearch.svelte';
 	import PhotoCapture from './PhotoCapture.svelte';
 	import ProposalRow from './ProposalRow.svelte';
 	import { startDictation, type Dictation } from '$lib/ui/dictation';
 
-	const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 	const TABS = [
 		{ id: 'type', icon: Keyboard, label: 'Type' },
 		{ id: 'photo', icon: Camera, label: 'Photo' },
@@ -38,9 +41,8 @@
 	let matchIndex = $state<number | null>(null);
 	let dictation: Dictation | null = null;
 
-	// GLP-1 users routinely eat part-portions, so the stepper moves in quarters.
-	const step = $derived(tend.profile?.glp1 ? 0.25 : 0.5);
-	const defaultServings = $derived(tend.profile?.glp1 ? 0.5 : 1);
+	const step = $derived(servingStep(tend.profile));
+	const servings = $derived(defaultServings(tend.profile));
 
 	function reset() {
 		proposals = [];
@@ -62,7 +64,7 @@
 				foodId: food.id,
 				query: food.name,
 				name: food.name,
-				servings: defaultServings,
+				servings,
 				meal,
 				confidence
 			}
@@ -121,18 +123,20 @@
 		const date = todayISO();
 		// A proposal without a catalog match has no nutrition behind it, so it is
 		// dropped rather than logged as a zero-calorie entry.
-		const items = proposals
-			.filter((p) => p.foodId && FOOD_BY_ID[p.foodId])
-			.map((p) =>
-				logFromFood({
-					foodId: p.foodId as string,
-					servings: p.servings,
-					meal: p.meal,
-					date,
-					source: 'text',
-					note: p.note
-				})
-			);
+		const items = proposals.flatMap((p) =>
+			p.foodId && FOOD_BY_ID[p.foodId]
+				? [
+						logFromFood({
+							foodId: p.foodId,
+							servings: p.servings,
+							meal: p.meal,
+							date,
+							source: 'text',
+							note: p.note
+						})
+					]
+				: []
+		);
 		if (!items.length) {
 			toast('Match each item to a catalog food first.');
 			return;
@@ -158,34 +162,28 @@
 	<div class="flex gap-1 px-5 pt-4">
 		{#each TABS as t (t.id)}
 			{@const Icon = t.icon}
-			<button
-				type="button"
-				aria-pressed={logUi.tab === t.id}
+			<ToggleButton
+				pressed={logUi.tab === t.id}
 				onclick={() => (logUi.tab = t.id)}
-				class="flex h-11 flex-1 flex-col items-center justify-center rounded-xl text-xs font-medium {logUi.tab ===
-				t.id
-					? 'bg-primary text-primary-foreground'
-					: 'bg-secondary text-muted-foreground'}"
+				class="bg-secondary text-muted-foreground flex h-11 flex-1 flex-col items-center justify-center rounded-xl text-xs font-medium"
 			>
 				<Icon class="size-4" />
 				{t.label}
-			</button>
+			</ToggleButton>
 		{/each}
 	</div>
 
 	<div class="min-h-0 flex-1 overflow-auto px-5 py-4 pb-8">
 		<div class="mb-3 flex gap-1">
 			{#each MEALS as m (m)}
-				<button
-					type="button"
-					aria-pressed={meal === m}
+				<ToggleButton
+					pressed={meal === m}
+					tone="inverse"
 					onclick={() => (meal = m)}
-					class="h-8 flex-1 rounded-full text-xs capitalize {meal === m
-						? 'bg-foreground text-background'
-						: 'bg-secondary text-muted-foreground'}"
+					class="bg-secondary text-muted-foreground h-8 flex-1 rounded-full text-xs capitalize"
 				>
 					{m}
-				</button>
+				</ToggleButton>
 			{/each}
 		</div>
 
