@@ -127,6 +127,29 @@ describe('recipeMacros', () => {
 		expect(recipeMacros(recipe).kcal).toBeCloseTo(total / recipe.servings, 0);
 	});
 
+	it('reports every macro per serving, not just the energy', () => {
+		// Stated by hand from the catalog rather than derived with the same
+		// arithmetic the function uses, so a swapped operand or a field reading
+		// the wrong nutrient shows up here as a wrong number.
+		const recipe = RECIPE_BY_ID['yogurt-bowl'];
+		if (!recipe) throw new Error('test fixture references an unknown recipe');
+		expect(recipeMacros(recipe)).toEqual({
+			kcal: 200,
+			protein: 20,
+			carbs: 22,
+			fat: 5,
+			fiber: 5.9
+		});
+	});
+
+	it('halves the plate when the pot serves two', () => {
+		const recipe = RECIPE_BY_ID['yogurt-bowl'];
+		if (!recipe) throw new Error('test fixture references an unknown recipe');
+		const forTwo = recipeMacros({ ...recipe, servings: 2 });
+		expect(forTwo.protein).toBe(10);
+		expect(forTwo.kcal).toBe(100);
+	});
+
 	it('skips an ingredient the catalog no longer has, rather than counting it as zero-weight', () => {
 		const recipe = firstRecipe();
 		const withGhost: Recipe = {
@@ -189,6 +212,29 @@ describe('buildGrocery', () => {
 	it('lists each food once, with the servings combined', () => {
 		const items = buildGrocery(plan, []);
 		expect(new Set(items.map((i) => i.foodId)).size).toBe(items.length);
+	});
+
+	it('adds up an ingredient that two meals both call for', () => {
+		const twice: PlannedMeal[] = [
+			{ date: '2026-06-01', meal: 'breakfast', recipeId: 'yogurt-bowl', forProfileIds: ['p1'] },
+			{ date: '2026-06-02', meal: 'breakfast', recipeId: 'yogurt-bowl', forProfileIds: ['p1'] }
+		];
+		const list = buildGrocery(twice, []);
+		expect(list.map((i) => [i.foodId, i.servings, i.aisle])).toEqual([
+			['blueberries', 1, 'Produce'],
+			['greek-yogurt', 2, 'Dairy'],
+			['chia', 2, 'Pantry']
+		]);
+	});
+
+	it('rounds an awkward quantity to a quarter serving you can actually buy', () => {
+		// The turkey taco asks for 1.2 servings of ground turkey. A shopping list
+		// that says 1.2 is answering a question nobody asked at the counter.
+		const tacos: PlannedMeal[] = [
+			{ date: '2026-06-01', meal: 'dinner', recipeId: 'turkey-taco', forProfileIds: ['p1'] }
+		];
+		const turkey = buildGrocery(tacos, []).find((i) => i.foodId === 'ground-turkey');
+		expect(turkey?.servings).toBe(1.25);
 	});
 
 	it('marks pantry items without removing them from the list', () => {

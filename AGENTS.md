@@ -81,6 +81,15 @@ its log path, and its machine-readable artifact. Do not scrape the human output.
 | `bun run ci`          | Adds the blocking security scanners.              | Docker, Chromium |
 | `bun run nightly`     | Trivy and ZAP. Scheduled, never a merge gate.     | Docker, Chromium |
 
+`make` lists local shortcuts for the same tiers. `make ci` runs the exact steps
+the CI workflow runs, but arranges them for one machine instead of six runners:
+the static and security jobs run beside a single browser lane, and mutation
+testing gets the machine to itself afterwards. It cannot be reordered freely —
+`build`, `test:e2e` and `test:gates` all contend for `build/` and port 4173, and
+`reuseExistingServer` in `playwright.config.ts` means a second Playwright would
+silently reuse the first one's server and prove nothing. `make dev` runs the app
+with hot reload; `make android` builds and installs it on a connected device.
+
 No tier needs Firefox or WebKit. Every gate runs end-to-end flows through the default
 `mobile-chrome` project, which uses the Chromium engine. Only `bun run test:e2e:all`
 reaches for the other engines, and CI is where that runs.

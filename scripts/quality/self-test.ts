@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { tmpdir } from 'node:os';
+import { availableParallelism, tmpdir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import type { GateFixture } from './fixtures';
@@ -42,8 +42,48 @@ const skipDocker = process.argv.includes('--skip-docker');
 const skipBrowser = process.argv.includes('--skip-browser');
 
 async function run(cwd: string, command: string, args: string[]): Promise<number> {
-	const { exitCode } = await captureStatus(command, args, { cwd });
+	const { exitCode } = await captureStatus(command, args, { cwd, env: fixtureEnv });
 	return exitCode;
+}
+
+/**
+ * Fixtures are independent: each gets its own copy of the tree, breaks one
+ * thing in it, and runs one gate. Nothing is shared but the read-only template,
+ * so they can run side by side — which matters, because this is the slowest job
+ * in CI and it used to run them one at a time.
+ *
+ * The cap is deliberately well under the core count. A fixture is not one
+ * process: `surviving-mutant` starts a whole mutation run and `uncovered-file`
+ * a coverage run, each of which runs in parallel internally. Four heavy gates at
+ * once already saturates a workstation, and a hosted runner has two cores.
+ */
+const concurrency = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 4)));
+
+/**
+ * A nested mutation run must not size itself to the whole machine while its
+ * siblings are doing the same. Two workers is enough for a fixture that only
+ * has to fail.
+ */
+const fixtureEnv: NodeJS.ProcessEnv = { ...process.env, STRYKER_CONCURRENCY: '2' };
+
+/** Run `work` over `items`, `limit` at a time, keeping the input order. */
+async function pooled<T, R>(
+	items: T[],
+	limit: number,
+	work: (item: T) => Promise<R>
+): Promise<R[]> {
+	const results = new Array<R>(items.length);
+	let next = 0;
+	const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+		while (next < items.length) {
+			const index = next++;
+			const item = items[index];
+			if (item === undefined) return;
+			results[index] = await work(item);
+		}
+	});
+	await Promise.all(workers);
+	return results;
 }
 
 /** Fixtures mutate their workspace, so a workspace must never be the real tree. */
@@ -120,17 +160,19 @@ async function proveFixture(
 }
 
 const root = await mkdtemp(path.join(tmpdir(), 'fit-self-test-'));
-console.log(`Gate self-test: ${fixtures.length} fixtures.\n`);
+console.log(`Gate self-test: ${fixtures.length} fixtures, ${concurrency} at a time.\n`);
 
-const results: FixtureResult[] = [];
+let results: FixtureResult[];
 try {
 	const template = await createTemplate(root);
-	for (const fixture of fixtures) {
+	results = await pooled(fixtures, concurrency, async (fixture) => {
 		const result = await proveFixture(fixture, template, root);
-		results.push(result);
+		// Printed on completion rather than in order, so a slow fixture never
+		// hides the ones that already finished. The report below keeps the order.
 		const status = result.reason === 'skipped' ? 'skip' : result.proven ? 'pass' : 'FAIL';
 		console.log(`${status}  ${result.gate.padEnd(20)} ${result.name}`);
-	}
+		return result;
+	});
 } finally {
 	await rm(root, { recursive: true, force: true });
 }
