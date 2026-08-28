@@ -96,13 +96,12 @@ determinism promised above. They run on a schedule instead and open an issue.
 
 Gitleaks, Semgrep, Actionlint, Trivy, and ZAP use digest-pinned containers that die after each command. Semgrep runs offline after its rule pack is hash-verified. ZAP disables update checks, proxies the `mobile-chrome` E2E flows, and waits for passive scanning. Trivy refreshes its vulnerability database when needed; that deliberate freshness means vulnerability results can change even when project code does not.
 
-Baseline, re-measured 2026-08-27: Gitleaks and Semgrep have 0 findings, and Trivy has 1 Low
-and 0 High/Critical. The ZAP figures recorded earlier (15 Medium, 11 Low, 1 Informational,
-0 blocking) have not been re-measured since, because ZAP cannot run on every workstation;
-see "Running ZAP locally" below. Trivy and ZAP read external feeds, so their counts drift
-without any code change, which is exactly why neither blocks a merge. These findings stay
-visible in the reports. The table below grades detection coverage, not whether every
-reported smell has been fixed.
+Baseline, re-measured 2026-08-27 with every scanner actually run: Gitleaks and Semgrep have
+0 findings; Trivy has 1 Low and 0 High/Critical; ZAP has 15 Medium, 11 Low, 1 Informational,
+and 0 blocking. Trivy and ZAP read external feeds, so their counts drift without any code
+change, which is exactly why neither blocks a merge. These findings stay visible in the
+reports. The table below grades detection coverage, not whether every reported smell has
+been fixed.
 
 ### Patched transitive dependencies
 
@@ -123,9 +122,16 @@ ZAP runs in a container and proxies the preview server through
 `http://host.docker.internal:4173`. The container gets there via
 `--add-host=host.docker.internal:host-gateway`, so a host firewall that blocks the Docker
 bridge makes every proxied flow time out, and `bun run nightly` fails with an unreachable
-target rather than a security finding. On a host running `ufw`, allow the bridge with
-`sudo ufw allow in on docker0` before running the advisory scanners. Hosted CI has no such
-filter, which is where these scanners are scheduled to run anyway.
+target rather than a security finding. That failure mode is easy to misread as a security
+verdict; it is not one.
+
+On a host running `ufw`, allow the bridge before running the advisory scanners:
+
+```bash
+sudo ufw allow in on docker0
+```
+
+Hosted CI has no such filter, which is where these scanners are scheduled to run anyway.
 
 ## 5. Enforcing the gate on GitHub
 
