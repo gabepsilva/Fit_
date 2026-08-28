@@ -5,10 +5,18 @@ const isCI = Boolean(env.CI);
 const baseURL = env.E2E_BASE_URL ?? 'http://localhost:4173';
 const proxy = env.ZAP_PROXY_URL ? { proxy: { server: env.ZAP_PROXY_URL } } : {};
 const previewHost = env.ZAP_PROXY_URL ? '0.0.0.0' : '127.0.0.1';
+// Fit_ is a mobile web app, so the default loop runs a mobile viewport on the
+// engine that is always installed. Desktop is a responsive-regression backstop
+// and runs with the full matrix, not on every local run.
 const projects = [
-	{ name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-	{ name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-	...(env.E2E_ALL_BROWSERS ? [{ name: 'webkit', use: { ...devices['Desktop Safari'] } }] : [])
+	{ name: 'mobile-chrome', use: { ...devices['Pixel 7'] } },
+	...(env.E2E_ALL_BROWSERS
+		? [
+				{ name: 'mobile-safari', use: { ...devices['iPhone 15'] } },
+				{ name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+				{ name: 'firefox', use: { ...devices['Desktop Firefox'] } }
+			]
+		: [])
 ];
 
 export default defineConfig({

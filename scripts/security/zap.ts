@@ -128,15 +128,19 @@ try {
 		throw error;
 	}
 
-	const playwrightExitCode = await run('bun', ['run', 'test:e2e', '--', '--project=chromium'], {
-		allowFailure: true,
-		env: {
-			...process.env,
-			CI: '1',
-			E2E_BASE_URL: targetUrl,
-			ZAP_PROXY_URL: proxyUrl
+	const playwrightExitCode = await run(
+		'bun',
+		['run', 'test:e2e', '--', '--project=mobile-chrome'],
+		{
+			allowFailure: true,
+			env: {
+				...process.env,
+				CI: '1',
+				E2E_BASE_URL: targetUrl,
+				ZAP_PROXY_URL: proxyUrl
+			}
 		}
-	});
+	);
 
 	await waitForPassiveScan();
 	await Promise.all([

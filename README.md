@@ -60,6 +60,16 @@ and they block a merge. Trivy and ZAP depend on external feeds whose results cha
 any code change; gating on them would contradict the determinism this repository promises,
 so they run on a schedule and open an issue instead.
 
+### Mobile-first end-to-end runs
+
+Fit_ targets Android and iOS browsers, so `bun run test:e2e` defaults to a single mobile
+project, `mobile-chrome` (Pixel 7 viewport, Chromium engine). That keeps the everyday loop
+fast and makes a mobile viewport the default thing under test.
+
+`bun run test:e2e:all` sets `E2E_ALL_BROWSERS` and adds `mobile-safari` (iPhone 15, the real
+WebKit engine iOS uses) plus desktop Chrome and Firefox as a responsive-regression backstop.
+CI runs the full matrix.
+
 Generated reports are written under `coverage/`, `playwright-report/`, and `reports/`. They are
 ignored by Git and uploaded by GitHub Actions.
 
@@ -73,8 +83,9 @@ Repository-specific agent and review rules live in `AGENTS.md`. Workshop setup a
 
 ## Deployment
 
-The template pins `@sveltejs/adapter-node` so that `bun run build` proves a deployable
-artifact. With `adapter-auto` the build succeeded while adapting to nothing: it exited 0,
-printed "Could not detect a supported production environment", and emitted no `build/`
-directory, so the build gate proved compilation but never deployability. A consuming
-application may swap the adapter for its own target.
+Fit_ ships as a mobile web app, served over HTTP rather than through an app store.
+`@sveltejs/adapter-node` is pinned so that `bun run build` proves a deployable artifact.
+With `adapter-auto` the build succeeded while adapting to nothing: it exited 0, printed
+"Could not detect a supported production environment", and emitted no `build/` directory,
+so the build gate proved compilation but never deployability. Swap the adapter if the
+hosting target changes.
