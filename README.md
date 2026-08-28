@@ -2,8 +2,12 @@
 
 [![CI](https://github.com/gabepsilva/Fit_/actions/workflows/ci.yml/badge.svg)](https://github.com/gabepsilva/Fit_/actions/workflows/ci.yml)
 
-A fitness application for Android and iOS, built on SvelteKit. The repository carries a set of
-deterministic, reviewable quality gates that run before application features are added.
+A fitness application for Android and iOS, built on SvelteKit. Food logging, an adaptive
+calorie and macro model, a household meal plan, and progress tracking, behind a set of
+deterministic, reviewable quality gates.
+
+Data currently lives in the browser's `localStorage`. The SQLite backend is not built yet,
+so nothing leaves the device and nothing syncs between devices.
 
 ## Requirements
 

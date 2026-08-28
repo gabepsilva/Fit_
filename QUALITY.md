@@ -86,6 +86,19 @@ add more maintenance and noise than useful protection.
 
 ## Recorded decisions and known gaps
 
+- **The JavaScript budget was raised to 320 KiB when the product UI landed (recorded
+  2026-08-28).** The previous 150 KiB budget was set against a repository that carried
+  only the SvelteKit demo routes, so it measured an empty application. Porting the front
+  end took the build to 312 KiB of raw JavaScript, of which roughly 50 KiB is the food
+  catalog and recipe data, and roughly 66 KiB is `bits-ui` and `svelte-sonner`. Two
+  things make the raw figure a poor proxy for what a phone actually pays: the check sums
+  every emitted chunk, including route code that is loaded lazily and never on first
+  paint, and it counts uncompressed bytes. The same build is 111 KiB gzipped in total and
+  about 79 KiB gzipped on first load. The budget was raised to sit just above the
+  measured build rather than to a round aspiration, so it still fails on a careless
+  dependency. CSS was left at 50 KiB and passes at 40 KiB. The better fix is to weigh
+  transferred bytes and to budget the first-load path separately from lazily-loaded
+  routes; that is the trigger for revisiting `scripts/quality/bundle-budget.ts`.
 - **ZAP scans the wrong server (recorded 2026-08-27).** ZAP proxies `vite preview`, but
   the project ships `adapter-node`, and the two serve different headers, so every
   "Cross-Domain Misconfiguration" alert is an artifact of the scanned server. The real

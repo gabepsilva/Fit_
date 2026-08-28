@@ -1,0 +1,132 @@
+<script lang="ts">
+	import {
+		computeTargets,
+		loggedDatesSet,
+		nutritionForDay,
+		rollingAverages
+	} from '$lib/domain/tdee';
+	import type { Meal } from '$lib/domain/types';
+	import { todayISO, weekdayLong } from '$lib/domain/utils';
+	import { logUi } from '$lib/state/log-ui.svelte';
+	import { tend } from '$lib/state/tend.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import LogRow from './LogRow.svelte';
+	import MacroRing from './MacroRing.svelte';
+	import MiniStat from './MiniStat.svelte';
+	import WeekStrip from './WeekStrip.svelte';
+
+	const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+	let day = $state(todayISO());
+	let editing = $state<string | null>(null);
+
+	const profile = $derived(tend.profile);
+
+	function greetingFor(loggedDays: number) {
+		if (loggedDays === 0) return 'Whenever you log is a good time.';
+		return `${loggedDays} day${loggedDays === 1 ? '' : 's'} logged this week. That’s enough.`;
+	}
+</script>
+
+{#if profile}
+	{@const targets = computeTargets(profile)}
+	{@const dayTotals = nutritionForDay(profile.log, day)}
+	{@const week = rollingAverages(profile.log, 7)}
+	{@const logged = loggedDatesSet(profile.log)}
+	{@const items = profile.log.filter((i) => i.date === day)}
+	<!-- GLP-1 users are steered by protein rather than energy, so the ring
+	     layout changes rather than merely reordering. -->
+	{@const primaryProtein = profile.glp1 || profile.goal === 'glp1'}
+	<div class="flex flex-col gap-6 pb-8">
+		<header>
+			<p class="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
+				{weekdayLong(day)}
+			</p>
+			<h1 class="font-display mt-1 text-4xl tracking-tight">Today</h1>
+			<p class="text-muted-foreground mt-2 text-sm">{greetingFor(week.loggedDays)}</p>
+		</header>
+
+		<WeekStrip {logged} bind:selected={day} />
+
+		<section class="bg-card rounded-3xl px-3 py-5 shadow-[var(--shadow-border)]">
+			<div class="flex items-start justify-center gap-3">
+				{#if primaryProtein}
+					<MacroRing
+						value={dayTotals.protein}
+						target={targets.protein}
+						label="Protein"
+						unit="g"
+						emphasis
+						size={140}
+					/>
+					<MacroRing
+						value={dayTotals.fiber}
+						target={targets.fiber}
+						label="Fiber"
+						unit="g"
+						size={108}
+					/>
+					<MacroRing
+						value={dayTotals.kcal}
+						target={targets.kcal}
+						label="Energy"
+						unit="kcal"
+						size={96}
+					/>
+				{:else}
+					<MacroRing
+						value={dayTotals.kcal}
+						target={targets.kcal}
+						label="Energy"
+						unit="kcal"
+						emphasis
+						size={148}
+					/>
+					<div class="flex flex-col justify-center gap-3 pt-2 text-sm">
+						<MiniStat label="Protein" value={dayTotals.protein} target={targets.protein} unit="g" />
+						<MiniStat label="Carbs" value={dayTotals.carbs} target={targets.carbs} unit="g" />
+						<MiniStat label="Fat" value={dayTotals.fat} target={targets.fat} unit="g" />
+					</div>
+				{/if}
+			</div>
+			<p class="text-muted-foreground mt-4 px-3 text-center text-xs">
+				Week’s average {Math.round(week.avg.kcal) || '—'} kcal on logged days — unlogged days are not
+				counted as zero.
+			</p>
+		</section>
+
+		{#each MEALS as meal (meal)}
+			{@const group = items.filter((i) => i.meal === meal)}
+			<section>
+				<div class="mb-2 flex items-baseline justify-between px-1">
+					<h2 class="font-display text-xl tracking-tight capitalize">{meal}</h2>
+					<span class="tabular text-muted-foreground text-xs">
+						{group.reduce((s, i) => s + i.kcal, 0)} kcal
+					</span>
+				</div>
+				{#if group.length === 0}
+					<button
+						type="button"
+						onclick={() => logUi.show()}
+						class="border-border text-muted-foreground flex h-16 w-full items-center justify-center rounded-2xl border border-dashed text-sm"
+					>
+						Nothing here. That’s fine.
+					</button>
+				{:else}
+					<ul class="flex flex-col gap-1.5">
+						{#each group as item (item.id)}
+							<LogRow
+								{item}
+								open={editing === item.id}
+								step={profile.glp1 ? 0.25 : 0.5}
+								ontoggle={() => (editing = editing === item.id ? null : item.id)}
+							/>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		{/each}
+
+		<Button size="lg" class="w-full" onclick={() => logUi.show()}>Log something</Button>
+	</div>
+{/if}

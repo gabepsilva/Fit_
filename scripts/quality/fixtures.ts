@@ -149,11 +149,14 @@ export const fixtures: GateFixture[] = [
 		apply: async (root) => {
 			const payload = 'fit-bundle-budget-fixture-payload-'.repeat(8000);
 			await write(root, 'src/lib/fixture.ts', `export const payload = '${payload}';\n`);
-			await edit(
+			// A route of its own, rather than an edit to an existing page: the
+			// payload still lands in the client build and counts against the
+			// budget, and the fixture cannot be broken by whatever a real page
+			// happens to contain.
+			await write(
 				root,
-				'src/routes/+page.svelte',
-				(content) =>
-					`<script lang="ts">\n\timport { payload } from '$lib/fixture';\n</script>\n\n${content}\n<p>{payload.length}</p>\n`
+				'src/routes/fixture/+page.svelte',
+				`<script lang="ts">\n\timport { payload } from '$lib/fixture';\n</script>\n\n<p>{payload.length}</p>\n`
 			);
 		}
 	},
@@ -228,7 +231,6 @@ export const fixtures: GateFixture[] = [
 		gate: 'test:e2e',
 		browser: true,
 		description: 'A page whose heading the end-to-end flow asserts on.',
-		apply: (root) =>
-			write(root, 'src/routes/demo/playwright/+page.svelte', '<p>no heading here</p>\n')
+		apply: (root) => write(root, 'src/routes/progress/+page.svelte', '<p>no heading here</p>\n')
 	}
 ];

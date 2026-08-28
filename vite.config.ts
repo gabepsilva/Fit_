@@ -3,9 +3,11 @@ import thresholds from './quality/thresholds.json' with { type: 'json' };
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
 	plugins: [
+		tailwindcss(),
 		sveltekit({
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.

@@ -1,0 +1,107 @@
+@import 'tailwindcss';
+
+@theme {
+	--font-display: 'Fraunces', ui-serif, Georgia, 'Times New Roman', serif;
+	--font-sans: 'Figtree', ui-sans-serif, system-ui, sans-serif;
+
+	--color-background: #f3eee4;
+	--color-foreground: #1f1b16;
+	--color-card: #faf7f0;
+	--color-card-foreground: #1f1b16;
+	--color-popover: #fffcf6;
+	--color-popover-foreground: #1f1b16;
+	--color-primary: #3f5a48;
+	--color-primary-foreground: #f6f3eb;
+	--color-secondary: #e8e2d6;
+	--color-secondary-foreground: #1f1b16;
+	--color-muted: #e8e2d6;
+	--color-muted-foreground: #6f675d;
+	--color-accent: #dde6dc;
+	--color-accent-foreground: #3f5a48;
+	--color-destructive: #5c4638;
+	--color-destructive-foreground: #f6f3eb;
+	--color-border: #e0d8c8;
+	--color-input: #e0d8c8;
+	--color-ring: #3f5a48;
+	--color-ink-subtle: #9a9286;
+	--color-linen: #e8e2d6;
+	--color-paper: #f3eee4;
+	--color-sage-soft: #8a9a86;
+
+	--radius-xs: 4px;
+	--radius-sm: 8px;
+	--radius-md: 12px;
+	--radius-lg: 16px;
+	--radius-xl: 24px;
+	--radius-2xl: 32px;
+	--radius: 12px;
+
+	--shadow-border:
+		0 0 0 1px rgb(31 27 22 / 0.06), 0 1px 2px -1px rgb(31 27 22 / 0.06),
+		0 2px 8px 0 rgb(31 27 22 / 0.04);
+}
+
+@layer base {
+	html {
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	html,
+	body {
+		min-height: 100%;
+		background: var(--color-background);
+		color: var(--color-foreground);
+	}
+
+	body {
+		font-family: var(--font-sans);
+		line-height: 1.5;
+	}
+
+	button:not(:disabled),
+	[role='button']:not(:disabled) {
+		cursor: pointer;
+	}
+
+	h1,
+	h2,
+	h3 {
+		text-wrap: balance;
+		font-family: var(--font-display);
+		letter-spacing: -0.03em;
+		line-height: 1.15;
+	}
+
+	p {
+		text-wrap: pretty;
+	}
+
+	* {
+		border-color: var(--color-border);
+	}
+
+	input,
+	textarea,
+	select {
+		font: inherit;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+.tabular {
+	font-variant-numeric: tabular-nums;
+}
+
+.font-display {
+	font-family: var(--font-display);
+}

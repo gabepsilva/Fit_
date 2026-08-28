@@ -1,0 +1,214 @@
+import { describe, expect, it } from 'vitest';
+import {
+	CATEGORY_LABEL,
+	FOOD_BY_BARCODE,
+	FOOD_BY_ID,
+	FOODS,
+	PROVENANCE_LABEL,
+	scaleFood
+} from './foods';
+import { buildGrocery } from './grocery';
+import {
+	groceryAisle,
+	RECIPE_BY_ID,
+	RECIPES,
+	recipeFits,
+	recipeMacros,
+	type Recipe
+} from './recipes';
+import type { Food, PlannedMeal } from './types';
+
+/** Look a fixture up loudly, so a catalog rename fails the test it belongs to. */
+function food(id: string): Food {
+	const hit = FOOD_BY_ID[id];
+	if (!hit) throw new Error(`test fixture references unknown food: ${id}`);
+	return hit;
+}
+
+function firstRecipe(): Recipe {
+	const hit = RECIPES[0];
+	if (!hit) throw new Error('the recipe book is empty');
+	return hit;
+}
+
+describe('the food catalog', () => {
+	it('is not empty', () => {
+		expect(FOODS.length).toBeGreaterThan(0);
+	});
+
+	it('has no duplicate ids', () => {
+		expect(new Set(FOODS.map((f) => f.id)).size).toBe(FOODS.length);
+	});
+
+	it('indexes every food by id', () => {
+		expect(Object.keys(FOOD_BY_ID).length).toBe(FOODS.length);
+	});
+
+	it('indexes only the foods that carry a barcode', () => {
+		expect(Object.keys(FOOD_BY_BARCODE).length).toBe(FOODS.filter((f) => f.barcode).length);
+	});
+
+	it('labels every provenance it uses', () => {
+		for (const food of FOODS) {
+			expect(PROVENANCE_LABEL[food.provenance]).toBeDefined();
+		}
+	});
+
+	it('gives every category a human label', () => {
+		for (const food of FOODS) {
+			expect(CATEGORY_LABEL[food.category] ?? food.category).toBeTruthy();
+		}
+	});
+
+	it('defaults aliases to an empty list when a food declares none', () => {
+		expect(FOODS.every((f) => Array.isArray(f.aliases))).toBe(true);
+	});
+
+	it('never leaves a food without energy and a serving label', () => {
+		for (const food of FOODS) {
+			expect(food.servingLabel.length).toBeGreaterThan(0);
+			expect(food.kcal).toBeGreaterThanOrEqual(0);
+		}
+	});
+});
+
+describe('scaleFood', () => {
+	it('leaves a single serving unchanged', () => {
+		expect(scaleFood(food('egg-large'), 1).kcal).toBe(food('egg-large').kcal);
+	});
+
+	it('doubles energy for two servings', () => {
+		expect(scaleFood(food('egg-large'), 2).kcal).toBe(food('egg-large').kcal * 2);
+	});
+
+	it('scales micronutrients alongside macros', () => {
+		const single = scaleFood(food('broccoli'), 1);
+		const double = scaleFood(food('broccoli'), 2);
+		expect(double.micros.fiber).toBeCloseTo(single.micros.fiber * 2, 1);
+	});
+
+	it('zeroes out at zero servings', () => {
+		expect(scaleFood(food('egg-large'), 0).kcal).toBe(0);
+	});
+
+	it('carries the provenance through', () => {
+		expect(scaleFood(food('egg-large'), 1.5).provenance).toBe(food('egg-large').provenance);
+	});
+});
+
+describe('the recipe book', () => {
+	it('is not empty', () => {
+		expect(RECIPES.length).toBeGreaterThan(0);
+	});
+
+	it('has no duplicate ids', () => {
+		expect(new Set(RECIPES.map((r) => r.id)).size).toBe(RECIPES.length);
+	});
+
+	it('indexes every recipe by id', () => {
+		expect(Object.keys(RECIPE_BY_ID).length).toBe(RECIPES.length);
+	});
+
+	it('only references foods that exist in the catalog', () => {
+		for (const r of RECIPES) {
+			for (const ing of r.ingredients) {
+				expect(FOOD_BY_ID[ing.foodId], `${r.id} -> ${ing.foodId}`).toBeDefined();
+			}
+		}
+	});
+
+	it('covers every planned meal slot', () => {
+		for (const meal of ['breakfast', 'lunch', 'dinner'] as const) {
+			expect(RECIPES.some((r) => r.meal === meal)).toBe(true);
+		}
+	});
+});
+
+describe('recipeMacros', () => {
+	it('reports per-serving energy, not the whole pot', () => {
+		const recipe = firstRecipe();
+		const total = recipe.ingredients.reduce(
+			(sum, ing) => sum + scaleFood(food(ing.foodId), ing.servings).kcal,
+			0
+		);
+		expect(recipeMacros(recipe).kcal).toBeCloseTo(total / recipe.servings, 0);
+	});
+});
+
+describe('recipeFits', () => {
+	it('accepts any recipe when nothing is restricted', () => {
+		expect(RECIPES.every((r) => recipeFits(r, []))).toBe(true);
+	});
+
+	it('only returns vegetarian recipes under a vegetarian restriction', () => {
+		const fitting = RECIPES.filter((r) => recipeFits(r, ['vegetarian']));
+		expect(fitting.every((r) => r.suits.includes('vegetarian'))).toBe(true);
+	});
+
+	it('leaves at least one option under a single common restriction', () => {
+		expect(RECIPES.some((r) => recipeFits(r, ['vegetarian']))).toBe(true);
+	});
+});
+
+describe('groceryAisle', () => {
+	it('maps a known category to its aisle', () => {
+		expect(groceryAisle('produce')).toBe('Produce');
+	});
+
+	it('falls back to Other for an unknown category', () => {
+		expect(groceryAisle('nonexistent-category')).toBe('Other');
+	});
+
+	it('maps condiments to the pantry', () => {
+		expect(groceryAisle('condiment')).toBe('Pantry');
+	});
+
+	it('maps drinks to their own aisle', () => {
+		expect(groceryAisle('drink')).toBe('Drinks');
+	});
+
+	it('maps packaged foods to their own aisle', () => {
+		expect(groceryAisle('packaged')).toBe('Packaged');
+	});
+});
+
+describe('buildGrocery', () => {
+	const plan: PlannedMeal[] = RECIPES.slice(0, 3).map((r, i) => ({
+		date: `2026-06-0${i + 1}`,
+		meal: 'dinner',
+		recipeId: r.id,
+		forProfileIds: ['p1']
+	}));
+
+	it('produces a list from a plan', () => {
+		expect(buildGrocery(plan, []).length).toBeGreaterThan(0);
+	});
+
+	it('lists each food once, with the servings combined', () => {
+		const items = buildGrocery(plan, []);
+		expect(new Set(items.map((i) => i.foodId)).size).toBe(items.length);
+	});
+
+	it('marks pantry items without removing them from the list', () => {
+		const firstId = buildGrocery(plan, [])[0]?.foodId ?? '';
+		const withPantry = buildGrocery(plan, [firstId]);
+		expect(withPantry.find((i) => i.foodId === firstId)?.inPantry).toBe(true);
+	});
+
+	it('groups the list so each aisle appears in one run', () => {
+		const aisles = buildGrocery(plan, []).map((i) => i.aisle);
+		const runs = aisles.filter((a, i) => a !== aisles[i - 1]);
+		expect(new Set(runs).size).toBe(runs.length);
+	});
+
+	it('returns nothing for an empty plan', () => {
+		expect(buildGrocery([], [])).toEqual([]);
+	});
+
+	it('skips a plan slot whose recipe no longer exists', () => {
+		const stale: PlannedMeal[] = [
+			{ date: '2026-06-01', meal: 'dinner', recipeId: 'gone', forProfileIds: ['p1'] }
+		];
+		expect(buildGrocery(stale, [])).toEqual([]);
+	});
+});
