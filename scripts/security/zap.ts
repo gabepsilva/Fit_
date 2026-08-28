@@ -26,7 +26,7 @@ if (!/^\d+$/.test(proxyPort)) throw new Error('ZAP_PROXY_PORT must be numeric.')
 
 const proxyUrl = `http://127.0.0.1:${proxyPort}`;
 const targetUrl = 'http://host.docker.internal:4173';
-const containerName = `sveltekit-ai-zap-${process.pid}`;
+const containerName = `fit-zap-${process.pid}`;
 const apiHeaders = { Host: 'zap' } as const;
 const policy = JSON.parse(
 	await readFile(path.join(projectRoot, 'security', 'zap-policy.json'), 'utf8')

@@ -1,8 +1,24 @@
-# Project Configuration
+# Fit_
+
+A fitness application delivered as a **mobile web app**: SvelteKit served over HTTP and
+opened in the browser on Android and iOS. It is not a native build and there is no
+Capacitor or Tauri shell.
 
 - **Language**: TypeScript
-- **Package Manager**: bun
-- **Add-ons**: prettier, eslint, vitest, playwright, mcp
+- **Package manager**: bun
+- **Tooling**: prettier, eslint, vitest, playwright, mcp
+- **Deployment**: `@sveltejs/adapter-node`
+
+## Current phase: environment, not application
+
+The repository is still being set up. It carries the quality gates and the test
+environment; it does not yet carry fitness features. There is no domain model, no
+persistence, and no product UI beyond the SvelteKit demo routes.
+
+Scope work accordingly: tooling, gates, CI, and test infrastructure. Do not add fitness
+domain features, screens, or branding assets unless asked. When a setup task needs a
+product decision, such as web-app-manifest metadata, icons, or a color theme, raise it
+rather than inventing a placeholder that later has to be unpicked.
 
 ---
 
@@ -41,9 +57,13 @@ its log path, and its machine-readable artifact. Do not scrape the human output.
 | `bun run precommit`   | Formatting, lint, suppression ratchet. Fail-fast. | Nothing          |
 | `bun run verify:fast` | Every static check plus server unit tests.        | Nothing          |
 | `bun run verify`      | Adds workflow lint, coverage, build, budgets.     | Docker, Chromium |
-| `bun run verify:deep` | Adds mutation testing and end-to-end flows.       | Docker, browsers |
-| `bun run ci`          | Adds the blocking security scanners.              | Docker, browsers |
+| `bun run verify:deep` | Adds mutation testing and end-to-end flows.       | Docker, Chromium |
+| `bun run ci`          | Adds the blocking security scanners.              | Docker, Chromium |
 | `bun run nightly`     | Trivy and ZAP. Scheduled, never a merge gate.     | Docker, Chromium |
+
+No tier needs Firefox or WebKit. Every gate runs end-to-end flows through the default
+`mobile-chrome` project, which uses the Chromium engine. Only `bun run test:e2e:all`
+reaches for the other engines, and CI is where that runs.
 
 - Run `bun run verify:fast` after each change; it needs no Docker and no browser.
 - Run `bun run verify` before declaring implementation work complete.
@@ -51,6 +71,13 @@ its log path, and its machine-readable artifact. Do not scrape the human output.
 - Run `bun run ci` when changing authentication, authorization, input handling, dependencies,
   HTTP behavior, or security configuration.
 - Re-run one step with `bun scripts/quality/gate.ts <tier> --only <step>`.
+- End-to-end flows default to one mobile project, `mobile-chrome` (Pixel 7 viewport).
+  `bun run test:e2e:all` adds `mobile-safari` (iPhone 15, WebKit) and desktop Chrome and
+  Firefox. Fit_ is a mobile web app, so treat a mobile viewport as the primary target and
+  desktop as a regression backstop.
+- `scripts/security/zap.ts` pins the project it proxies. If a project is renamed in
+  `playwright.config.ts`, that reference has to move with it or the nightly scan fails
+  with no matching project.
 - Never suppress or downgrade diagnostics merely to make a check pass.
 - Never lower coverage thresholds, skip tests, focus tests, or update snapshots without
   explicit authorization.
@@ -64,6 +91,13 @@ its log path, and its machine-readable artifact. Do not scrape the human output.
 - `bun run test:gates` proves every gate rejects the input it claims to reject, using
   fixtures generated at run time. A new gate is not finished until it has a fixture.
 - Never add a security-scanner exception without a documented finding reference and justification.
+- Trivy blocks on High and Critical findings. When the fix sits inside the range the parent
+  already allows, pin it in the `overrides` block of `package.json` and drop the override
+  once the tree resolves to a patched version by itself. Do not force an override across a
+  major boundary a direct dependency declares against; record why instead.
+- `bun run nightly` needs the Docker bridge to reach the host preview server. A host
+  firewall that blocks it produces a timeout, not a security verdict; do not read that as
+  a passing scan.
 - Changes to quality configuration, CI scripts, scanner policies, container digests, snapshots,
   the suppression baseline, or `bun.lock` require deliberate review.
 

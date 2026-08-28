@@ -341,10 +341,12 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-firefox-${{ hashFiles('bun.lock') }}
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('bun.lock') }}
 
+      # The self-test's e2e fixture runs the default matrix, which is mobile-chrome
+      # on the Chromium engine. Firefox and WebKit are only needed by the e2e job.
       - name: Install browser runtimes
-        run: bunx playwright install --with-deps chromium firefox
+        run: bunx playwright install --with-deps chromium
 
       # Proves each gate rejects input it claims to reject. Without this, every
       # threshold in the repository is an assertion nobody has tested.

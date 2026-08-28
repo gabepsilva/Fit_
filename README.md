@@ -9,12 +9,24 @@ deterministic, reviewable quality gates that run before application features are
 
 - Bun 1.3.9
 - Docker with a running daemon
-- Chromium, Firefox, and WebKit installed through Playwright
+- Chromium, installed through Playwright
 
 ```bash
 bun install --frozen-lockfile
-bunx playwright install --with-deps chromium firefox webkit
+bunx playwright install --with-deps chromium
 ```
+
+Chromium alone runs every gate, up to and including `bun run ci`, because end-to-end
+flows default to a mobile Chromium project. Add the other engines only if you want to
+run the full matrix locally:
+
+```bash
+bunx playwright install --with-deps firefox webkit
+```
+
+Playwright installs WebKit's system libraries only on Debian and Ubuntu. On other
+distributions `--with-deps` fails, `mobile-safari` cannot run locally, and CI is where
+that project gets exercised.
 
 ## Development
 
@@ -79,7 +91,7 @@ CI runs its gates as parallel jobs, so a formatting failure surfaces in about a 
 than behind half an hour of browser and container work. The `main` branch is protected by the
 hosted `CI / Quality and security` check, which passes only when every parallel gate succeeds. The Codex review job is advisory and runs only after deterministic CI succeeds. It is enabled for same-repository pull requests after the repository secret `OPENAI_API_KEY` is configured.
 
-Repository-specific agent and review rules live in `AGENTS.md`. Workshop setup and the full before/current quality table live in `Basic Start.md`.
+Repository-specific agent and review rules live in `AGENTS.md`. How this quality baseline was built, and what it does and does not cover, is in `Basic Start.md`.
 
 ## Deployment
 

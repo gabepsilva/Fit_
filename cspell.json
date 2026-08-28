@@ -40,8 +40,10 @@
 		"Semgrep",
 		"Stryker",
 		"SvelteKit",
+		"Tauri",
 		"tmpfs",
 		"Trivy",
+		"viewports",
 		"Vitest",
 		"zaproxy"
 	]
