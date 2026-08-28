@@ -143,8 +143,6 @@ every one succeeds, so a formatting failure surfaces in about a minute instead o
 hour of browser and container work. Protect `main` by requiring `CI / Quality and security` and
 pull requests.
 
-Codex runs afterward as a read-only advisory reviewer when `OPENAI_API_KEY` exists. Its CLI, model, prompt, permissions, and action commit are pinned, but its judgment remains probabilistic and therefore does not block merges.
-
 ## 6. What this baseline does and does not cover
 
 The per-area breakdown, including what to add next and what should trigger adding it,
