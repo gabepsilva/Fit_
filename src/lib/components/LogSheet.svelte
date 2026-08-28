@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Camera from '@lucide/svelte/icons/camera';
+	import ImageUp from '@lucide/svelte/icons/image-up';
 	import Keyboard from '@lucide/svelte/icons/keyboard';
 	import Mic from '@lucide/svelte/icons/mic';
 	import ScanBarcode from '@lucide/svelte/icons/scan-barcode';
@@ -10,27 +11,26 @@
 	import { guessMeal, hydrateProposal, parseLocalText } from '$lib/domain/parse-text';
 	import type { Food, Meal, ProposedItem } from '$lib/domain/types';
 	import { todayISO } from '$lib/domain/utils';
-	import { logUi } from '$lib/state/log-ui.svelte';
+	import { logUi, type LogTab } from '$lib/state/log-ui.svelte';
 	import { logFromFood, tend } from '$lib/state/tend.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Sheet from '$lib/ui/Sheet.svelte';
 	import Textarea from '$lib/ui/Textarea.svelte';
 	import FoodSearch from './FoodSearch.svelte';
+	import PhotoCapture from './PhotoCapture.svelte';
 	import ProposalRow from './ProposalRow.svelte';
 	import { startDictation, type Dictation } from '$lib/ui/dictation';
-
-	type Tab = 'type' | 'photo' | 'voice' | 'scan' | 'search';
 
 	const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 	const TABS = [
 		{ id: 'type', icon: Keyboard, label: 'Type' },
 		{ id: 'photo', icon: Camera, label: 'Photo' },
+		{ id: 'upload', icon: ImageUp, label: 'Upload' },
 		{ id: 'voice', icon: Mic, label: 'Voice' },
 		{ id: 'scan', icon: ScanBarcode, label: 'Scan' },
 		{ id: 'search', icon: Search, label: 'Search' }
-	] as const satisfies readonly { id: Tab; icon: unknown; label: string }[];
+	] as const satisfies readonly { id: LogTab; icon: unknown; label: string }[];
 
-	let tab = $state<Tab>('type');
 	let text = $state('');
 	let meal = $state<Meal>(guessMeal());
 	let listening = $state(false);
@@ -47,6 +47,7 @@
 		text = '';
 		matchIndex = null;
 		listening = false;
+		logUi.tab = 'type';
 	}
 
 	function close() {
@@ -66,7 +67,7 @@
 				confidence
 			}
 		];
-		tab = 'type';
+		logUi.tab = 'type';
 	}
 
 	function runText(raw: string) {
@@ -159,9 +160,9 @@
 			{@const Icon = t.icon}
 			<button
 				type="button"
-				aria-pressed={tab === t.id}
-				onclick={() => (tab = t.id)}
-				class="flex h-11 flex-1 flex-col items-center justify-center rounded-xl text-xs font-medium {tab ===
+				aria-pressed={logUi.tab === t.id}
+				onclick={() => (logUi.tab = t.id)}
+				class="flex h-11 flex-1 flex-col items-center justify-center rounded-xl text-xs font-medium {logUi.tab ===
 				t.id
 					? 'bg-primary text-primary-foreground'
 					: 'bg-secondary text-muted-foreground'}"
@@ -188,7 +189,7 @@
 			{/each}
 		</div>
 
-		{#if tab === 'type'}
+		{#if logUi.tab === 'type'}
 			<div class="flex flex-col gap-3">
 				<Textarea
 					bind:value={text}
@@ -198,16 +199,11 @@
 				/>
 				<Button onclick={() => runText(text)} disabled={!text.trim()}>Parse</Button>
 			</div>
-		{:else if tab === 'photo'}
-			<div class="bg-background flex flex-col items-center gap-3 rounded-3xl px-4 py-8 text-center">
-				<Camera class="text-muted-foreground size-8" />
-				<p class="text-muted-foreground max-w-xs text-sm">
-					Reading a plate from a photo needs the server, which isn’t built yet. Type or search for
-					now.
-				</p>
-				<Button variant="secondary" onclick={() => (tab = 'type')}>Type it instead</Button>
-			</div>
-		{:else if tab === 'voice'}
+		{:else if logUi.tab === 'photo'}
+			<PhotoCapture route="camera" ontype={() => (logUi.tab = 'type')} />
+		{:else if logUi.tab === 'upload'}
+			<PhotoCapture route="file" ontype={() => (logUi.tab = 'type')} />
+		{:else if logUi.tab === 'voice'}
 			<div class="bg-background flex flex-col items-center gap-3 rounded-3xl px-4 py-8 text-center">
 				<Mic class="size-8 {listening ? 'text-primary' : 'text-muted-foreground'}" />
 				<p class="text-muted-foreground max-w-xs text-sm">
@@ -217,7 +213,7 @@
 					{listening ? 'Listening — tap to stop' : 'Start listening'}
 				</Button>
 			</div>
-		{:else if tab === 'scan'}
+		{:else if logUi.tab === 'scan'}
 			<div class="bg-background flex flex-col items-center gap-3 rounded-3xl px-4 py-8 text-center">
 				<ScanBarcode class="text-primary size-8" />
 				<p class="text-muted-foreground max-w-xs text-sm">

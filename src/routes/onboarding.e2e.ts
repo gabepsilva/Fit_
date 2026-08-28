@@ -34,27 +34,75 @@ test.describe('once onboarded', () => {
 		await expect(page.getByRole('heading', { name: 'breakfast' })).toBeVisible();
 	});
 
+	test('keeps the destinations behind the menu button', async ({ page }) => {
+		await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible();
+		await expect(page.getByRole('link', { name: 'Progress' })).toBeHidden();
+	});
+
 	test('marks the current destination in the navigation', async ({ page }) => {
+		await page.getByRole('button', { name: 'Open menu' }).click();
 		await expect(page.getByRole('link', { name: 'Today' })).toHaveAttribute('aria-current', 'page');
 	});
 
+	test('has no detectable accessibility violations with the menu open', async ({ page }) => {
+		await page.getByRole('button', { name: 'Open menu' }).click();
+		await expect(page.getByRole('dialog')).toBeVisible();
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+			.analyze();
+		expect(results.violations).toEqual([]);
+	});
+
 	test('navigates to progress and moves the current marker', async ({ page }) => {
+		await page.getByRole('button', { name: 'Open menu' }).click();
 		await page.getByRole('link', { name: 'Progress' }).click();
 		await expect(page.getByRole('heading', { name: 'Progress', level: 1 })).toBeVisible();
+		await page.getByRole('button', { name: 'Open menu' }).click();
 		await expect(page.getByRole('link', { name: 'Progress' })).toHaveAttribute(
 			'aria-current',
 			'page'
 		);
 	});
 
-	test('navigates to the plan', async ({ page }) => {
+	test('closes the menu once a destination is reached', async ({ page }) => {
+		await page.getByRole('button', { name: 'Open menu' }).click();
 		await page.getByRole('link', { name: 'Plan' }).click();
 		await expect(page.getByRole('heading', { name: 'Plan', level: 1 })).toBeVisible();
+		await expect(page.getByRole('dialog')).toBeHidden();
+	});
+
+	test('navigates to exercise, which is not built yet', async ({ page }) => {
+		await page.getByRole('button', { name: 'Open menu' }).click();
+		await page.getByRole('link', { name: 'Exercise' }).click();
+		await expect(page.getByRole('heading', { name: 'Exercise', level: 1 })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Coming soon' })).toBeVisible();
 	});
 
 	test('navigates to the profile', async ({ page }) => {
+		await page.getByRole('button', { name: 'Open menu' }).click();
 		await page.getByRole('link', { name: 'You' }).click();
 		await expect(page.getByRole('heading', { name: 'You', level: 1 })).toBeVisible();
+	});
+
+	test('opens the log sheet on the photo tab from the camera', async ({ page }) => {
+		await page.getByRole('button', { name: 'Log from a photo' }).click();
+		await expect(page.getByRole('dialog')).toBeVisible();
+		// `exact`, because the top bar's own camera button is "Log from a photo".
+		await expect(page.getByRole('button', { name: 'Photo', exact: true })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+	});
+
+	test('offers the gallery as its own way in, beside the camera', async ({ page }) => {
+		await page.getByRole('button', { name: 'Log food' }).click();
+		await page.getByRole('button', { name: 'Upload' }).click();
+		await expect(page.getByRole('button', { name: 'Choose a picture' })).toBeVisible();
+	});
+
+	test('says on the photo tab that a still cannot be read yet', async ({ page }) => {
+		await page.getByRole('button', { name: 'Log from a photo' }).click();
+		await expect(page.getByText(/needs the server, which isn’t built yet/)).toBeVisible();
 	});
 
 	test('logs a food through the sheet', async ({ page }) => {

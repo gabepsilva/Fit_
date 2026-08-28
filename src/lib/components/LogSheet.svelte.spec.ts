@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { emptyProfile } from '$lib/domain/demo-seed';
@@ -8,6 +8,14 @@ import { tend } from '$lib/state/tend.svelte';
 import LogSheet from './LogSheet.svelte';
 
 const DEMO_BARCODE = '602652171032';
+
+/** A stream with real frames: a canvas can produce one without a camera. */
+function fakeStream() {
+	const canvas = document.createElement('canvas');
+	canvas.width = 320;
+	canvas.height = 240;
+	return canvas.captureStream(1);
+}
 
 function onboard() {
 	tend.resetAll();
@@ -24,9 +32,14 @@ async function openSheet() {
 	await expect.element(page.getByRole('dialog')).toBeInTheDocument();
 }
 
+afterEach(() => {
+	delete (navigator as { mediaDevices?: MediaDevices }).mediaDevices;
+});
+
 beforeEach(() => {
 	localStorage.clear();
 	logUi.open = false;
+	logUi.tab = 'type';
 	vi.restoreAllMocks();
 	onboard();
 });
@@ -49,6 +62,22 @@ describe('LogSheet', () => {
 			.toBeInTheDocument();
 	});
 
+	it('opens on the photo tab when the camera asked for it', async () => {
+		await render(LogSheet);
+		logUi.show('photo');
+		await expect
+			.element(page.getByText(/needs the server, which isn’t built yet/))
+			.toBeInTheDocument();
+	});
+
+	it('returns to typing once it has been closed', async () => {
+		await render(LogSheet);
+		logUi.show('photo');
+		await expect.element(page.getByRole('dialog')).toBeInTheDocument();
+		await page.getByRole('button', { name: 'Close' }).click();
+		expect(logUi.tab).toBe('type');
+	});
+
 	it('will not parse an empty sentence', async () => {
 		await openSheet();
 		await expect.element(page.getByRole('button', { name: 'Parse' })).toBeDisabled();
@@ -66,6 +95,25 @@ describe('LogSheet', () => {
 		await page.getByRole('button', { name: 'Photo' }).click();
 		await expect
 			.element(page.getByText(/needs the server, which isn’t built yet/))
+			.toBeInTheDocument();
+	});
+
+	it('opens the camera straight away on the photo tab', async () => {
+		const stream = fakeStream();
+		Object.defineProperty(navigator, 'mediaDevices', {
+			configurable: true,
+			value: { getUserMedia: vi.fn(() => Promise.resolve(stream)) }
+		});
+		await openSheet();
+		await page.getByRole('button', { name: 'Photo' }).click();
+		await expect.element(page.getByLabelText('Camera viewfinder')).toBeInTheDocument();
+	});
+
+	it('keeps the gallery as its own way in, beside the camera', async () => {
+		await openSheet();
+		await page.getByRole('button', { name: 'Upload' }).click();
+		await expect
+			.element(page.getByRole('button', { name: 'Choose a picture' }))
 			.toBeInTheDocument();
 	});
 

@@ -30,6 +30,11 @@ describe('NavLink', () => {
 		await expect.element(page.getByRole('link')).toHaveClass(/text-primary/);
 	});
 
+	it('sits on a filled row when active', async () => {
+		await render(NavLink, { props: { ...base, active: true } });
+		await expect.element(page.getByRole('link')).toHaveClass(/bg-accent/);
+	});
+
 	it('stays quiet when inactive', async () => {
 		await render(NavLink, { props: { ...base, active: false } });
 		await expect.element(page.getByRole('link')).toHaveClass(/text-muted-foreground/);
@@ -48,8 +53,8 @@ describe('NavLink', () => {
 			active: false
 		});
 		await render(NavLink, { props });
-		props.route = '/plan';
-		props.label = 'Plan';
-		await expect.element(page.getByRole('link', { name: 'Plan' })).toBeInTheDocument();
+		props.route = '/exercise';
+		props.label = 'Exercise';
+		await expect.element(page.getByRole('link', { name: 'Exercise' })).toBeInTheDocument();
 	});
 });

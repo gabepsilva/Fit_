@@ -11,8 +11,13 @@ Capacitor or Tauri shell.
 
 ## Current phase: front end in place, no backend
 
-The product UI is in: five routes (today, catalog, plan, progress, profile), onboarding,
-and the logging flow. It is a port of an earlier React prototype, rebuilt in Svelte 5.
+The product UI is in: six routes (today, catalog, plan, progress, exercise, profile),
+onboarding, and the logging flow. It is a port of an earlier React prototype, rebuilt in
+Svelte 5. Navigation is a side drawer opened from the top bar, not a bottom bar.
+
+Exercise is a placeholder on purpose: the destination exists and the route renders a
+"coming soon" page. Calorie tracking is one feature among several that will live beside
+it, so do not treat the empty page as an oversight to fill in unasked.
 
 - `src/lib/domain/` is framework-free TypeScript: the food catalog, recipes, the adaptive
   TDEE model, the on-device text parser, import and export. Tested by the `server` vitest

@@ -16,6 +16,7 @@ function seedOnboardedStorage() {
 beforeEach(() => {
 	localStorage.clear();
 	logUi.open = false;
+	logUi.tab = 'type';
 	tend.resetAll();
 	tend.hydrated = false;
 });
@@ -37,21 +38,58 @@ describe('AppShell', () => {
 		await expect.element(page.getByText('Page body')).toBeInTheDocument();
 	});
 
-	it('offers the four navigation destinations', async () => {
+	it('keeps the navigation behind the menu button until it is asked for', async () => {
 		seedOnboardedStorage();
 		await render(AppShellHarness, { props: { body: 'Page body' } });
-		for (const label of ['Today', 'Progress', 'Plan', 'You']) {
+		await expect.element(page.getByRole('button', { name: 'Open menu' })).toBeInTheDocument();
+		expect(document.querySelector('[role="dialog"]')).toBeNull();
+	});
+
+	it('offers the five navigation destinations once the menu is open', async () => {
+		seedOnboardedStorage();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+		await page.getByRole('button', { name: 'Open menu' }).click();
+		for (const label of ['Today', 'Progress', 'Exercise', 'Plan', 'You']) {
 			await expect.element(page.getByRole('link', { name: label })).toBeInTheDocument();
 		}
+	});
+
+	it('closes the menu again from its close control', async () => {
+		seedOnboardedStorage();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+		await page.getByRole('button', { name: 'Open menu' }).click();
+		await page.getByRole('button', { name: 'Close menu' }).click();
+		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 	});
 
 	// Which destination reads as current depends on real routing, so that is
 	// asserted end to end rather than here.
 
-	it('opens the log sheet from the central action', async () => {
+	it('opens the log sheet from the top bar', async () => {
 		seedOnboardedStorage();
 		await render(AppShellHarness, { props: { body: 'Page body' } });
 		await page.getByRole('button', { name: 'Log food' }).click();
 		expect(logUi.open).toBe(true);
+	});
+
+	it('opens the log sheet from the camera too', async () => {
+		seedOnboardedStorage();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+		await page.getByRole('button', { name: 'Log from a photo' }).click();
+		expect(logUi.open).toBe(true);
+	});
+
+	it('takes the camera straight to the photo tab', async () => {
+		seedOnboardedStorage();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+		await page.getByRole('button', { name: 'Log from a photo' }).click();
+		expect(logUi.tab).toBe('photo');
+	});
+
+	it('leaves the plain log action on the typing tab', async () => {
+		seedOnboardedStorage();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+		await page.getByRole('button', { name: 'Log food' }).click();
+		expect(logUi.tab).toBe('type');
 	});
 });

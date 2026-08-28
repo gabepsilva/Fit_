@@ -23,8 +23,8 @@
 	{href}
 	aria-current={active ? 'page' : undefined}
 	class={cn(
-		'flex h-16 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium',
-		active ? 'text-primary' : 'text-muted-foreground'
+		'flex h-12 items-center gap-3 rounded-2xl px-3 text-sm font-medium',
+		active ? 'bg-accent text-primary' : 'text-muted-foreground'
 	)}
 >
 	<Icon class="size-5" strokeWidth={active ? 2.2 : 1.8} />
