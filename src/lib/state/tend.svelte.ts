@@ -1,13 +1,10 @@
 import { buildAlexProfile, buildJordanProfile, HOUSEHOLD_PARTNER } from '$lib/domain/demo-seed';
 import { FOOD_BY_ID, scaleFood } from '$lib/domain/foods';
-import { logFromFood } from '$lib/domain/log-entry';
 import { emptyProfile, isGlp1 } from '$lib/domain/profile';
 import { recipeFits, RECIPES } from '$lib/domain/recipes';
 import type {
 	Injection,
 	LogItem,
-	LogSource,
-	Meal,
 	PlannedMeal,
 	PlannedMealSlot,
 	Profile,
@@ -188,32 +185,7 @@ export class TendStore {
 		this.persist();
 	}
 
-	removeProfile(id: string) {
-		this.state.profiles = this.state.profiles.filter((p) => p.id !== id);
-		if (this.state.activeProfileId === id) {
-			this.state.activeProfileId = this.state.profiles[0]?.id ?? '';
-		}
-		this.persist();
-	}
-
 	// -- log -----------------------------------------------------------------
-
-	addLogFromFood(args: {
-		foodId: string;
-		servings: number;
-		meal: Meal;
-		date?: string;
-		source?: LogSource;
-		note?: string;
-	}) {
-		this.addLogItems([
-			logFromFood({
-				...args,
-				date: args.date ?? todayISO(),
-				source: args.source ?? 'manual'
-			})
-		]);
-	}
 
 	addLogItems(items: LogItem[]) {
 		const active = this.profile;
@@ -268,19 +240,7 @@ export class TendStore {
 		this.persist();
 	}
 
-	removeInjection(id: string) {
-		const active = this.profile;
-		if (!active) return;
-		active.injections = active.injections.filter((i) => i.id !== id);
-		this.persist();
-	}
-
 	// -- plan ----------------------------------------------------------------
-
-	setPlan(plan: PlannedMeal[]) {
-		this.state.weekPlan = plan;
-		this.persist();
-	}
 
 	generatePlan() {
 		const restrictions = householdRestrictions(this.state.profiles);
@@ -340,12 +300,6 @@ export class TendStore {
 
 	resetAll() {
 		this.state = emptyState();
-		this.hydrated = true;
-		this.persist();
-	}
-
-	replaceState(s: TendState) {
-		this.state = { ...emptyState(), ...s };
 		this.hydrated = true;
 		this.persist();
 	}

@@ -1,7 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { logFromFood } from '$lib/domain/log-entry';
 import { emptyProfile } from '$lib/domain/profile';
 import { RECIPE_BY_ID, RECIPES, recipeFits } from '$lib/domain/recipes';
-import type { Injection, LogItem, Profile, TendState } from '$lib/domain/types';
+import type {
+	Injection,
+	LogItem,
+	LogSource,
+	Meal,
+	PlannedMeal,
+	Profile,
+	TendState
+} from '$lib/domain/types';
 import { PLANNED_MEALS, ZERO_MICROS } from '$lib/domain/types';
 import { todayISO } from '$lib/domain/utils';
 import { STORAGE_KEY, TendStore } from './tend.svelte';
@@ -11,6 +20,25 @@ function freshStore() {
 	const store = new TendStore();
 	store.hydrate();
 	return store;
+}
+
+/**
+ * Log one catalog food. The store carried this shorthand until nothing in the
+ * app turned out to use it; the tests that lean on it keep it here instead.
+ */
+function logFood(
+	store: TendStore,
+	args: { foodId: string; servings: number; meal: Meal; date?: string; source?: LogSource }
+) {
+	store.addLogItems([
+		logFromFood({ ...args, date: args.date ?? todayISO(), source: args.source ?? 'manual' })
+	]);
+}
+
+/** Put a known plan in place, so a swap has something predictable to move. */
+function setPlan(store: TendStore, plan: PlannedMeal[]) {
+	store.state.weekPlan = plan;
+	store.persist();
 }
 
 function onboarded(overrides: Partial<Profile> = {}) {
@@ -193,7 +221,7 @@ describe('onboarding', () => {
 describe('the log', () => {
 	it('adds an entry for the active profile', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 2, meal: 'breakfast' });
 		expect(store.profile?.log).toHaveLength(1);
 		expect(store.profile?.log[0]?.kcal).toBe(144);
 		expect(store.profile?.log[0]?.protein).toBe(12.6);
@@ -201,25 +229,25 @@ describe('the log', () => {
 
 	it('dates a new entry today by default', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 1, meal: 'breakfast' });
 		expect(store.profile?.log[0]?.date).toBe(todayISO());
 	});
 
 	it('calls an entry manual when nothing else said where it came from', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 1, meal: 'breakfast' });
 		expect(store.profile?.log[0]?.source).toBe('manual');
 	});
 
 	it('keeps the source an entry was logged with', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast', source: 'photo' });
+		logFood(store, { foodId: 'egg-large', servings: 1, meal: 'breakfast', source: 'photo' });
 		expect(store.profile?.log[0]?.source).toBe('photo');
 	});
 
 	it('re-derives a catalog entry from its food when the servings change', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 0.5, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 0.5, meal: 'breakfast' });
 		const id = store.profile?.log[0]?.id ?? '';
 		expect(store.profile?.log[0]?.protein).toBe(3.2);
 		store.updateLog(id, { servings: 2 });
@@ -261,7 +289,7 @@ describe('the log', () => {
 
 	it('leaves other fields alone when patching without a serving change', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 1, meal: 'breakfast' });
 		const id = store.profile?.log[0]?.id ?? '';
 		store.updateLog(id, { note: 'runny' });
 		const after = store.profile?.log[0];
@@ -272,7 +300,7 @@ describe('the log', () => {
 
 	it('does not re-derive an edited entry when the serving count is unchanged', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 1, meal: 'breakfast' });
 		const id = store.profile?.log[0]?.id ?? '';
 		store.updateLog(id, { kcal: 999 });
 		store.updateLog(id, { servings: 1, note: 'as weighed' });
@@ -283,8 +311,8 @@ describe('the log', () => {
 
 	it('removes only the entry it was asked for', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast' });
-		store.addLogFromFood({ foodId: 'egg-large', servings: 2, meal: 'lunch' });
+		logFood(store, { foodId: 'egg-large', servings: 1, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 2, meal: 'lunch' });
 		const first = store.profile?.log[0]?.id ?? '';
 		store.removeLog(first);
 		expect(store.profile?.log).toHaveLength(1);
@@ -333,51 +361,12 @@ describe('injections', () => {
 		expect(store.profile?.injections[0]?.id.startsWith('i-')).toBe(true);
 	});
 
-	it('removes only the dose it was asked for', () => {
-		const store = onboarded();
-		store.addInjection(dose);
-		store.addInjection({ ...dose, date: '2026-06-08', doseMg: 1 });
-		store.removeInjection(store.profile?.injections[0]?.id ?? '');
-		expect(store.profile?.injections).toHaveLength(1);
-		expect(store.profile?.injections[0]?.doseMg).toBe(1);
-	});
-});
-
-describe('profiles', () => {
 	it('switches the active profile', () => {
 		const store = onboarded();
 		const other = emptyProfile({ name: 'Jordan' });
 		store.addProfile(other);
 		store.setActive(other.id);
 		expect(store.profile?.name).toBe('Jordan');
-	});
-
-	it('falls back to the remaining profile when the active one is removed', () => {
-		const store = onboarded();
-		const other = emptyProfile({ name: 'Jordan' });
-		store.addProfile(other);
-		store.removeProfile(store.state.activeProfileId);
-		expect(store.profile?.name).toBe('Jordan');
-	});
-
-	it('keeps the active profile when a different one is removed', () => {
-		const store = onboarded();
-		const second = emptyProfile({ name: 'Jordan' });
-		const third = emptyProfile({ name: 'Sam' });
-		store.addProfile(second);
-		store.addProfile(third);
-		store.setActive(third.id);
-		store.removeProfile(second.id);
-		expect(store.state.activeProfileId).toBe(third.id);
-		expect(store.profile?.name).toBe('Sam');
-	});
-
-	it('has no active profile left when the last one is removed', () => {
-		const store = onboarded();
-		store.removeProfile(store.state.activeProfileId);
-		expect(store.state.profiles).toEqual([]);
-		expect(store.state.activeProfileId).toBe('');
-		expect(store.profile).toBeNull();
 	});
 
 	it('patches only the active profile', () => {
@@ -458,7 +447,7 @@ describe('the week plan', () => {
 		const breakfast = RECIPES.filter((r) => r.meal === 'breakfast')[0]?.id ?? '';
 		// Another day's dinner comes first and the same day's breakfast comes in
 		// between, so matching on only half of date-and-meal picks the wrong slot.
-		store.setPlan([
+		setPlan(store, [
 			{ date: '2026-06-02', meal: 'dinner', recipeId: dinners[0]?.id ?? '', forProfileIds: [] },
 			{ date: '2026-06-01', meal: 'breakfast', recipeId: breakfast, forProfileIds: [] },
 			{ date: '2026-06-01', meal: 'dinner', recipeId: dinners[1]?.id ?? '', forProfileIds: [] }
@@ -473,21 +462,13 @@ describe('the week plan', () => {
 		const store = onboarded({ restrictions: ['vegetarian'] });
 		const fits = RECIPES.filter((r) => r.meal === 'dinner' && recipeFits(r, ['vegetarian']));
 		expect(fits.length).toBeGreaterThan(1);
-		store.setPlan([
+		setPlan(store, [
 			{ date: '2026-06-01', meal: 'dinner', recipeId: fits[0]?.id ?? '', forProfileIds: [] }
 		]);
 		store.swapPlanned('2026-06-01', 'dinner');
 		expect(store.state.weekPlan[0]?.recipeId).toBe(fits[1]?.id);
 	});
 
-	it('accepts a plan set wholesale', () => {
-		const store = onboarded();
-		store.setPlan([]);
-		expect(store.state.weekPlan).toEqual([]);
-	});
-});
-
-describe('the pantry', () => {
 	it('adds a food', () => {
 		const store = onboarded();
 		store.togglePantry('egg-large');
@@ -519,33 +500,6 @@ describe('whole-state operations', () => {
 		expect(reloaded().state.onboarded).toBe(false);
 	});
 
-	it('replaces the state from an import', () => {
-		const store = freshStore();
-		store.replaceState({
-			onboarded: true,
-			activeProfileId: 'p1',
-			profiles: [{ ...emptyProfile({ name: 'Imported' }), id: 'p1' }],
-			weekPlan: [],
-			pantry: []
-		});
-		expect(store.profile?.name).toBe('Imported');
-	});
-
-	it('writes an import through even when the store was never hydrated', () => {
-		const store = new TendStore();
-		store.replaceState({
-			onboarded: true,
-			activeProfileId: 'p1',
-			profiles: [{ ...emptyProfile({ name: 'Imported' }), id: 'p1' }],
-			weekPlan: [],
-			pantry: []
-		});
-		expect(store.hydrated).toBe(true);
-		expect(stored().profiles[0]?.name).toBe('Imported');
-	});
-});
-
-describe('persistence', () => {
 	it('writes the payload under the key an older build would read', () => {
 		onboarded();
 		expect(localStorage.getItem('tend.v1')).not.toBeNull();
@@ -555,7 +509,7 @@ describe('persistence', () => {
 
 	it('saves each change to the log as it is made', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 1, meal: 'breakfast' });
 		expect(stored().profiles[0]?.log).toHaveLength(1);
 		const id = store.profile?.log[0]?.id ?? '';
 		store.updateLog(id, { servings: 2 });
@@ -570,8 +524,6 @@ describe('persistence', () => {
 		expect(stored().profiles[0]?.weights[0]?.kg).toBe(80);
 		store.addInjection(dose);
 		expect(stored().profiles[0]?.injections).toHaveLength(1);
-		store.removeInjection(store.profile?.injections[0]?.id ?? '');
-		expect(stored().profiles[0]?.injections).toEqual([]);
 	});
 
 	it('saves each change to the profile list as it is made', () => {
@@ -583,14 +535,12 @@ describe('persistence', () => {
 		expect(stored().activeProfileId).toBe(other.id);
 		store.patchActive((p) => ({ ...p, glp1: true }));
 		expect(stored().profiles[1]?.glp1).toBe(true);
-		store.removeProfile(other.id);
-		expect(stored().profiles).toHaveLength(1);
 	});
 
 	it('saves each change to the plan and the pantry as it is made', () => {
 		const store = onboarded();
 		const dinners = RECIPES.filter((r) => r.meal === 'dinner');
-		store.setPlan([
+		setPlan(store, [
 			{ date: '2026-06-01', meal: 'dinner', recipeId: dinners[0]?.id ?? '', forProfileIds: [] }
 		]);
 		expect(stored().weekPlan).toHaveLength(1);
@@ -627,7 +577,7 @@ describe('persistence', () => {
 
 	it('reloads into the state it wrote', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 2, meal: 'breakfast' });
 		store.addWeight(80);
 		store.togglePantry('oats');
 		const next = reloaded();
@@ -668,16 +618,9 @@ describe('guards when nothing is active', () => {
 		expect(localStorage.getItem('tend.v1')).toBeNull();
 	});
 
-	it('ignores a dose removal', () => {
-		const store = freshStore();
-		store.removeInjection('nope');
-		expect(store.profile).toBeNull();
-		expect(localStorage.getItem('tend.v1')).toBeNull();
-	});
-
 	it('leaves unrelated entries untouched when patching', () => {
 		const store = onboarded();
-		store.addLogFromFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast' });
+		logFood(store, { foodId: 'egg-large', servings: 1, meal: 'breakfast' });
 		store.updateLog('not-this-one', { servings: 5 });
 		expect(store.profile?.log[0]?.servings).toBe(1);
 		expect(store.profile?.log[0]?.kcal).toBe(72);

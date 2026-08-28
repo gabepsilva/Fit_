@@ -18,7 +18,16 @@ const NUMBER_WORDS: Record<string, number> = {
 	dozen: 12
 };
 
+/**
+ * Words that sit between a quantity and the food itself. They are dropped
+ * before the catalog is searched, because "half an avocado" and "a cup of
+ * coffee" are avocado and coffee — leaving the filler in drags a real match
+ * below the threshold and sends the item back to be corrected by hand.
+ */
 const UNIT_HINTS = [
+	'a',
+	'an',
+	'of',
 	'large',
 	'medium',
 	'small',

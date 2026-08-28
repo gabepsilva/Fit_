@@ -1,11 +1,26 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import { logFromFood } from '$lib/domain/log-entry';
 import { emptyProfile } from '$lib/domain/profile';
+import type { LogSource, Meal } from '$lib/domain/types';
 import { addDaysISO, todayISO, weekdayLong, weekdayShort } from '$lib/domain/utils';
 import { logUi } from '$lib/state/log-ui.svelte';
 import { tend } from '$lib/state/tend.svelte';
 import TodayView from './TodayView.svelte';
+
+/** Log one catalog food, the way the sheet does it. */
+function logFood(args: {
+	foodId: string;
+	servings: number;
+	meal: Meal;
+	date?: string;
+	source?: LogSource;
+}) {
+	tend.addLogItems([
+		logFromFood({ ...args, date: args.date ?? todayISO(), source: args.source ?? 'manual' })
+	]);
+}
 
 function logName() {
 	return tend.profile?.log[0]?.name ?? '';
@@ -40,14 +55,14 @@ describe('TodayView', () => {
 	});
 
 	it('counts logged days once there is a log', async () => {
-		tend.addLogFromFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
+		logFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
 		await render(TodayView);
 		await expect.element(page.getByText(/1 day logged this week/)).toBeInTheDocument();
 	});
 
 	it('pluralizes the logged-day count', async () => {
-		tend.addLogFromFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
-		tend.addLogFromFood({
+		logFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
+		logFood({
 			foodId: 'egg-large',
 			servings: 2,
 			meal: 'breakfast',
@@ -58,7 +73,7 @@ describe('TodayView', () => {
 	});
 
 	it('collapses an expanded entry when tapped again', async () => {
-		tend.addLogFromFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
+		logFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
 		await render(TodayView);
 		const row = page.getByRole('button', { name: new RegExp(logName()) });
 		await row.click();
@@ -68,7 +83,7 @@ describe('TodayView', () => {
 
 	it('steps servings in quarters on GLP-1', async () => {
 		onboard(true);
-		tend.addLogFromFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast' });
+		logFood({ foodId: 'egg-large', servings: 1, meal: 'breakfast' });
 		await render(TodayView);
 		await page.getByRole('button', { name: new RegExp(logName()) }).click();
 		await page.getByRole('button', { name: 'Increase' }).click();
@@ -88,7 +103,7 @@ describe('TodayView', () => {
 	});
 
 	it('shows a logged entry under its meal', async () => {
-		tend.addLogFromFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
+		logFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
 		await render(TodayView);
 		await expect.element(page.getByText(logName()).first()).toBeInTheDocument();
 	});
@@ -130,7 +145,7 @@ describe('TodayView', () => {
 	});
 
 	it('expands an entry when it is tapped', async () => {
-		tend.addLogFromFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
+		logFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
 		await render(TodayView);
 		await page.getByRole('button', { name: new RegExp(logName()) }).click();
 		await expect.element(page.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
@@ -152,7 +167,7 @@ describe('TodayView', () => {
 	});
 
 	it('totals energy per meal', async () => {
-		tend.addLogFromFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
+		logFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
 		await render(TodayView);
 		const kcal = tend.profile?.log[0]?.kcal ?? 0;
 		await expect.element(page.getByText(`${kcal} kcal`).first()).toBeInTheDocument();

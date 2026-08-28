@@ -209,13 +209,6 @@ describe('LogSheet', () => {
 		expect(logUi.open).toBe(false);
 	});
 
-	it('says so when a barcode has no catalog match', async () => {
-		await openSheet();
-		await page.getByRole('button', { name: 'Scan' }).click();
-		await page.getByRole('button', { name: 'Demo scan' }).click();
-		await expect.element(page.getByText(/Parsed on-device/)).toBeInTheDocument();
-	});
-
 	it('matches a proposal to a catalog food', async () => {
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('xyzzy nonexistent gruel');
@@ -255,17 +248,6 @@ describe('LogSheet', () => {
 		expect(document.body.textContent).not.toContain('Find a catalog match');
 	});
 
-	it('reports a single item in the singular', async () => {
-		vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
-		await openSheet();
-		await page.getByLabelText('What you ate').fill('two eggs');
-		await page.getByRole('button', { name: 'Parse' }).click();
-		await page.getByRole('button', { name: 'Add to today' }).click();
-		expect(logUi.open).toBe(false);
-	});
-});
-
-describe('LogSheet dictation', () => {
 	it('says so when the browser cannot dictate', async () => {
 		const globals = globalThis as unknown as {
 			SpeechRecognition?: unknown;

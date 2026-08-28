@@ -238,11 +238,13 @@ describe('parseLocalText', () => {
 		expect(item?.foodId).toBe('egg-large');
 	});
 
-	it('keeps an "of" that sits inside the phrase, where the catalog can still use it', () => {
+	it('drops the unit and the "of" between a quantity and its food', () => {
 		const item = firstItem('2 slices of toast');
 		expect(item?.servings).toBe(2);
 		expect(item?.foodId).toBe('sourdough');
-		expect(item?.confidence).toBe(0.86);
+		// The whole query is now the alias, rather than "of toast" scraping past
+		// the threshold on a partial match.
+		expect(item?.confidence).toBe(0.96);
 	});
 
 	it('reads a number only at the start of a phrase, not in the middle of one', () => {
@@ -323,17 +325,18 @@ describe('parseLocalText', () => {
 		expect(result.items[0]?.confidence).toBe(0);
 	});
 
-	// A pinned gap, not a specification: "an" is not a unit hint, so it survives
-	// into the query and drags the score under the matching threshold. "half
-	// avocado" matches fine. The assertion below states what happens today so a
-	// fix shows up as a deliberate change rather than a surprise.
-	it('leaves a near miss unmatched but keeps the quantity and the score it reached', () => {
+	it('reads through the article in "half an avocado"', () => {
 		const result = parseLocalText('half an avocado');
-		expect(result.unmatched).toEqual(['half an avocado']);
-		expect(result.allMatched).toBe(false);
-		expect(result.items[0]?.foodId).toBeNull();
+		expect(result.allMatched).toBe(true);
+		expect(result.items[0]?.foodId).toBe('avocado');
 		expect(result.items[0]?.servings).toBe(0.5);
-		expect(result.items[0]?.confidence).toBe(0.5);
+	});
+
+	it('reads through the unit and the "of" in "a cup of coffee"', () => {
+		const result = parseLocalText('a cup of coffee');
+		expect(result.allMatched).toBe(true);
+		expect(result.items[0]?.foodId).toBe('coffee');
+		expect(result.items[0]?.servings).toBe(1);
 	});
 
 	it('is not "all matched" when there is nothing to match', () => {
