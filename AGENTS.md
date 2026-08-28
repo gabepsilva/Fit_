@@ -103,10 +103,10 @@ reaches for the other engines, and CI is where that runs.
 
 ## Further reading
 
-`QUALITY.md` documents each control: its purpose, how it is implemented, which command
-gates it, and its current limit. It also records, per area, what to add next and what
-should trigger adding it. Consult it before proposing a new tool or rule, because most
-gaps are deliberate and already have a stated trigger.
+`QUALITY.md` is the control inventory: what each area currently enforces, what to add
+next, and what should trigger adding it, plus the recorded decisions behind non-obvious
+choices. Consult it before proposing a new tool or rule, because most gaps are deliberate
+and already have a stated trigger. Record gate reviews and deliberate exceptions there.
 
 ## Review guidelines
 

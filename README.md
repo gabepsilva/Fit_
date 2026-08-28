@@ -78,6 +78,15 @@ and they block a merge. Trivy and ZAP depend on external feeds whose results cha
 any code change; gating on them would contradict the determinism this repository promises,
 so they run on a schedule and open an issue instead.
 
+ZAP runs in a container and reaches the host preview server through the Docker bridge. A
+host firewall that blocks the bridge makes every proxied flow time out, and `bun run
+nightly` fails with an unreachable target rather than a security verdict. On a host
+running `ufw`, allow the bridge first:
+
+```bash
+sudo ufw allow in on docker0
+```
+
 ### Mobile-first end-to-end runs
 
 Fit_ targets Android and iOS browsers, so `bun run test:e2e` defaults to a single mobile
@@ -97,7 +106,9 @@ CI runs its gates as parallel jobs, so a formatting failure surfaces in about a 
 than behind half an hour of browser and container work. The `main` branch is protected by the
 hosted `CI / Quality and security` check, which passes only when every parallel gate succeeds.
 
-Repository-specific agent and review rules live in `AGENTS.md`. `QUALITY.md` documents every control in detail, with what to add next and what should trigger adding it. `Basic Start.md` records how the baseline was assembled.
+Repository-specific agent and review rules live in `AGENTS.md`. `QUALITY.md` is the control
+inventory: what each area currently enforces, what to add next, and what should trigger
+adding it.
 
 ## Deployment
 
