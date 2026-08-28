@@ -24,6 +24,10 @@ rather than inventing a placeholder that later has to be unpicked.
 
 You are able to use the Svelte MCP server, where you have access to comprehensive Svelte 5 and SvelteKit documentation. Here's how to use the available tools effectively:
 
+The server is registered for Claude Code in `.mcp.json` and for Cursor in `.cursor/mcp.json`,
+pinned to one `@sveltejs/mcp` version in both. Bump them together. `.claude/skills/svelte/SKILL.md`
+carries the component conventions and the gates a Svelte change has to clear.
+
 ## Available Svelte MCP Tools
 
 ### 1. list-sections
