@@ -25,8 +25,14 @@
 	type Phase = 'ready' | 'live' | 'reading' | 'shot' | 'failed';
 
 	const TROUBLE: Record<CameraFailure | PickFailure, string> = {
+		// `unsupported` names the browser on purpose: it means `getUserMedia` is
+		// missing, which needs an insecure origin, and the Android shell serves
+		// from https://localhost. That branch is unreachable in the native app.
 		unsupported: 'This browser doesn’t offer a camera.',
-		denied: 'Camera access was declined. Your browser’s site settings can undo that.',
+		// `denied` is reachable in both, where the way back differs: site
+		// settings in a browser, app permissions on Android. Naming neither is
+		// what keeps this sentence true wherever it is read.
+		denied: 'Camera access was declined. You can undo that in your settings.',
 		unavailable: 'The camera wouldn’t open. Something else may be using it.',
 		'not-an-image': 'That file isn’t a picture.',
 		unreadable: 'That picture couldn’t be read.'

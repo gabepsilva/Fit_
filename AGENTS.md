@@ -1,13 +1,15 @@
 # Fit_
 
-A fitness application delivered as a **mobile web app**: SvelteKit served over HTTP and
-opened in the browser on Android and iOS. It is not a native build and there is no
-Capacitor or Tauri shell.
+A fitness application delivered two ways from one codebase: a **mobile web app** —
+SvelteKit served over HTTP and opened in the browser on Android and iOS — and an
+**Android app**, the same client bundle running inside a Capacitor WebView. There is no
+iOS shell and no Tauri.
 
 - **Language**: TypeScript
 - **Package manager**: bun
 - **Tooling**: prettier, eslint, vitest, playwright, mcp
-- **Deployment**: `@sveltejs/adapter-node`
+- **Deployment**: `@sveltejs/adapter-node` (web), `@sveltejs/adapter-static` in a Capacitor
+  shell (Android)
 
 ## Current phase: front end in place, no backend
 

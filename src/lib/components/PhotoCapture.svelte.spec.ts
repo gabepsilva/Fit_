@@ -172,7 +172,7 @@ describe('PhotoCapture, pointed at the camera', () => {
 	it('names a declined permission and how to undo it', async () => {
 		failing('NotAllowedError');
 		await camera();
-		await expect.element(page.getByText(/site settings can undo that/)).toBeInTheDocument();
+		await expect.element(page.getByText(/undo that in your settings/)).toBeInTheDocument();
 	});
 
 	it('says when the camera could not be opened at all', async () => {

@@ -12,6 +12,10 @@ const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
 
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),
+	// The generated native project holds a copy of the built web assets, which
+	// are minified and not ours to lint. `android/.gitignore` hides them from
+	// git, but `includeIgnoreFile` above only reads the root one.
+	{ ignores: ['android/**'] },
 	js.configs.recommended,
 	ts.configs.recommendedTypeChecked,
 	svelte.configs.recommended,
@@ -24,7 +28,11 @@ export default defineConfig(
 		},
 		languageOptions: {
 			globals: { ...globals.browser, ...globals.node },
-			parserOptions: { projectService: true }
+			// `capacitor.config.ts` is read by the Capacitor CLI rather than by
+			// the app, so no tsconfig owns it; it still gets type-aware linting.
+			parserOptions: {
+				projectService: { allowDefaultProject: ['capacitor.config.ts'] }
+			}
 		},
 		rules: {
 			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.

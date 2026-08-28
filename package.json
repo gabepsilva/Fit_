@@ -17,6 +17,9 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
+		"build:capacitor": "VITE_CAPACITOR=1 vite build",
+		"android:sync": "bun run build:capacitor && cap sync android",
+		"android:run": "bun run android:sync && cap run android",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync && git config core.hooksPath .githooks 2>/dev/null || true",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
@@ -62,12 +65,14 @@
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "^4.13.0",
+		"@capacitor/cli": "^8.5.0",
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.62.1",
 		"@stryker-mutator/api": "10.0.0",
 		"@stryker-mutator/core": "10.0.0",
 		"@stryker-mutator/vitest-runner": "10.0.0",
 		"@sveltejs/adapter-node": "^5.5.7",
+		"@sveltejs/adapter-static": "^3.0.10",
 		"@sveltejs/kit": "^2.70.3",
 		"@sveltejs/vite-plugin-svelte": "^7.3.0",
 		"@tailwindcss/vite": "^4.3.3",
@@ -97,6 +102,8 @@
 		"vitest-browser-svelte": "^3.0.0"
 	},
 	"dependencies": {
+		"@capacitor/android": "^8.5.0",
+		"@capacitor/core": "^8.5.0",
 		"@lucide/svelte": "^1.35.0",
 		"bits-ui": "^2.19.0",
 		"clsx": "^2.1.1",

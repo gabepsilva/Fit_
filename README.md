@@ -116,9 +116,32 @@ adding it.
 
 ## Deployment
 
-Fit_ ships as a mobile web app, served over HTTP rather than through an app store.
-`@sveltejs/adapter-node` is pinned so that `bun run build` proves a deployable artifact.
-With `adapter-auto` the build succeeded while adapting to nothing: it exited 0, printed
-"Could not detect a supported production environment", and emitted no `build/` directory,
-so the build gate proved compilation but never deployability. Swap the adapter if the
-hosting target changes.
+Fit_ ships from one codebase to two targets.
+
+**Web.** Served over HTTP rather than through an app store. `@sveltejs/adapter-node` is
+pinned so that `bun run build` proves a deployable artifact. With `adapter-auto` the build
+succeeded while adapting to nothing: it exited 0, printed "Could not detect a supported
+production environment", and emitted no `build/` directory, so the build gate proved
+compilation but never deployability. Swap the adapter if the hosting target changes.
+
+**Android.** The same client bundle inside a Capacitor WebView. A WebView has no Node to
+run a server bundle, so `bun run build:capacitor` sets `VITE_CAPACITOR=1`, which switches
+the adapter to `@sveltejs/adapter-static` and turns off SSR in `src/routes/+layout.ts`.
+That build writes to `build-capacitor/` rather than `build/`, so the two targets can never
+overwrite each other. This is the only place the targets diverge: web rendering is
+unchanged.
+
+| Command                   | Does                                                      |
+| ------------------------- | --------------------------------------------------------- |
+| `bun run build`           | Web build (`adapter-node`) into `build/`.                 |
+| `bun run build:capacitor` | Static SPA build into `build-capacitor/`.                 |
+| `bun run android:sync`    | Static build, then copy it into the native project.       |
+| `bun run android:run`     | The above, then install and launch on a plugged-in phone. |
+
+The generated `android/` project is committed, because it carries edits that are not
+reproducible from config: the `CAMERA` permission that `src/lib/ui/camera.ts` needs, and
+the launcher icons. Its own `.gitignore` keeps the copied web assets and build outputs out.
+
+Building it needs a JDK and the Android SDK, neither of which the repository can pin:
+JDK 21 (the Android Gradle Plugin does not support 25 or later), SDK platform 36, and
+build-tools 36. Point `local.properties` at the SDK, or export `ANDROID_HOME`.
