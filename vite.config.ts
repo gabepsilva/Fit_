@@ -38,6 +38,11 @@ export default defineConfig({
 	},
 	test: {
 		expect: { requireAssertions: true },
+		// A mutation run puts one vitest inside every Stryker worker. Left alone,
+		// each of those would size its pool to the whole machine and the workers
+		// would fight each other into false timeouts; `stryker.config.mjs` sets
+		// this flag and owns the parallelism instead.
+		...(process.env.FIT_MUTATION_RUN ? { fileParallelism: false } : {}),
 		coverage: {
 			provider: 'istanbul',
 			reporter: ['text', 'json-summary', 'html'],
