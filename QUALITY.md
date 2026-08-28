@@ -86,6 +86,46 @@ add more maintenance and noise than useful protection.
 
 ## Recorded decisions and known gaps
 
+- **The JavaScript budget was raised to 320 KiB when the product UI landed (recorded
+  2026-08-28).** The previous 150 KiB budget was set against a repository that carried
+  only the SvelteKit demo routes, so it measured an empty application. Porting the front
+  end took the build to 312 KiB of raw JavaScript, of which roughly 50 KiB is the food
+  catalog and recipe data, and roughly 66 KiB is `bits-ui` and `svelte-sonner`. Two
+  things make the raw figure a poor proxy for what a phone actually pays: the check sums
+  every emitted chunk, including route code that is loaded lazily and never on first
+  paint, and it counts uncompressed bytes. The same build is 111 KiB gzipped in total and
+  about 79 KiB gzipped on first load. The budget was raised to sit just above the
+  measured build rather than to a round aspiration, so it still fails on a careless
+  dependency. CSS was left at 50 KiB and passes at 40 KiB. The better fix is to weigh
+  transferred bytes and to budget the first-load path separately from lazily-loaded
+  routes; that is the trigger for revisiting `scripts/quality/bundle-budget.ts`.
+- **Mutation testing measures behavior, not seed data (recorded 2026-08-28).** The
+  mutation glob was `src/lib/**/*.ts`, which swept in roughly 1,800 lines of catalog and
+  fixture data and held the score at 53.84 percent against a break threshold of 80. Almost
+  every survivor was a string literal in a food name, an alias list, a recipe note, or a
+  demo meal template. Those mutants cannot be killed by design: the only test that fails when
+  "Egg, large" becomes an empty string is a test that asserts the catalog's exact wording,
+  which would freeze a fixture as if it were a contract and make every seed edit a test
+  edit. The score was measuring how much data the repository carries, not how well its
+  logic is tested. The fix was to split the data out rather than to move the bar: `FOODS`
+  and its `f()` row builder, `CATEGORY_LABEL` and `PROVENANCE_LABEL` now live in
+  `src/lib/domain/food-catalog.ts`, and `RECIPES` in `src/lib/domain/recipe-book.ts`, both
+  re-exported from `foods.ts` and `recipes.ts` so no import site changed. Those two modules
+  and `src/lib/domain/demo-seed.ts` are excluded from `mutate` in `stryker.config.mjs`.
+  Everything that reads the data is still mutated at full strength: `FOOD_BY_ID`,
+  `FOOD_BY_BARCODE`, `scaleFood`, `RECIPE_BY_ID`, `recipeMacros`, `recipeFits`, the grocery
+  builder, the text parser, and the adaptive TDEE model. No threshold moved, and the
+  excluded modules keep their existing tests and their place in coverage: `catalog.spec.ts`
+  still checks that the catalog is non-empty, uniquely keyed, and fully labelled, and
+  `demo-seed.spec.ts` still checks that the seeded journal has gaps, varied sources, and
+  enough history for adaptive TDEE to engage. It asserts those properties without freezing
+  the sample numbers, which is exactly the line the exclusion draws. Revisit this when real
+  logic grows inside an excluded module — a food-catalog module that starts normalizing
+  units, deriving micros, or resolving aliases is no longer data and belongs back in the
+  glob, as does `demo-seed.ts` if the demo journal ever has to reproduce a specific history
+  rather than a plausible one. The narrower answer, if Stryker ever supports it cleanly, is
+  to exclude mutant types per file instead of whole files, so a genuine off-by-one in
+  fixture arithmetic would still be caught.
 - **ZAP scans the wrong server (recorded 2026-08-27).** ZAP proxies `vite preview`, but
   the project ships `adapter-node`, and the two serve different headers, so every
   "Cross-Domain Misconfiguration" alert is an artifact of the scanned server. The real

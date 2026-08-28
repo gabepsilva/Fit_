@@ -7,7 +7,12 @@
 	},
 	"globs": [
 		"**/*.md",
+		"!android/**",
+		"!build-capacitor/**",
 		"!node_modules/**",
+		// An interrupted mutation run leaves a sandbox behind, holding a copy of
+		// every dependency's README. Linting those is not a verdict on this repo.
+		"!.stryker-tmp/**",
 		"!.security-cache/**",
 		"!.svelte-kit/**",
 		"!coverage/**",

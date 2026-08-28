@@ -1,24 +1,40 @@
 # Fit_
 
-A fitness application delivered as a **mobile web app**: SvelteKit served over HTTP and
-opened in the browser on Android and iOS. It is not a native build and there is no
-Capacitor or Tauri shell.
+A fitness application delivered two ways from one codebase: a **mobile web app** —
+SvelteKit served over HTTP and opened in the browser on Android and iOS — and an
+**Android app**, the same client bundle running inside a Capacitor WebView. There is no
+iOS shell and no Tauri.
 
 - **Language**: TypeScript
 - **Package manager**: bun
 - **Tooling**: prettier, eslint, vitest, playwright, mcp
-- **Deployment**: `@sveltejs/adapter-node`
+- **Deployment**: `@sveltejs/adapter-node` (web), `@sveltejs/adapter-static` in a Capacitor
+  shell (Android)
 
-## Current phase: environment, not application
+## Current phase: front end in place, no backend
 
-The repository is still being set up. It carries the quality gates and the test
-environment; it does not yet carry fitness features. There is no domain model, no
-persistence, and no product UI beyond the SvelteKit demo routes.
+The product UI is in: six routes (today, catalog, plan, progress, exercise, profile),
+onboarding, and the logging flow. It is a port of an earlier React prototype, rebuilt in
+Svelte 5. Navigation is a side drawer opened from the top bar, not a bottom bar.
 
-Scope work accordingly: tooling, gates, CI, and test infrastructure. Do not add fitness
-domain features, screens, or branding assets unless asked. When a setup task needs a
-product decision, such as web-app-manifest metadata, icons, or a color theme, raise it
-rather than inventing a placeholder that later has to be unpicked.
+Exercise is a placeholder on purpose: the destination exists and the route renders a
+"coming soon" page. Calorie tracking is one feature among several that will live beside
+it, so do not treat the empty page as an oversight to fill in unasked.
+
+- `src/lib/domain/` is framework-free TypeScript: the food catalog, recipes, the adaptive
+  TDEE model, the on-device text parser, import and export. Tested by the `server` vitest
+  project, in Node.
+- `src/lib/state/tend.svelte.ts` is the single rune-backed store. It persists to
+  `localStorage` behind an explicit `hydrate()`, so a server render never touches it.
+- `src/lib/components/` and `src/lib/ui/` are the Svelte components, on Tailwind 4 and
+  `bits-ui`. Tested by the `client` vitest project, in a real browser.
+
+**There is no server yet.** No database, no accounts, no sync, no assisted parsing. When
+the SQLite backend lands, the store's methods are the call sites that talk to it. Do not
+describe the app as having a backend, and do not add one without being asked.
+
+Coverage is split by which project tests what: `client` measures everything under
+`src/lib` except `domain/` and `server/`; `server` measures `domain/` and `server/`.
 
 ---
 
@@ -64,6 +80,15 @@ its log path, and its machine-readable artifact. Do not scrape the human output.
 | `bun run verify:deep` | Adds mutation testing and end-to-end flows.       | Docker, Chromium |
 | `bun run ci`          | Adds the blocking security scanners.              | Docker, Chromium |
 | `bun run nightly`     | Trivy and ZAP. Scheduled, never a merge gate.     | Docker, Chromium |
+
+`make` lists local shortcuts for the same tiers. `make ci` runs the exact steps
+the CI workflow runs, but arranges them for one machine instead of six runners:
+the static and security jobs run beside a single browser lane, and mutation
+testing gets the machine to itself afterwards. It cannot be reordered freely —
+`build`, `test:e2e` and `test:gates` all contend for `build/` and port 4173, and
+`reuseExistingServer` in `playwright.config.ts` means a second Playwright would
+silently reuse the first one's server and prove nothing. `make dev` runs the app
+with hot reload; `make android` builds and installs it on a connected device.
 
 No tier needs Firefox or WebKit. Every gate runs end-to-end flows through the default
 `mobile-chrome` project, which uses the Chromium engine. Only `bun run test:e2e:all`

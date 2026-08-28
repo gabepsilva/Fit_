@@ -2,10 +2,13 @@ import { defineConfig } from 'vitest/config';
 import thresholds from './quality/thresholds.json' with { type: 'json' };
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-node';
+import adapterStatic from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
 	plugins: [
+		tailwindcss(),
 		sveltekit({
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
@@ -16,7 +19,18 @@ export default defineConfig({
 			// Pinned so `bun run build` proves a deployable artifact rather than
 			// succeeding while adapting to nothing. A consuming app may swap this
 			// for its own target: https://svelte.dev/docs/kit/adapters
-			adapter: adapter()
+			//
+			// The Capacitor target is the one exception: a WebView has no Node to
+			// run a server bundle, so that build emits a static SPA into its own
+			// directory. Both are real artifacts; neither adapts to nothing.
+			adapter: process.env.VITE_CAPACITOR
+				? adapterStatic({
+						pages: 'build-capacitor',
+						assets: 'build-capacitor',
+						fallback: 'index.html',
+						precompress: false
+					})
+				: adapter()
 		})
 	],
 	preview: {
@@ -24,6 +38,11 @@ export default defineConfig({
 	},
 	test: {
 		expect: { requireAssertions: true },
+		// A mutation run puts one vitest inside every Stryker worker. Left alone,
+		// each of those would size its pool to the whole machine and the workers
+		// would fight each other into false timeouts; `stryker.config.mjs` sets
+		// this flag and owns the parallelism instead.
+		...(process.env.FIT_MUTATION_RUN ? { fileParallelism: false } : {}),
 		coverage: {
 			provider: 'istanbul',
 			reporter: ['text', 'json-summary', 'html'],
