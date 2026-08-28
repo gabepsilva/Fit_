@@ -101,6 +101,13 @@ reaches for the other engines, and CI is where that runs.
 - Changes to quality configuration, CI scripts, scanner policies, container digests, snapshots,
   the suppression baseline, or `bun.lock` require deliberate review.
 
+## Further reading
+
+`QUALITY.md` documents each control: its purpose, how it is implemented, which command
+gates it, and its current limit. It also records, per area, what to add next and what
+should trigger adding it. Consult it before proposing a new tool or rule, because most
+gaps are deliberate and already have a stated trigger.
+
 ## Review guidelines
 
 - Report concrete correctness, security, data-loss, concurrency, or contract defects; do not repeat deterministic lint output.

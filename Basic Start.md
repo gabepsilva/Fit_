@@ -3,7 +3,8 @@
 This is the record of how the gates in this repository were assembled and why, plus an
 honest table of what they do and do not catch. It is history and rationale, not a setup
 guide: the project already exists, so nothing here needs to be run again. Day-to-day
-commands live in `README.md`; the rules agents must follow live in `AGENTS.md`.
+commands live in `README.md`, the rules agents must follow live in `AGENTS.md`, and the
+per-control reference lives in `QUALITY.md`.
 
 Fit_ is a mobile web app, so the end-to-end layer described below targets mobile
 viewports first. See "Mobile-first end-to-end runs" in `README.md`.
@@ -144,30 +145,12 @@ pull requests.
 
 Codex runs afterward as a read-only advisory reviewer when `OPENAI_API_KEY` exists. Its CLI, model, prompt, permissions, and action commit are pinned, but its judgment remains probabilistic and therefore does not block merges.
 
-## 6. Smell coverage: before and now
+## 6. What this baseline does and does not cover
 
-| Area                          | Before            | Now      | Difference                                                                             |
-| ----------------------------- | ----------------- | -------- | -------------------------------------------------------------------------------------- |
-| Formatting                    | Strong, failing   | Strong   | Prettier now passes and is a hard gate.                                                |
-| Type errors                   | Strong            | Strong   | Added stricter compiler flags and made Svelte warnings fail.                           |
-| JS/TS smells                  | Medium            | Strong   | ESLint is now type-aware, rejects unsafe patterns, and allows zero warnings.           |
-| Svelte mistakes               | Strong            | Strong   | Retained compiler and recommended Svelte ESLint enforcement.                           |
-| Test quality                  | Partial           | Strong   | Added assertion rules and an 80% mutation-score gate for reusable TypeScript.          |
-| Unit/component behavior       | Basic             | Strong   | Vitest server and real-browser component projects are hard gates.                      |
-| Numeric test coverage         | None              | Partial  | Added 80% thresholds; client/shared is 100%; no server-only source exists.             |
-| E2E behavior                  | Basic             | Partial  | Flows run on a mobile viewport by default, all four projects in CI; breadth is small.  |
-| Accessibility                 | Compile-time only | Partial  | Added a runtime Axe scan of the root page and fixed its initial violations.            |
-| Dead code and dependencies    | None              | Strong   | Knip now rejects unused files, exports, and dependencies.                              |
-| Production build              | Basic             | Strong   | The production build is now part of the mandatory gate.                                |
-| Application security          | Minimal           | Strong   | Added Semgrep source rules plus ZAP observation of browser-driven application flows.   |
-| Dependencies and secrets      | None              | Strong   | Gitleaks scans the tree/history; Trivy blocks High or Critical dependency findings.    |
-| Runtime HTTP security         | None              | Partial  | ZAP passively scans proxied E2E traffic; active attacks and full crawling are absent.  |
-| Persisted quality reports     | None              | Strong   | Coverage, mutation, duplication, bundle, Gitleaks, Semgrep, Trivy, and ZAP persist.    |
-| CI command                    | None              | Strong   | `bun run ci` now runs all quality checks, direct E2E, and container security checks.   |
-| Duplication and complexity    | None              | Strong   | Added ESLint complexity limits and a 5% maximum duplication threshold.                 |
-| Architecture boundaries       | None              | None     | Still no layer, import-boundary, or dependency-cycle rules.                            |
-| Performance and bundle budget | None              | Partial  | Added deterministic JS, CSS, and largest-asset byte budgets; no Lighthouse timing.     |
-| Hosted CI workflow            | None              | Strong   | Pinned GitHub Actions runs the complete gate and uploads reports for every PR.         |
-| Semantic AI review            | None              | Advisory | Codex reviews after CI with read-only permissions; probabilistic findings do not gate. |
+The per-area breakdown, including what to add next and what should trigger adding it,
+lives in `QUALITY.md`. It is maintained there rather than duplicated here, so the two
+documents cannot drift apart.
 
-This is a strong starting gate for agent-written code. Add architectural boundaries once the application structure becomes clear; premature layer rules would encode guesses rather than design.
+This is a strong starting gate for agent-written code. Add architectural boundaries once
+the application structure becomes clear; premature layer rules would encode guesses
+rather than design.

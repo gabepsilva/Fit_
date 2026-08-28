@@ -91,7 +91,7 @@ CI runs its gates as parallel jobs, so a formatting failure surfaces in about a 
 than behind half an hour of browser and container work. The `main` branch is protected by the
 hosted `CI / Quality and security` check, which passes only when every parallel gate succeeds. The Codex review job is advisory and runs only after deterministic CI succeeds. It is enabled for same-repository pull requests after the repository secret `OPENAI_API_KEY` is configured.
 
-Repository-specific agent and review rules live in `AGENTS.md`. How this quality baseline was built, and what it does and does not cover, is in `Basic Start.md`.
+Repository-specific agent and review rules live in `AGENTS.md`. `QUALITY.md` documents every control in detail, with what to add next and what should trigger adding it. `Basic Start.md` records how the baseline was assembled.
 
 ## Deployment
 
