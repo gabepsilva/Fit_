@@ -18,7 +18,11 @@ const state: TendState = {
 	activeProfileId: 'p1',
 	profiles: [{ ...emptyProfile({ name: 'Alex' }), id: 'p1' }],
 	weekPlan: [],
-	pantry: []
+	pantry: [],
+	routines: [],
+	trainingPlan: [],
+	workouts: [],
+	activeWorkout: null
 };
 
 /**

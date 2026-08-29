@@ -1,0 +1,243 @@
+import { describe, expect, it } from 'vitest';
+import { EXERCISE_LIBRARY, FORM_CUES, ROUTINE_TEMPLATES } from './exercise-catalog';
+import {
+	alternativesTo,
+	bumpField,
+	emptyRoutine,
+	exercisesFromLibrary,
+	FIELD_STEPS,
+	formatLoad,
+	formCues,
+	libraryExercise,
+	libraryFor,
+	MINUTES_PER_SET,
+	muscleSections,
+	routineSets,
+	routinesFromTemplate,
+	routineTotals
+} from './exercises';
+import type { Routine, RoutineExercise } from './types';
+
+function row(name: string, group: RoutineExercise['group'], sets = 3): RoutineExercise {
+	return { name, group, sets, reps: 10, load: 20 };
+}
+
+function routine(exercises: RoutineExercise[]): Routine {
+	return { id: 'r1', name: 'Push', freq: 3, exercises };
+}
+
+describe('the exercise library', () => {
+	it('finds a movement by name', () => {
+		expect(libraryExercise('Bench Press')).toEqual({ name: 'Bench Press', group: 'Chest' });
+	});
+
+	it('does not invent a movement it has never heard of', () => {
+		expect(libraryExercise('Tyre Flip')).toBeUndefined();
+	});
+
+	it('offers the whole library when no group is chosen', () => {
+		expect(libraryFor(null)).toHaveLength(EXERCISE_LIBRARY.length);
+	});
+
+	it('narrows to one muscle group', () => {
+		const chest = libraryFor('Chest');
+		expect(chest.length).toBeGreaterThan(0);
+		expect(chest.length).toBeLessThan(EXERCISE_LIBRARY.length);
+		for (const e of chest) expect(e.group).toBe('Chest');
+	});
+});
+
+describe('alternatives', () => {
+	it('offers other movements for the same muscle group', () => {
+		const alternatives = alternativesTo('Bench Press');
+		expect(alternatives.length).toBeGreaterThan(0);
+		for (const e of alternatives) expect(e.group).toBe('Chest');
+	});
+
+	it('does not offer a movement as its own replacement', () => {
+		expect(alternativesTo('Bench Press').map((e) => e.name)).not.toContain('Bench Press');
+	});
+
+	it('has nothing to offer for a movement it does not know', () => {
+		expect(alternativesTo('Tyre Flip')).toEqual([]);
+	});
+});
+
+describe('form cues', () => {
+	it('gives the written cues for a movement that has them', () => {
+		expect(formCues('Bench Press')).toBe(FORM_CUES['Bench Press']);
+	});
+
+	it('falls back to the general cues rather than an empty panel', () => {
+		expect(formCues('Shrug')).toEqual([
+			'Set up braced: ribs down, spine neutral.',
+			'Move through the full range under control.',
+			'Two seconds down, one second up.'
+		]);
+	});
+});
+
+describe('routine arithmetic', () => {
+	it('adds up the sets across the movements', () => {
+		expect(routineSets(routine([row('Squat', 'Legs', 5), row('Leg Press', 'Legs', 4)]))).toBe(9);
+	});
+
+	it('counts no sets in an empty routine', () => {
+		expect(routineSets(routine([]))).toBe(0);
+	});
+
+	it('reports movements, sets and an estimated length together', () => {
+		const totals = routineTotals(routine([row('Squat', 'Legs', 5), row('Leg Press', 'Legs', 5)]));
+		expect(totals.exercises).toBe(2);
+		expect(totals.sets).toBe(10);
+		expect(totals.minutes).toBe(Math.round(10 * MINUTES_PER_SET));
+		expect(totals.minutes).toBe(32);
+	});
+
+	it('rounds the estimate to whole minutes', () => {
+		expect(routineTotals(routine([row('Squat', 'Legs', 3)])).minutes).toBe(10);
+	});
+});
+
+describe('muscle sections', () => {
+	it('keeps the order the groups first appear in', () => {
+		const sections = muscleSections([
+			row('Squat', 'Legs'),
+			row('Bench Press', 'Chest'),
+			row('Lateral Raise', 'Shoulders')
+		]);
+		expect(sections.map((s) => s.group)).toEqual(['Legs', 'Chest', 'Shoulders']);
+	});
+
+	it('merges a group that appears twice into its first position', () => {
+		const sections = muscleSections([
+			row('Bench Press', 'Chest'),
+			row('Squat', 'Legs'),
+			row('Dumbbell Fly', 'Chest')
+		]);
+		expect(sections.map((s) => s.group)).toEqual(['Chest', 'Legs']);
+		expect(sections[0]?.exercises.map((e) => e.name)).toEqual(['Bench Press', 'Dumbbell Fly']);
+		expect(sections[1]?.exercises).toHaveLength(1);
+	});
+
+	it('has no sections for a routine with no movements', () => {
+		expect(muscleSections([])).toEqual([]);
+	});
+});
+
+describe('adding from the library', () => {
+	it('prescribes three sets of ten at bodyweight until it is edited', () => {
+		expect(exercisesFromLibrary(['Squat'])).toEqual([
+			{ name: 'Squat', group: 'Legs', sets: 3, reps: 10, load: 0 }
+		]);
+	});
+
+	it('drops a name the library does not know rather than guessing at it', () => {
+		expect(exercisesFromLibrary(['Squat', 'Tyre Flip', 'Deadlift']).map((e) => e.name)).toEqual([
+			'Squat',
+			'Deadlift'
+		]);
+	});
+
+	it('adds nothing when nothing was picked', () => {
+		expect(exercisesFromLibrary([])).toEqual([]);
+	});
+});
+
+describe('starting from a template', () => {
+	it('carries every routine over with its name, frequency and movements', () => {
+		const template = ROUTINE_TEMPLATES[0];
+		if (!template) throw new Error('the template list is empty');
+		const routines = routinesFromTemplate(template);
+		expect(routines.map((r) => r.id)).toEqual(template.routines.map((r) => r.id));
+		expect(routines[0]?.name).toBe(template.routines[0]?.name);
+		expect(routines[0]?.freq).toBe(template.routines[0]?.freq);
+		expect(routines[0]?.exercises).toEqual(template.routines[0]?.exercises);
+	});
+
+	it('copies deeply enough that editing the copy leaves the template alone', () => {
+		const template = ROUTINE_TEMPLATES[0];
+		if (!template) throw new Error('the template list is empty');
+		const originalLoad = template.routines[0]?.exercises[0]?.load;
+		const originalCount = template.routines[0]?.exercises.length ?? 0;
+		const routines = routinesFromTemplate(template);
+		const first = routines[0];
+		if (!first?.exercises[0]) throw new Error('the first template routine is empty');
+		first.name = 'Renamed';
+		first.exercises[0].load = 999;
+		first.exercises.push(row('Pull-up', 'Back'));
+		expect(template.routines[0]?.name).not.toBe('Renamed');
+		expect(template.routines[0]?.exercises[0]?.load).toBe(originalLoad);
+		expect(template.routines[0]?.exercises).toHaveLength(originalCount);
+	});
+});
+
+describe('an empty routine', () => {
+	it('opens named, three times a week, with nothing in it', () => {
+		expect(emptyRoutine('r-7')).toEqual({
+			id: 'r-7',
+			name: 'New routine',
+			freq: 3,
+			exercises: []
+		});
+	});
+});
+
+describe('stepping a field', () => {
+	it('moves sets and reps by one and load by a plate', () => {
+		expect(FIELD_STEPS).toEqual({ sets: 1, reps: 1, load: 2.5 });
+		expect(bumpField('sets', 3, 1)).toBe(4);
+		expect(bumpField('reps', 10, 1)).toBe(11);
+		expect(bumpField('load', 40, 1)).toBe(42.5);
+	});
+
+	it('steps back down by the same amount', () => {
+		expect(bumpField('sets', 3, -1)).toBe(2);
+		expect(bumpField('reps', 10, -1)).toBe(9);
+		expect(bumpField('load', 40, -1)).toBe(37.5);
+	});
+
+	it('stops sets and reps at one, because a set of none is a removal', () => {
+		expect(bumpField('sets', 1, -1)).toBe(1);
+		expect(bumpField('reps', 1, -1)).toBe(1);
+	});
+
+	it('stops load at bodyweight rather than going negative', () => {
+		expect(bumpField('load', 2.5, -1)).toBe(0);
+		expect(bumpField('load', 0, -1)).toBe(0);
+	});
+
+	it('will not go past eight sets of one movement', () => {
+		expect(bumpField('sets', 7, 1)).toBe(8);
+		expect(bumpField('sets', 8, 1)).toBe(8);
+	});
+
+	it('leaves reps and load unbounded above', () => {
+		expect(bumpField('reps', 30, 1)).toBe(31);
+		expect(bumpField('load', 200, 1)).toBe(202.5);
+	});
+
+	it('stays on the 2.5 step without collecting floating-point dust', () => {
+		let load = 0;
+		for (let i = 0; i < 9; i++) load = bumpField('load', load, 1);
+		expect(load).toBe(22.5);
+		for (let i = 0; i < 9; i++) load = bumpField('load', load, -1);
+		expect(load).toBe(0);
+	});
+
+	it('does not move for a direction of neither up nor down', () => {
+		expect(bumpField('load', 40, 0)).toBe(40);
+		expect(bumpField('sets', 3, 0)).toBe(3);
+	});
+});
+
+describe('showing a load', () => {
+	it('reads bodyweight as an em dash rather than as nothing lifted', () => {
+		expect(formatLoad(0)).toBe('—');
+	});
+
+	it('shows a load as its own number', () => {
+		expect(formatLoad(42.5)).toBe('42.5');
+		expect(formatLoad(60)).toBe('60');
+	});
+});

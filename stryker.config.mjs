@@ -65,6 +65,11 @@ export default {
 		// Seed food rows and the two literal label lookup tables. Mutants here are
 		// food names, aliases and label strings.
 		'!src/lib/domain/food-catalog.ts',
+		// Seed exercise rows, form cues and starter routines. Mutants here are
+		// movement names, cue wording and template loads — data, not logic. What
+		// reads it (the library index, the group filter, the template copy) is
+		// still mutated in exercises.ts.
+		'!src/lib/domain/exercise-catalog.ts',
 		// Seed recipe rows. Mutants here are recipe names, notes and portions.
 		'!src/lib/domain/recipe-book.ts',
 		// Demo-journal fixture builder. Its meal templates are data, and the jitter
@@ -80,6 +85,11 @@ export default {
 		// rename, which fails as ENOTEMPTY. CI hits this because the coverage step
 		// populates the cache immediately before mutation runs in the same job.
 		'node_modules/.vite/**',
+		// The nutrition ETL pipeline: several gigabytes of Python environment,
+		// data extracts and a food database. Stryker copies what it does not
+		// ignore into every sandbox, which exhausted the disk quota before a
+		// single mutant ran, and failed first on a symlink inside it.
+		'data/**',
 		'.security-cache/**',
 		'.svelte-kit/**',
 		'build/**',

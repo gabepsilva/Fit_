@@ -1,0 +1,88 @@
+<script lang="ts">
+	import { loadTrend, trainedExercises } from '$lib/domain/training-progress';
+	import type { Workout } from '$lib/domain/types';
+	import { round1 } from '$lib/domain/utils';
+	import ToggleButton from '$lib/ui/ToggleButton.svelte';
+
+	/**
+	 * The top set of one movement, week by week. Weekly columns rather than a
+	 * line, because the question is only ever whether the bar on the right is
+	 * taller than the one on the left.
+	 */
+	let { workouts }: { workouts: Workout[] } = $props();
+
+	let picked = $state('');
+
+	const names = $derived(trainedExercises(workouts));
+	const name = $derived(names.includes(picked) ? picked : (names[0] ?? ''));
+	const points = $derived(name === '' ? [] : loadTrend(workouts, name));
+
+	const bars = $derived.by(() => {
+		const loads = points.map((p) => p.load);
+		const top = Math.max(0, ...loads);
+		const low = Math.min(top, ...loads);
+		// Load moves in 2.5 kg steps against a much larger total, so a column
+		// measured from zero would flatten every change worth seeing. The floor
+		// sits below the lightest week instead.
+		const floor = Math.max(0, low - (top - low) * 0.6);
+		return points.map((point, i) => {
+			const height = top === floor ? 100 : ((point.load - floor) / (top - floor)) * 100;
+			return { ...point, style: `height: ${height}%`, latest: i === points.length - 1 };
+		});
+	});
+
+	const caption = $derived.by(() => {
+		const first = points[0];
+		const last = points.at(-1);
+		if (!first || !last) return '';
+		const span = `top set, last ${points.length} week${points.length === 1 ? '' : 's'}`;
+		if (points.length === 1) return `${name} · ${span}`;
+		const change = round1(last.load - first.load);
+		const move = change === 0 ? 'no change' : `${change > 0 ? '+' : ''}${change} kg`;
+		return `${name} · ${span} · ${move}`;
+	});
+
+	const described = $derived(
+		`${name}, top set by week: ${points.map((p) => `${p.label} ${p.load} kg`).join(', ')}`
+	);
+</script>
+
+<section class="bg-card rounded-3xl p-4 shadow-border">
+	{#if bars.length === 0}
+		<h2 class="font-display text-lg tracking-tight">Load trend</h2>
+		<p class="text-muted-foreground mt-1 text-sm">
+			Nothing finished yet, so there is no load to follow.
+		</p>
+	{:else}
+		<p class="text-muted-foreground text-sm">{caption}</p>
+		<div class="mt-3 flex items-end gap-1.5" role="img" aria-label={described}>
+			{#each bars as bar (bar.label)}
+				<div class="flex flex-1 flex-col items-center gap-1">
+					<span class="tabular text-primary h-3 text-[0.65rem] leading-3">
+						{bar.latest ? `${bar.load} kg` : ''}
+					</span>
+					<div class="flex h-20 w-full items-end">
+						<span
+							class={['w-full rounded-t-md', bar.latest ? 'bg-primary' : 'bg-accent']}
+							style={bar.style}
+						></span>
+					</div>
+					<span class="text-muted-foreground text-[0.65rem]">{bar.label}</span>
+				</div>
+			{/each}
+		</div>
+	{/if}
+	{#if names.length > 1}
+		<div class="mt-3 flex flex-wrap gap-1.5">
+			{#each names as option (option)}
+				<ToggleButton
+					pressed={option === name}
+					onclick={() => (picked = option)}
+					class="bg-secondary text-foreground/70 min-h-9 rounded-full px-3.5 text-xs"
+				>
+					{option}
+				</ToggleButton>
+			{/each}
+		</div>
+	{/if}
+</section>

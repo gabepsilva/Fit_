@@ -78,11 +78,12 @@ test.describe('once onboarded', () => {
 		await expect(page.getByRole('dialog')).toBeHidden();
 	});
 
-	test('navigates to exercise, which is not built yet', async ({ page }) => {
+	test('navigates to exercise, which opens on the starting points', async ({ page }) => {
 		await page.getByRole('button', { name: 'Open menu' }).click();
 		await page.getByRole('link', { name: 'Exercise' }).click();
-		await expect(page.getByRole('heading', { name: 'Exercise', level: 1 })).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'Coming soon' })).toBeVisible();
+		// The sample journal seeds meals, not training, so Exercise opens on its
+		// first-run picker rather than on a rotation nobody chose.
+		await expect(page.getByRole('heading', { name: 'Nothing here yet', level: 1 })).toBeVisible();
 	});
 
 	test('navigates to the profile', async ({ page }) => {

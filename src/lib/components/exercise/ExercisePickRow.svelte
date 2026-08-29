@@ -1,0 +1,69 @@
+<script lang="ts">
+	import Check from '@lucide/svelte/icons/check';
+	import CirclePlay from '@lucide/svelte/icons/circle-play';
+	import { cn } from '$lib/ui/cn';
+
+	/**
+	 * One movement offered for picking — as a swap mid-session, or from the
+	 * library while building a routine. The two differ only in whether picking
+	 * is a choice that closes the list or a selection that accumulates, so
+	 * `selected` decides the shape: left undefined the whole row is the choice.
+	 */
+	let {
+		name,
+		note,
+		selected,
+		onpick,
+		onplay
+	}: {
+		name: string;
+		note: string;
+		/** Undefined for a one-shot pick; a boolean turns the row into a checkbox. */
+		selected?: boolean | undefined;
+		onpick: () => void;
+		/** Shows the form-check control when provided. */
+		onplay?: (() => void) | undefined;
+	} = $props();
+</script>
+
+<div
+	class={cn(
+		'flex items-center gap-3 rounded-2xl px-3',
+		selected === true ? 'bg-accent/60' : 'bg-transparent'
+	)}
+>
+	{#if selected !== undefined}
+		<button
+			type="button"
+			role="checkbox"
+			aria-checked={selected}
+			aria-label={`Select ${name}`}
+			onclick={onpick}
+			class={cn(
+				'flex size-8 shrink-0 items-center justify-center rounded-xl',
+				selected ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground/70'
+			)}
+		>
+			<Check class="size-3.5" />
+		</button>
+		<span class="min-w-0 flex-1 py-3">
+			<span class="block truncate text-sm font-medium">{name}</span>
+			<span class="text-muted-foreground block text-xs">{note}</span>
+		</span>
+	{:else}
+		<button type="button" onclick={onpick} class="min-w-0 flex-1 py-3 text-left">
+			<span class="block truncate text-sm font-medium">{name}</span>
+			<span class="text-muted-foreground block text-xs">{note}</span>
+		</button>
+	{/if}
+	{#if onplay}
+		<button
+			type="button"
+			onclick={onplay}
+			aria-label={`Watch ${name}`}
+			class="text-muted-foreground hover:bg-secondary flex size-9 shrink-0 items-center justify-center rounded-xl"
+		>
+			<CirclePlay class="size-4" />
+		</button>
+	{/if}
+</div>

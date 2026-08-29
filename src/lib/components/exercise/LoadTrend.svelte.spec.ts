@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest';
+import { page } from 'vitest/browser';
+import { render } from 'vitest-browser-svelte';
+import { firstMondayISO } from '$lib/domain/training-plan';
+import type { RoutineExercise, Workout } from '$lib/domain/types';
+import { addDaysISO } from '$lib/domain/utils';
+import { workoutFromRoutine } from '$lib/domain/workout';
+import LoadTrend from './LoadTrend.svelte';
+
+const monday = firstMondayISO(new Date().getFullYear());
+
+function bench(load: number): RoutineExercise {
+	return { name: 'Bench Press', group: 'Chest', sets: 2, reps: 8, load };
+}
+
+const squat: RoutineExercise = { name: 'Squat', group: 'Legs', sets: 2, reps: 5, load: 70 };
+
+function session(weekIndex: number, exercises: RoutineExercise[]): Workout {
+	const date = addDaysISO(monday, weekIndex * 7 + 1);
+	const workout = workoutFromRoutine(
+		{ id: 'r1', name: 'Push', freq: 3, exercises },
+		{ id: `w${weekIndex}`, date, startedAt: 0 }
+	);
+	for (const exercise of workout.exercises) {
+		for (const set of exercise.sets) set.done = true;
+	}
+	return { ...workout, finishedAt: 1 };
+}
+
+describe('LoadTrend', () => {
+	it('captions the movement, the range and the change across it', async () => {
+		const workouts = [session(0, [bench(40)]), session(1, [bench(42.5)]), session(2, [bench(45)])];
+		await render(LoadTrend, { props: { workouts } });
+		await expect
+			.element(page.getByText('Bench Press · top set, last 3 weeks · +5 kg'))
+			.toBeInTheDocument();
+	});
+
+	it('labels the latest week with its top set', async () => {
+		const workouts = [session(0, [bench(40)]), session(1, [bench(45)])];
+		await render(LoadTrend, { props: { workouts } });
+		await expect.element(page.getByText('45 kg')).toBeInTheDocument();
+	});
+
+	it('reports no change when the top set has not moved', async () => {
+		const workouts = [session(0, [bench(40)]), session(1, [bench(40)])];
+		await render(LoadTrend, { props: { workouts } });
+		await expect.element(page.getByText(/no change$/)).toBeInTheDocument();
+	});
+
+	it('reads a lighter top set as a loss rather than a gain', async () => {
+		const workouts = [session(0, [bench(45)]), session(1, [bench(40)])];
+		await render(LoadTrend, { props: { workouts } });
+		await expect.element(page.getByText(/-5 kg$/)).toBeInTheDocument();
+	});
+
+	it('claims no change from a single week', async () => {
+		await render(LoadTrend, { props: { workouts: [session(0, [bench(40)])] } });
+		await expect.element(page.getByText('Bench Press · top set, last 1 week')).toBeInTheDocument();
+	});
+
+	it('says there is nothing to follow when no session was finished', async () => {
+		await render(LoadTrend, { props: { workouts: [] } });
+		await expect.element(page.getByText(/no load to follow/)).toBeInTheDocument();
+	});
+
+	it('charts another movement when it is picked', async () => {
+		const workouts = [
+			session(0, [bench(40)]),
+			session(1, [bench(45)]),
+			session(2, [bench(45), squat])
+		];
+		await render(LoadTrend, { props: { workouts } });
+		await page.getByRole('button', { name: 'Squat' }).click();
+		await expect.element(page.getByText(/^Squat · top set/)).toBeInTheDocument();
+	});
+
+	it('offers no picker when one movement is all that was trained', async () => {
+		await render(LoadTrend, { props: { workouts: [session(0, [bench(40)])] } });
+		expect(document.querySelectorAll('button')).toHaveLength(0);
+	});
+});

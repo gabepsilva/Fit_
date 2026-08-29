@@ -1,4 +1,13 @@
 import { buildAlexProfile, buildJordanProfile, HOUSEHOLD_PARTNER } from '$lib/domain/demo-seed';
+import { ROUTINE_TEMPLATES } from '$lib/domain/exercise-catalog';
+import {
+	bumpField,
+	exercisesFromLibrary,
+	routinesFromTemplate,
+	emptyRoutine,
+	type BumpField
+} from '$lib/domain/exercises';
+import { seedTrainingPlan } from '$lib/domain/training-plan';
 import { FOOD_BY_ID, scaleFood } from '$lib/domain/foods';
 import { emptyProfile, isGlp1 } from '$lib/domain/profile';
 import { recipeFits, RECIPES } from '$lib/domain/recipes';
@@ -9,11 +18,14 @@ import type {
 	PlannedMealSlot,
 	Profile,
 	Restriction,
+	Routine,
 	TendState,
-	WeightEntry
+	WeightEntry,
+	Workout
 } from '$lib/domain/types';
 import { PLANNED_MEALS } from '$lib/domain/types';
 import { addDaysISO, round1, startOfWeek, todayISO, uid } from '$lib/domain/utils';
+import { currentExercise, workoutFromRoutine, workoutSetsDone } from '$lib/domain/workout';
 
 export const STORAGE_KEY = 'tend.v1';
 
@@ -23,7 +35,11 @@ function emptyState(): TendState {
 		activeProfileId: '',
 		profiles: [],
 		weekPlan: [],
-		pantry: []
+		pantry: [],
+		routines: [],
+		trainingPlan: [],
+		workouts: [],
+		activeWorkout: null
 	};
 }
 
@@ -294,6 +310,211 @@ export class TendStore {
 			? this.state.pantry.filter((id) => id !== foodId)
 			: [...this.state.pantry, foodId];
 		this.persist();
+	}
+
+	// -- training ------------------------------------------------------------
+
+	get activeWorkout(): Workout | null {
+		return this.state.activeWorkout;
+	}
+
+	routine(id: string): Routine | undefined {
+		return this.state.routines.find((r) => r.id === id);
+	}
+
+	/**
+	 * Take a starter routine set, and a plan to put it on. A template without a
+	 * plan would leave the calendar — and so the home screen — empty on the day
+	 * someone decides to begin, which is the worst possible day for that.
+	 */
+	useTemplate(templateId: string) {
+		const template = ROUTINE_TEMPLATES.find((t) => t.id === templateId);
+		if (!template) return;
+		const routines = routinesFromTemplate(template);
+		this.state.routines = routines;
+		this.state.trainingPlan = seedTrainingPlan(routines.map((r) => r.id));
+		this.persist();
+	}
+
+	createRoutine(): Routine {
+		const routine = emptyRoutine(uid('r-'));
+		this.state.routines.push(routine);
+		this.persist();
+		return routine;
+	}
+
+	updateRoutine(id: string, patch: Partial<Pick<Routine, 'name' | 'freq'>>) {
+		this.state.routines = this.state.routines.map((r) => (r.id === id ? { ...r, ...patch } : r));
+		this.persist();
+	}
+
+	/** Removing a routine also clears the weeks that pointed at it, so the planner cannot name a routine that is gone. */
+	removeRoutine(id: string) {
+		this.state.routines = this.state.routines.filter((r) => r.id !== id);
+		this.state.trainingPlan = this.state.trainingPlan.filter((p) => p.routineId !== id);
+		this.persist();
+	}
+
+	private patchRoutine(id: string, fn: (r: Routine) => Routine) {
+		this.state.routines = this.state.routines.map((r) =>
+			r.id === id ? fn($state.snapshot(r)) : r
+		);
+		this.persist();
+	}
+
+	/** One tap on a stepper against a routine row. `direction` is +1 or -1. */
+	bumpRoutineExercise(id: string, index: number, field: BumpField, direction: number) {
+		this.patchRoutine(id, (r) => ({
+			...r,
+			exercises: r.exercises.map((e, i) =>
+				i === index ? { ...e, [field]: bumpField(field, e[field], direction) } : e
+			)
+		}));
+	}
+
+	addExercises(id: string, names: string[]) {
+		const added = exercisesFromLibrary(names);
+		if (added.length === 0) return;
+		this.patchRoutine(id, (r) => ({ ...r, exercises: [...r.exercises, ...added] }));
+	}
+
+	removeExercise(id: string, index: number) {
+		this.patchRoutine(id, (r) => ({ ...r, exercises: r.exercises.filter((_, i) => i !== index) }));
+	}
+
+	/** Reordering is one step at a time; the first row has nowhere to go. */
+	moveExerciseUp(id: string, index: number) {
+		if (index <= 0) return;
+		this.patchRoutine(id, (r) => {
+			const exercises = [...r.exercises];
+			const [moved] = exercises.splice(index, 1);
+			if (moved) exercises.splice(index - 1, 0, moved);
+			return { ...r, exercises };
+		});
+	}
+
+	// -- training plan -------------------------------------------------------
+
+	/** Assign one routine to a set of weeks. An empty list of weeks is a no-op, not a wipe. */
+	planWeeks(year: number, weeks: number[], routineId: string) {
+		if (weeks.length === 0) return;
+		const untouched = this.state.trainingPlan.filter(
+			(p) => p.year !== year || !weeks.includes(p.week)
+		);
+		this.state.trainingPlan = [
+			...untouched,
+			...weeks.map((week) => ({ year, week, routineId }))
+		].sort((a, b) => a.year - b.year || a.week - b.week);
+		this.persist();
+	}
+
+	// -- workouts ------------------------------------------------------------
+
+	/**
+	 * Begin a session. The routine is copied in rather than referenced, and an
+	 * unfinished session is replaced rather than queued: two live sessions would
+	 * both claim to be "the workout", and neither would be right.
+	 */
+	startWorkout(routineId: string): Workout | null {
+		const routine = this.routine(routineId);
+		if (!routine) return null;
+		const workout = workoutFromRoutine(routine, {
+			id: uid('w-'),
+			date: todayISO(),
+			startedAt: Date.now()
+		});
+		this.state.activeWorkout = workout;
+		this.persist();
+		return workout;
+	}
+
+	private patchWorkout(fn: (w: Workout) => Workout) {
+		const current = this.state.activeWorkout;
+		if (!current) return;
+		this.state.activeWorkout = fn($state.snapshot(current));
+		this.persist();
+	}
+
+	private patchCurrentExercise(
+		fn: (e: Workout['exercises'][number]) => Workout['exercises'][number]
+	) {
+		this.patchWorkout((w) => ({
+			...w,
+			exercises: w.exercises.map((e, i) => (i === w.exerciseIndex ? fn(e) : e))
+		}));
+	}
+
+	/** Tick or untick a set of the exercise on screen. */
+	toggleSet(index: number) {
+		this.patchCurrentExercise((e) => ({
+			...e,
+			sets: e.sets.map((s, i) => (i === index ? { ...s, done: !s.done } : s))
+		}));
+	}
+
+	bumpSet(index: number, field: 'reps' | 'load', direction: number) {
+		this.patchCurrentExercise((e) => ({
+			...e,
+			sets: e.sets.map((s, i) =>
+				i === index ? { ...s, [field]: bumpField(field, s[field], direction) } : s
+			)
+		}));
+	}
+
+	/** One more set than the routine asked for, opened at the last set's numbers. */
+	addSet() {
+		this.patchCurrentExercise((e) => {
+			const last = e.sets.at(-1) ?? { reps: 10, load: 0, done: false };
+			return { ...e, sets: [...e.sets, { ...last, done: false }] };
+		});
+	}
+
+	noteExercise(note: string) {
+		this.patchCurrentExercise((e) => ({ ...e, note }));
+	}
+
+	/** Machine taken: the movement changes, the sets already logged do not. */
+	swapExercise(name: string) {
+		const replacement = exercisesFromLibrary([name])[0];
+		if (!replacement) return;
+		this.patchCurrentExercise((e) => ({ ...e, name: replacement.name, group: replacement.group }));
+	}
+
+	nextExercise() {
+		this.patchWorkout((w) => ({
+			...w,
+			exerciseIndex: Math.min(w.exercises.length - 1, w.exerciseIndex + 1)
+		}));
+	}
+
+	/**
+	 * File the session. A session where nothing was ticked is dropped rather than
+	 * filed: it would otherwise count as a completed week in the plan and as a
+	 * zero in every average.
+	 */
+	finishWorkout(): Workout | null {
+		const current = this.state.activeWorkout;
+		if (!current) return null;
+		if (workoutSetsDone(current) === 0) {
+			this.discardWorkout();
+			return null;
+		}
+		const finished: Workout = { ...$state.snapshot(current), finishedAt: Date.now() };
+		this.state.workouts.push(finished);
+		this.state.activeWorkout = null;
+		this.persist();
+		return finished;
+	}
+
+	discardWorkout() {
+		this.state.activeWorkout = null;
+		this.persist();
+	}
+
+	/** The exercise the session screen is on, or nothing when no session is running. */
+	get currentExercise() {
+		const workout = this.state.activeWorkout;
+		return workout ? (currentExercise(workout) ?? null) : null;
 	}
 
 	// -- whole-state ---------------------------------------------------------
