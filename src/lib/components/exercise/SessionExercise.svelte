@@ -4,8 +4,11 @@
 	import { formatLoad } from '$lib/domain/exercises';
 	import { lastPerformance } from '$lib/domain/workout';
 	import { tend } from '$lib/state/tend.svelte';
+	import SectionLabel from '$lib/components/SectionLabel.svelte';
+	import { cn } from '$lib/ui/cn';
 	import Textarea from '$lib/ui/Textarea.svelte';
 	import FormCheckModal from './FormCheckModal.svelte';
+	import { SET_GRID } from './sheet-grids';
 	import SetRow from './SetRow.svelte';
 	import SwapSheet from './SwapSheet.svelte';
 
@@ -25,7 +28,7 @@
 	let formOpen = $state(false);
 	let swapOpen = $state(false);
 
-	const workout = $derived(tend.activeWorkout);
+	const workout = $derived(tend.state.activeWorkout);
 	const exercise = $derived(tend.currentExercise);
 
 	function toggle(index: number, wasDone: boolean) {
@@ -38,12 +41,12 @@
 
 {#if workout && exercise}
 	{@const last = lastPerformance(tend.state.workouts, exercise.name)}
+	{@const position = `Exercise ${workout.exerciseIndex + 1} of ${workout.exercises.length}`}
+	{@const loadHeading = `Load (${tend.state.loadUnit})`}
 	<div class="flex flex-col gap-4">
 		<div class="flex items-start gap-3">
 			<div class="min-w-0 flex-1">
-				<p class="text-muted-foreground text-xs font-medium tracking-[0.18em] uppercase">
-					Exercise {workout.exerciseIndex + 1} of {workout.exercises.length}
-				</p>
+				<SectionLabel>{position}</SectionLabel>
 				<div class="mt-1 flex items-center gap-2">
 					<h1 class="font-display text-3xl leading-tight tracking-tight">{exercise.name}</h1>
 					<button
@@ -72,22 +75,26 @@
 				</div>
 			</div>
 			{#if last}
+				{@const lastLine = `${last.reps} × ${formatLoad(last.load)}${
+					last.load > 0 ? ` ${tend.state.loadUnit}` : ''
+				}`}
 				<div class="shrink-0 text-right">
 					<p class="text-muted-foreground text-xs">Last time</p>
-					<p class="tabular text-sm">
-						{last.reps} × {formatLoad(last.load)}{last.load > 0 ? ' kg' : ''}
-					</p>
+					<p class="tabular text-sm">{lastLine}</p>
 				</div>
 			{/if}
 		</div>
 
 		<section class="bg-card rounded-3xl p-3 shadow-border">
 			<div
-				class="text-muted-foreground grid grid-cols-[2rem_1fr_1fr_2.5rem] gap-2 px-1 pb-1 text-[0.625rem] tracking-[0.14em] uppercase"
+				class={cn(
+					SET_GRID,
+					'text-muted-foreground px-1 pb-1 text-[0.625rem] tracking-[0.14em] uppercase'
+				)}
 			>
 				<span>Set</span>
 				<span class="text-center">Reps</span>
-				<span class="text-center">Load (kg)</span>
+				<span class="text-center">{loadHeading}</span>
 				<span></span>
 			</div>
 			<div class="flex flex-col gap-1.5">

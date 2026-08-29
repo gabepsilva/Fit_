@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import type { RoutineExercise, Workout } from '$lib/domain/types';
 import { monthDay, todayISO } from '$lib/domain/utils';
 import { workoutFromRoutine } from '$lib/domain/workout';
+import { tend } from '$lib/state/tend.svelte';
 import PersonalRecordList from './PersonalRecordList.svelte';
 
 const press: RoutineExercise = { name: 'Bench Press', group: 'Chest', sets: 1, reps: 8, load: 45 };
@@ -21,7 +22,16 @@ function session(exercises: RoutineExercise[], ticked: boolean): Workout {
 	return { ...workout, finishedAt: 1 };
 }
 
+afterEach(() => tend.setLoadUnit('kg'));
+
 describe('PersonalRecordList', () => {
+	it('reads the best set in whatever unit is set', async () => {
+		tend.setLoadUnit('lb');
+		await render(PersonalRecordList, { props: { workouts: [session([press, squat], true)] } });
+		await expect.element(page.getByText('70 lb × 5')).toBeInTheDocument();
+		await expect.element(page.getByText('45 lb × 8')).toBeInTheDocument();
+	});
+
 	it('names the best set of each movement and when it was lifted', async () => {
 		await render(PersonalRecordList, { props: { workouts: [session([press, squat], true)] } });
 		await expect.element(page.getByText('70 kg × 5')).toBeInTheDocument();

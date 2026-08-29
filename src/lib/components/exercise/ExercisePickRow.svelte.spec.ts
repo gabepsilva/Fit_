@@ -3,7 +3,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import ExercisePickRow from './ExercisePickRow.svelte';
 
-const BASE = { name: 'Bench Press', note: 'Chest' };
+const BASE = { name: 'Bench Press', note: 'Chest', selected: false };
 
 describe('ExercisePickRow', () => {
 	it('shows the movement and what it trains', async () => {
@@ -12,16 +12,8 @@ describe('ExercisePickRow', () => {
 		await expect.element(page.getByText('Chest')).toBeInTheDocument();
 	});
 
-	it('makes the whole row the choice when picking is one-shot', async () => {
-		const onpick = vi.fn();
-		await render(ExercisePickRow, { props: { ...BASE, onpick } });
-		expect(page.getByRole('checkbox').elements()).toHaveLength(0);
-		await page.getByRole('button', { name: /Bench Press/ }).click();
-		expect(onpick).toHaveBeenCalledTimes(1);
-	});
-
-	it('becomes a checkbox when selection accumulates', async () => {
-		await render(ExercisePickRow, { props: { ...BASE, selected: false, onpick: vi.fn() } });
+	it('offers an empty checkbox while the movement is unchosen', async () => {
+		await render(ExercisePickRow, { props: { ...BASE, onpick: vi.fn() } });
 		await expect
 			.element(page.getByRole('checkbox', { name: 'Select Bench Press' }))
 			.toHaveAttribute('aria-checked', 'false');
@@ -36,7 +28,7 @@ describe('ExercisePickRow', () => {
 
 	it('reports a tick on the checkbox to whoever is collecting them', async () => {
 		const onpick = vi.fn();
-		await render(ExercisePickRow, { props: { ...BASE, selected: false, onpick } });
+		await render(ExercisePickRow, { props: { ...BASE, onpick } });
 		await page.getByRole('checkbox', { name: 'Select Bench Press' }).click();
 		expect(onpick).toHaveBeenCalledTimes(1);
 	});
@@ -56,7 +48,7 @@ describe('ExercisePickRow', () => {
 	it('keeps the form check apart from the pick', async () => {
 		const onpick = vi.fn();
 		const onplay = vi.fn();
-		await render(ExercisePickRow, { props: { ...BASE, selected: false, onpick, onplay } });
+		await render(ExercisePickRow, { props: { ...BASE, onpick, onplay } });
 		await page.getByRole('button', { name: 'Watch Bench Press' }).click();
 		expect(onpick).not.toHaveBeenCalled();
 		expect(onplay).toHaveBeenCalledTimes(1);

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
 	calendarWeeks,
-	firstMondayISO,
 	MONTHS_LONG,
 	plannedRoutineId,
 	plannedWeekCount,
@@ -27,12 +26,12 @@ describe('the calendar', () => {
 	});
 
 	it('starts a year that opens on a Monday on the first of January', () => {
-		expect(firstMondayISO(MONDAY_START)).toBe('2024-01-01');
+		expect(calendarWeeks(MONDAY_START)[0]?.startISO).toBe('2024-01-01');
 	});
 
 	it('waits for the first Monday in a year that does not', () => {
-		expect(firstMondayISO(LATE_START)).toBe('2026-01-05');
-		expect(firstMondayISO(2025)).toBe('2025-01-06');
+		expect(calendarWeeks(LATE_START)[0]?.startISO).toBe('2026-01-05');
+		expect(calendarWeeks(2025)[0]?.startISO).toBe('2025-01-06');
 	});
 });
 
@@ -81,6 +80,20 @@ describe('placing a date in the plan', () => {
 	it('gives the days before the first Monday back to the year before', () => {
 		expect(weekOf('2026-01-03')).toEqual({ year: 2025, week: 52 });
 		expect(weekOf('2027-01-02')).toEqual({ year: 2026, week: 52 });
+	});
+
+	it('is not moved by the clocks going forward', () => {
+		// 13 April 2026 is 14 whole weeks after the first Monday, but only 97 days
+		// and 23 hours after it wherever the spring change falls in between.
+		expect(weekOf('2026-04-13')).toEqual({ year: 2026, week: 15 });
+		expect(weekOf('2026-04-12')).toEqual({ year: 2026, week: 14 });
+	});
+
+	it('agrees with the week the calendar draws, every week of the year', () => {
+		for (const week of calendarWeeks(LATE_START)) {
+			expect(weekOf(week.startISO)).toEqual({ year: LATE_START, week: week.week });
+			expect(weekOf(week.endISO)).toEqual({ year: LATE_START, week: week.week });
+		}
 	});
 
 	it('keeps the days after week fifty-two in week fifty-two', () => {
@@ -197,6 +210,30 @@ describe('seeding a plan for the rest of the year', () => {
 		const plan = seedTrainingPlan(ids, 2027, '2026-07-01');
 		expect(plan[0]).toEqual({ year: 2027, week: 1, routineId: 'push' });
 		expect(plan).toHaveLength(WEEKS_IN_YEAR);
+	});
+
+	it('covers the trailing week the New Year days still belong to', () => {
+		// 1 January 2027 is a Friday, so it falls in the last week of the 2026
+		// training year — the plan has to say what happens on it.
+		expect(weekOf('2027-01-01')).toEqual({ year: 2026, week: WEEKS_IN_YEAR });
+		const plan = seedTrainingPlan(ids, 2027, '2027-01-01');
+		expect(plan[0]).toEqual({ year: 2026, week: WEEKS_IN_YEAR, routineId: 'push' });
+		expect(plan[1]).toEqual({ year: 2027, week: 1, routineId: 'pull' });
+		expect(plan).toHaveLength(WEEKS_IN_YEAR + 1);
+		expect(plan.at(-1)).toEqual({ year: 2027, week: WEEKS_IN_YEAR, routineId: 'push' });
+	});
+
+	it('reads back a routine for the days between New Year and the first Monday', () => {
+		const plan = seedTrainingPlan(ids, 2027, '2027-01-01');
+		const { year, week } = weekOf('2027-01-02');
+		expect(plannedRoutineId(plan, year, week)).toBe('push');
+	});
+
+	it('adds no trailing week once the training year has opened', () => {
+		const plan = seedTrainingPlan(ids, 2027, '2027-01-04');
+		expect(plan[0]).toEqual({ year: 2027, week: 1, routineId: 'push' });
+		expect(plan).toHaveLength(WEEKS_IN_YEAR);
+		expect(plan.filter((p) => p.year !== 2027)).toEqual([]);
 	});
 
 	it('defaults to this year, starting today', () => {

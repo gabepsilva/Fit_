@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { MONTHS_LONG, WEEKDAYS, type CalendarWeek } from '$lib/domain/training-plan';
+	import SectionLabel from '$lib/components/SectionLabel.svelte';
 	import type { PlannedWeek } from '$lib/domain/types';
 	import { cn } from '$lib/ui/cn';
 	import { plannedOption, type PlanOption } from './plan-options';
@@ -36,11 +37,7 @@
 	<div class="grid grid-cols-2 gap-x-2.5 gap-y-3">
 		{#each MONTHS_LONG as name, month (name)}
 			<section class="bg-card shadow-border rounded-2xl p-2">
-				<p
-					class="text-muted-foreground mb-1.5 ml-0.5 text-[0.65rem] font-medium tracking-[0.14em] uppercase"
-				>
-					{name.slice(0, 3)}
-				</p>
+				<SectionLabel class="mb-1.5 ml-0.5">{name.slice(0, 3)}</SectionLabel>
 				<div class="flex flex-col gap-1">
 					{#each weeks.filter((week) => week.month === month) as week (week.week)}
 						{@const option = plannedOption(options, plan, year, week.week)}

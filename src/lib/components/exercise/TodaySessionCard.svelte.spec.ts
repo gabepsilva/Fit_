@@ -25,7 +25,7 @@ function routine(id: string, name: string, freq: number, moves: number): Routine
 	};
 }
 
-function finished(date: string): Workout {
+function filed(date: string, done: boolean): Workout {
 	return {
 		id: `w-${date}`,
 		routineId: 'push',
@@ -34,8 +34,20 @@ function finished(date: string): Workout {
 		startedAt: 0,
 		finishedAt: 1,
 		exerciseIndex: 0,
-		exercises: []
+		exercises: [
+			{ name: 'Bench Press', group: 'Chest', note: '', sets: [{ reps: 8, load: 40, done }] }
+		]
 	};
+}
+
+/** A session that was trained: something was ticked off in it. */
+function finished(date: string): Workout {
+	return filed(date, true);
+}
+
+/** A session that was opened, walked out of, and filed with nothing ticked. */
+function walkedOut(date: string): Workout {
+	return filed(date, false);
 }
 
 const push = routine('push', 'Chest & Shoulders', 3, 5);
@@ -43,7 +55,18 @@ const legs = routine('legs', 'Legs', 3, 5);
 const plan: PlannedWeek[] = [{ year: 2026, week: 1, routineId: 'push' }];
 const noop = () => {};
 
-const base = { routines: [push, legs], plan, workouts: [], today: MONDAY, onstart: noop };
+const base = {
+	routines: [push, legs],
+	plan,
+	workouts: [],
+	today: MONDAY,
+	onstart: noop,
+	onpick: noop,
+	onopen: noop
+};
+
+/** Same name and frequency as `push`, but nothing on it to run. */
+const bare = routine('push', 'Chest & Shoulders', 3, 0);
 
 describe('TodaySessionCard', () => {
 	it('names the routine the plan calls for today', async () => {
@@ -64,6 +87,21 @@ describe('TodaySessionCard', () => {
 		await render(TodaySessionCard, { props: { ...base } });
 		await expect.element(page.getByText('Move 4', { exact: true })).toBeInTheDocument();
 		expect(page.getByText('Move 5', { exact: true }).elements()).toHaveLength(0);
+	});
+
+	it('previews a routine that asks for the same movement twice', async () => {
+		const twice: Routine = {
+			id: 'push',
+			name: 'Chest & Shoulders',
+			freq: 3,
+			exercises: [
+				{ name: 'Bench Press', group: 'Chest', sets: 3, reps: 10, load: 60 },
+				{ name: 'Incline Bench Press', group: 'Chest', sets: 3, reps: 10, load: 40 },
+				{ name: 'Bench Press', group: 'Chest', sets: 3, reps: 8, load: 65 }
+			]
+		};
+		await render(TodaySessionCard, { props: { ...base, routines: [twice, legs] } });
+		expect(page.getByText('Bench Press', { exact: true }).elements()).toHaveLength(2);
 	});
 
 	it('starts the routine the plan chose', async () => {
@@ -109,6 +147,29 @@ describe('TodaySessionCard', () => {
 		await expect.element(page.getByText(/2 sessions done this week already/)).toBeInTheDocument();
 	});
 
+	// Turning up and logging nothing is filed, so the summary can say something
+	// kind about it, but the week is not met by walking in and out again.
+	it('does not count a session where nothing was ticked', async () => {
+		await render(TodaySessionCard, {
+			props: { ...base, today: TUESDAY, workouts: [walkedOut(MONDAY)] }
+		});
+		await expect.element(page.getByText('The calendar has nothing scheduled.')).toBeInTheDocument();
+		// Read once rather than retried: the claim is that the sentence never
+		// arrives, and a retried assertion would only prove it was not there yet.
+		expect(page.getByText(/done this week already/).elements()).toHaveLength(0);
+	});
+
+	it('counts only the sessions that were trained, alongside an empty one', async () => {
+		await render(TodaySessionCard, {
+			props: {
+				...base,
+				today: THURSDAY,
+				workouts: [finished(MONDAY), walkedOut(WEDNESDAY)]
+			}
+		});
+		await expect.element(page.getByText(/1 session done this week already/)).toBeInTheDocument();
+	});
+
 	it('ignores a workout from an earlier week', async () => {
 		await render(TodaySessionCard, {
 			props: { ...base, today: TUESDAY, workouts: [finished('2026-01-01')] }
@@ -132,9 +193,62 @@ describe('TodaySessionCard', () => {
 		expect(onstart).toHaveBeenCalledWith('legs');
 	});
 
-	it('has nothing to train when there is no routine to train', async () => {
-		await render(TodaySessionCard, { props: { ...base, routines: [], plan: [] } });
+	it('refuses to start today’s routine when nothing is on it', async () => {
+		await render(TodaySessionCard, { props: { ...base, routines: [bare, legs] } });
+		await expect.element(page.getByRole('button', { name: 'Start session' })).toBeDisabled();
+	});
+
+	it('refuses to train anyway on a routine with nothing on it', async () => {
+		await render(TodaySessionCard, {
+			props: { ...base, today: TUESDAY, routines: [bare, legs] }
+		});
 		await expect.element(page.getByRole('button', { name: 'Train anyway' })).toBeDisabled();
+	});
+
+	it('still starts a routine that does have exercises on it', async () => {
+		await render(TodaySessionCard, { props: { ...base } });
+		await expect.element(page.getByRole('button', { name: 'Start session' })).toBeEnabled();
+	});
+
+	it('says there is nothing to run rather than showing a rest day', async () => {
+		await render(TodaySessionCard, { props: { ...base, routines: [], plan: [] } });
+		await expect
+			.element(page.getByRole('heading', { name: 'No routines yet', level: 2 }))
+			.toBeInTheDocument();
+		await expect
+			.element(
+				page.getByText(
+					'A routine is the list of exercises for one session. Start from a template, or build your own.'
+				)
+			)
+			.toBeInTheDocument();
+		expect(page.getByRole('heading', { name: 'Rest day' }).elements()).toHaveLength(0);
+	});
+
+	it('offers the starters to anyone with no routines', async () => {
+		const onpick = vi.fn();
+		await render(TodaySessionCard, { props: { ...base, routines: [], plan: [], onpick } });
+		await page.getByRole('button', { name: 'Pick a starter' }).click();
+		expect(onpick).toHaveBeenCalledTimes(1);
+	});
+
+	it('offers a blank routine to anyone who wants to build their own', async () => {
+		const onopen = vi.fn();
+		await render(TodaySessionCard, { props: { ...base, routines: [], plan: [], onopen } });
+		await page.getByRole('button', { name: 'Build one' }).click();
+		expect(onopen).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps the rest-day controls off the empty card', async () => {
+		await render(TodaySessionCard, { props: { ...base, routines: [], plan: [] } });
+		expect(page.getByRole('button', { name: 'Train anyway' }).elements()).toHaveLength(0);
+		expect(page.getByRole('link', { name: 'Change the plan' }).elements()).toHaveLength(0);
+	});
+
+	it('keeps the starter controls off a real rest day', async () => {
+		await render(TodaySessionCard, { props: { ...base, today: TUESDAY } });
+		expect(page.getByRole('button', { name: 'Pick a starter' }).elements()).toHaveLength(0);
+		expect(page.getByRole('button', { name: 'Build one' }).elements()).toHaveLength(0);
 	});
 
 	it('leads to the planner when the rest day is the wrong one', async () => {

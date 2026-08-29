@@ -1,13 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { firstMondayISO } from '$lib/domain/training-plan';
+import { calendarWeeks } from '$lib/domain/training-plan';
 import type { RoutineExercise, Workout } from '$lib/domain/types';
 import { addDaysISO } from '$lib/domain/utils';
 import { workoutFromRoutine } from '$lib/domain/workout';
+import { tend } from '$lib/state/tend.svelte';
 import LoadTrend from './LoadTrend.svelte';
 
-const monday = firstMondayISO(new Date().getFullYear());
+const monday = calendarWeeks(new Date().getFullYear())[0]?.startISO ?? '';
 
 function bench(load: number): RoutineExercise {
 	return { name: 'Bench Press', group: 'Chest', sets: 2, reps: 8, load };
@@ -27,7 +28,19 @@ function session(weekIndex: number, exercises: RoutineExercise[]): Workout {
 	return { ...workout, finishedAt: 1 };
 }
 
+afterEach(() => tend.setLoadUnit('kg'));
+
 describe('LoadTrend', () => {
+	it('captions and labels the chart in whatever unit is set', async () => {
+		tend.setLoadUnit('lb');
+		const workouts = [session(0, [bench(40)]), session(1, [bench(42.5)]), session(2, [bench(45)])];
+		await render(LoadTrend, { props: { workouts } });
+		await expect
+			.element(page.getByText('Bench Press · top set, last 3 weeks · +5 lb'))
+			.toBeInTheDocument();
+		await expect.element(page.getByText('45 lb')).toBeInTheDocument();
+	});
+
 	it('captions the movement, the range and the change across it', async () => {
 		const workouts = [session(0, [bench(40)]), session(1, [bench(42.5)]), session(2, [bench(45)])];
 		await render(LoadTrend, { props: { workouts } });
@@ -57,6 +70,16 @@ describe('LoadTrend', () => {
 	it('claims no change from a single week', async () => {
 		await render(LoadTrend, { props: { workouts: [session(0, [bench(40)])] } });
 		await expect.element(page.getByText('Bench Press · top set, last 1 week')).toBeInTheDocument();
+	});
+
+	it('measures the caption in weeks elapsed, not in bars drawn', async () => {
+		// Trained in the first week and again fourteen weeks later: two points, but
+		// fifteen weeks of history behind them.
+		const workouts = [session(0, [bench(40)]), session(14, [bench(50)])];
+		await render(LoadTrend, { props: { workouts } });
+		await expect
+			.element(page.getByText('Bench Press · top set, last 15 weeks · +10 kg'))
+			.toBeInTheDocument();
 	});
 
 	it('says there is nothing to follow when no session was finished', async () => {

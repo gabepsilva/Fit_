@@ -2,15 +2,16 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import RoutineGone from '$lib/components/exercise/RoutineGone.svelte';
 	import RoutineSheet from '$lib/components/exercise/RoutineSheet.svelte';
 	import ScreenHeader from '$lib/components/exercise/ScreenHeader.svelte';
 	import { routineTotals } from '$lib/domain/exercises';
 	import { tend } from '$lib/state/tend.svelte';
 	import Button from '$lib/ui/Button.svelte';
+	import LinkButton from '$lib/ui/LinkButton.svelte';
 
 	const id = $derived(page.params.id ?? '');
 	const routine = $derived(tend.routine(id));
-	const home = resolve('/exercise');
 
 	async function start() {
 		if (tend.startWorkout(id)) await goto(resolve('/exercise/session'));
@@ -24,12 +25,14 @@
 {#if routine}
 	{@const totals = routineTotals(routine)}
 	{#snippet edit()}
-		<a
+		<LinkButton
+			variant="outline"
+			size="sm"
+			class="shrink-0"
 			href={resolve('/exercise/routines/[id]/edit', { id })}
-			class="border-border bg-card flex h-9 shrink-0 items-center rounded-xl border px-3 text-sm"
 		>
 			Edit
-		</a>
+		</LinkButton>
 	{/snippet}
 
 	<div class="flex flex-col gap-4">
@@ -52,9 +55,5 @@
 		</div>
 	</div>
 {:else}
-	<div class="flex flex-col gap-4">
-		<ScreenHeader back="/exercise" backLabel="Back to Exercise" title="Routine" />
-		<p class="text-muted-foreground px-1 text-sm">That routine is gone.</p>
-		<a href={home} class="text-primary px-1 text-sm underline">Back to Exercise</a>
-	</div>
+	<RoutineGone title="Routine" />
 {/if}

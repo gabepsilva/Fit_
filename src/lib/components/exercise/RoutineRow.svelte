@@ -13,11 +13,13 @@
 	let {
 		routine,
 		index,
+		current = false,
 		onstart
 	}: {
 		routine: Routine;
 		/** Position in the rotation, which is also what picks the routine's tone. */
 		index: number;
+		current?: boolean;
 		onstart: (routineId: string) => void;
 	} = $props();
 
@@ -28,6 +30,12 @@
 		return `${totals.exercises} exercises · ${totals.sets} sets`;
 	});
 	const startLabel = $derived(`Start ${routine.name}`);
+	/**
+	 * A routine with nothing on it has no session to run — `tend.startWorkout`
+	 * refuses it — so the control that would run it says so rather than looking
+	 * live and doing nothing.
+	 */
+	const empty = $derived(routine.exercises.length === 0);
 </script>
 
 <div class="bg-card flex items-center gap-1 rounded-2xl py-1 pr-2 pl-1 shadow-border">
@@ -38,8 +46,7 @@
 		<span
 			class={cn(
 				'flex size-11 shrink-0 flex-col items-center justify-center rounded-2xl',
-				tone.tint,
-				tone.ink
+				current ? 'bg-primary text-primary-foreground' : [tone.tint, tone.ink]
 			)}
 		>
 			<span class="font-display text-base leading-none">{index + 1}</span>
@@ -54,8 +61,9 @@
 	<button
 		type="button"
 		onclick={() => onstart(routine.id)}
+		disabled={empty}
 		aria-label={startLabel}
-		class="bg-accent text-accent-foreground flex size-11 shrink-0 items-center justify-center rounded-2xl"
+		class="bg-accent text-accent-foreground flex size-11 shrink-0 items-center justify-center rounded-2xl disabled:opacity-40"
 	>
 		<Play class="size-4" fill="currentColor" />
 	</button>

@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { loadTrend, trainedExercises } from '$lib/domain/training-progress';
+	import { loadTrend, trainedExercises, weekSpan } from '$lib/domain/training-progress';
 	import type { Workout } from '$lib/domain/types';
 	import { round1 } from '$lib/domain/utils';
+	import { tend } from '$lib/state/tend.svelte';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
 	/**
@@ -13,6 +14,8 @@
 
 	let picked = $state('');
 
+	const unit = $derived(tend.state.loadUnit);
+
 	const names = $derived(trainedExercises(workouts));
 	const name = $derived(names.includes(picked) ? picked : (names[0] ?? ''));
 	const points = $derived(name === '' ? [] : loadTrend(workouts, name));
@@ -21,7 +24,7 @@
 		const loads = points.map((p) => p.load);
 		const top = Math.max(0, ...loads);
 		const low = Math.min(top, ...loads);
-		// Load moves in 2.5 kg steps against a much larger total, so a column
+		// Load moves in small steps against a much larger total, so a column
 		// measured from zero would flatten every change worth seeing. The floor
 		// sits below the lightest week instead.
 		const floor = Math.max(0, low - (top - low) * 0.6);
@@ -35,15 +38,18 @@
 		const first = points[0];
 		const last = points.at(-1);
 		if (!first || !last) return '';
-		const span = `top set, last ${points.length} week${points.length === 1 ? '' : 's'}`;
+		// Weeks elapsed, not bars drawn: a movement trained twice across a quarter
+		// covers a quarter, and saying "last 2 weeks" would claim the opposite.
+		const weeks = weekSpan(points);
+		const span = `top set, last ${weeks} week${weeks === 1 ? '' : 's'}`;
 		if (points.length === 1) return `${name} · ${span}`;
 		const change = round1(last.load - first.load);
-		const move = change === 0 ? 'no change' : `${change > 0 ? '+' : ''}${change} kg`;
+		const move = change === 0 ? 'no change' : `${change > 0 ? '+' : ''}${change} ${unit}`;
 		return `${name} · ${span} · ${move}`;
 	});
 
 	const described = $derived(
-		`${name}, top set by week: ${points.map((p) => `${p.label} ${p.load} kg`).join(', ')}`
+		`${name}, top set by week: ${points.map((p) => `${p.label} ${p.load} ${unit}`).join(', ')}`
 	);
 </script>
 
@@ -56,10 +62,10 @@
 	{:else}
 		<p class="text-muted-foreground text-sm">{caption}</p>
 		<div class="mt-3 flex items-end gap-1.5" role="img" aria-label={described}>
-			{#each bars as bar (bar.label)}
+			{#each bars as bar (`${bar.year}-${bar.week}`)}
 				<div class="flex flex-1 flex-col items-center gap-1">
 					<span class="tabular text-primary h-3 text-[0.65rem] leading-3">
-						{bar.latest ? `${bar.load} kg` : ''}
+						{bar.latest ? `${bar.load} ${unit}` : ''}
 					</span>
 					<div class="flex h-20 w-full items-end">
 						<span

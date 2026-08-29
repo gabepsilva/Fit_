@@ -54,7 +54,7 @@ export type CalendarWeek = {
 	label: string;
 };
 
-export function firstMondayISO(year: number): string {
+function firstMondayISO(year: number): string {
 	const jan1 = new Date(year, 0, 1);
 	// getDay() is Sunday-based; this is the offset to the Monday on or after it.
 	const offset = (8 - jan1.getDay()) % 7;
@@ -89,10 +89,24 @@ export function calendarWeeks(year: number): CalendarWeek[] {
  */
 export function weekOf(iso: string): { year: number; week: number } {
 	const year = parseISODate(iso).getFullYear();
-	const start = parseISODate(firstMondayISO(year));
-	const days = Math.floor((parseISODate(iso).getTime() - start.getTime()) / 86_400_000);
+	const days = daysBetween(firstMondayISO(year), iso);
 	if (days < 0) return { year: year - 1, week: WEEKS_IN_YEAR };
 	return { year, week: Math.min(WEEKS_IN_YEAR, Math.floor(days / 7) + 1) };
+}
+
+/**
+ * Whole days from one date to another. Both dates are local midnights, and
+ * subtracting them as instants loses the hour a daylight-saving change moves —
+ * enough for the day count, and so the week, to fall one short for the whole
+ * rest of the year. Comparing the calendar dates themselves cannot drift.
+ */
+function daysBetween(fromISO: string, toISO: string): number {
+	const from = parseISODate(fromISO);
+	const to = parseISODate(toISO);
+	const ms =
+		Date.UTC(to.getFullYear(), to.getMonth(), to.getDate()) -
+		Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+	return ms / 86_400_000;
 }
 
 /** Monday is 0, Sunday is 6 — the order the week strip draws. */
@@ -126,6 +140,11 @@ export function plannedWeekCount(plan: PlannedWeek[], year: number): number {
  * to appear. Each routine gets two weeks before the next one, and every seventh
  * planned week is a rest week — the deload that a plan drawn by hand tends to
  * leave out.
+ *
+ * The days between New Year and the first Monday belong to week 52 of the year
+ * before, the way an ISO week-year runs past the calendar one. A plan drawn on
+ * one of those days still has to say what happens on them, so it opens with
+ * that trailing week and then runs the requested year from week 1.
  */
 export function seedTrainingPlan(
 	routineIds: string[],
@@ -134,11 +153,15 @@ export function seedTrainingPlan(
 ): PlannedWeek[] {
 	if (routineIds.length === 0) return [];
 	const cycle = [...routineIds, ...routineIds, REST_WEEK];
-	const from = weekOf(fromISO).year === year ? weekOf(fromISO).week : 1;
-	const out: PlannedWeek[] = [];
-	for (let week = from; week <= WEEKS_IN_YEAR; week++) {
-		const routineId = cycle[(week - from) % cycle.length];
-		if (routineId) out.push({ year, week, routineId });
-	}
-	return out;
+	const at = weekOf(fromISO);
+	const inTrailingWeek = at.year === year - 1 && at.week === WEEKS_IN_YEAR;
+	const from = at.year === year ? at.week : 1;
+	const weeks: { year: number; week: number }[] = inTrailingWeek
+		? [{ year: at.year, week: at.week }]
+		: [];
+	for (let week = from; week <= WEEKS_IN_YEAR; week++) weeks.push({ year, week });
+	return weeks.flatMap((w, i) => {
+		const routineId = cycle[i % cycle.length];
+		return routineId ? [{ ...w, routineId }] : [];
+	});
 }

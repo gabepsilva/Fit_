@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Pause from '@lucide/svelte/icons/pause';
 	import Play from '@lucide/svelte/icons/play';
+	import { DEFAULT_REST_SECONDS } from '$lib/domain/types';
 	import { formatClock } from '$lib/domain/workout';
 	import { cn } from '$lib/ui/cn';
 
@@ -12,10 +13,11 @@
 	 */
 	let {
 		startedAt = null,
-		seconds = 90
+		seconds = DEFAULT_REST_SECONDS
 	}: {
 		/** When the last set was ticked; a new value restarts the rest. */
 		startedAt?: number | null;
+		/** How long the rest runs. The session passes what the setting says. */
 		seconds?: number;
 	} = $props();
 
@@ -66,9 +68,14 @@
 			paused = { startedAt, left };
 			return;
 		}
+		// Read what the pause was holding *before* dropping it: `paused` is what
+		// `left` reads while held, so once it is null `left` recomputes against an
+		// `endsAt` the wall clock has already passed. A pause longer than the rest
+		// that was left would then resume at the full rest instead of the rest of it.
+		const remaining = held ?? (over ? seconds : left);
 		paused = null;
 		now = Date.now();
-		endsAt = now + (over ? seconds : left) * 1000;
+		endsAt = now + remaining * 1000;
 	}
 </script>
 

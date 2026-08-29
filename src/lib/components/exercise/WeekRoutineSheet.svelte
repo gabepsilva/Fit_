@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { CalendarWeek } from '$lib/domain/training-plan';
+	import { REST_WEEK } from '$lib/domain/types';
 	import { cn } from '$lib/ui/cn';
 	import Sheet from '$lib/ui/Sheet.svelte';
 	import type { PlanOption } from './plan-options';
@@ -49,7 +50,11 @@
 						<span class={cn('block text-[15px] font-medium', on ? '' : 'text-muted-foreground')}>
 							{option.name}
 						</span>
-						<span class="text-foreground/70 block text-xs">{option.note}</span>
+						<span class="text-foreground/70 block text-xs">
+							{option.id === REST_WEEK
+								? 'Nothing scheduled, on purpose.'
+								: 'Every session that week'}
+						</span>
 					</span>
 				</button>
 			{/each}

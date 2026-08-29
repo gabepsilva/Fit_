@@ -5,7 +5,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import { cn } from '$lib/ui/cn';
 	import Stepper from '$lib/ui/Stepper.svelte';
-	import { SHEET_GRID } from './routine-sheet-grid';
+	import { SHEET_GRID } from './sheet-grids';
 
 	/**
 	 * One movement on the routine sheet, and the load editor it opens into. Sets

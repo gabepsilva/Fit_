@@ -1,6 +1,12 @@
-import { weekOf, type CalendarWeek } from '$lib/domain/training-plan';
-import type { MuscleGroup, PlannedWeek, Routine, Workout } from '$lib/domain/types';
-import { setsDone } from '$lib/domain/workout';
+import {
+	plannedRoutineId,
+	weekOf,
+	WEEKS_IN_YEAR,
+	type CalendarWeek
+} from '$lib/domain/training-plan';
+import type { LoadUnit, MuscleGroup, PlannedWeek, Routine, Workout } from '$lib/domain/types';
+import { round1 } from '$lib/domain/utils';
+import { countsAsTraining, setsDone } from '$lib/domain/workout';
 
 /** Only a finished workout counts as training done; an abandoned one is not evidence. */
 function finished(workouts: Workout[]): Workout[] {
@@ -8,6 +14,9 @@ function finished(workouts: Workout[]): Workout[] {
 }
 
 export type TrendPoint = {
+	/** The training year the week belongs to, which is not always its calendar year. */
+	year: number;
+	week: number;
 	/** "W34", the training week the top set was lifted in. */
 	label: string;
 	load: number;
@@ -17,20 +26,35 @@ export type TrendPoint = {
  * The heaviest set of one movement, week by week. Weekly rather than per
  * session, because two sessions in a week make a sawtooth out of a line that is
  * meant to answer one question: is this getting heavier?
+ *
+ * Weeks are held by year as well as by number: week 52 and week 1 either side
+ * of New Year are consecutive, and sorting on the number alone would draw a
+ * year of progress as a collapse.
  */
 export function loadTrend(workouts: Workout[], name: string, count = 7): TrendPoint[] {
-	const byWeek = new Map<number, number>();
+	const byWeek = new Map<string, TrendPoint>();
 	for (const workout of finished(workouts)) {
 		const sets = workout.exercises.find((e) => e.name === name)?.sets.filter((s) => s.done) ?? [];
 		if (sets.length === 0) continue;
 		const top = Math.max(...sets.map((s) => s.load));
-		const { week } = weekOf(workout.date);
-		byWeek.set(week, Math.max(byWeek.get(week) ?? 0, top));
+		const { year, week } = weekOf(workout.date);
+		const key = `${year}-${week}`;
+		const load = Math.max(byWeek.get(key)?.load ?? 0, top);
+		byWeek.set(key, { year, week, label: `W${week}`, load });
 	}
-	return [...byWeek.entries()]
-		.sort((a, b) => a[0] - b[0])
-		.slice(-count)
-		.map(([week, load]) => ({ label: `W${week}`, load }));
+	return [...byWeek.values()].sort((a, b) => a.year - b.year || a.week - b.week).slice(-count);
+}
+
+/**
+ * How many weeks the trend reaches back over, gaps included. Two points
+ * fourteen weeks apart are fifteen weeks of history, not two: counting the
+ * points instead would caption a long silence as a short streak.
+ */
+export function weekSpan(points: TrendPoint[]): number {
+	const first = points[0];
+	const last = points.at(-1);
+	if (!first || !last) return 0;
+	return (last.year - first.year) * WEEKS_IN_YEAR + (last.week - first.week) + 1;
 }
 
 /** The movements trained most often, so the trend has something worth charting. */
@@ -97,7 +121,10 @@ export function weeklyAdherence(args: {
 }): AdherenceWeek[] {
 	const { workouts, plan, routines, weeks, year, throughWeek, count = 4 } = args;
 	const done = new Map<number, number>();
-	for (const workout of finished(workouts)) {
+	// A session that logged nothing is filed, so the summary can say so, but it is
+	// not a session the plan asked for. Counting it would let a week be met by
+	// walking in and out again.
+	for (const workout of workouts.filter(countsAsTraining)) {
 		const at = weekOf(workout.date);
 		if (at.year === year) done.set(at.week, (done.get(at.week) ?? 0) + 1);
 	}
@@ -105,8 +132,7 @@ export function weeklyAdherence(args: {
 		.filter((w) => w.week <= throughWeek)
 		.slice(-count)
 		.map((w) => {
-			const routineId = plan.find((p) => p.year === year && p.week === w.week)?.routineId;
-			const routine = routines.find((r) => r.id === routineId);
+			const routine = routines.find((r) => r.id === plannedRoutineId(plan, year, w.week));
 			return {
 				week: w.week,
 				label: `Week ${w.week}`,
@@ -143,4 +169,58 @@ export function personalRecords(workouts: Workout[], limit = 3): PersonalRecord[
 		}
 	}
 	return [...best.values()].sort((a, b) => b.load - a.load).slice(0, limit);
+}
+
+/**
+ * How much the movement on the chart has moved, as a sentence. Empty when there
+ * is nothing to report: one week of history has no change in it, and a top set
+ * that has not budged is not news.
+ */
+function loadSentence(workouts: Workout[], unit: LoadUnit): string {
+	// The movement the load trend opens on, so the note and the chart it sends
+	// you to are talking about the same thing.
+	const name = trainedExercises(workouts)[0];
+	if (name === undefined) return '';
+	const points = loadTrend(workouts, name);
+	const first = points[0];
+	const last = points.at(-1);
+	if (!first || !last || first.load === last.load) return '';
+	const change = round1(Math.abs(last.load - first.load));
+	const direction = last.load > first.load ? 'heavier' : 'lighter';
+	// One less than the span: the span counts both end weeks, and what is being
+	// pointed at is the week the first bar was lifted in, not the width of the
+	// chart.
+	const ago = weekSpan(points) - 1;
+	return `${name} is ${change} ${unit} ${direction} than ${ago} ${ago === 1 ? 'week' : 'weeks'} ago.`;
+}
+
+/**
+ * Which group the plan is thinnest on, as a sentence. Empty until there are two
+ * groups to compare: a single group trained is not the thin part of anything,
+ * it is all there is.
+ */
+function thinGroupSentence(workouts: Workout[], sinceISO: string): string {
+	const volume = volumeByGroup(workouts, sinceISO);
+	const thinnest = volume.length > 1 ? volume.at(-1) : undefined;
+	if (!thinnest) return '';
+	// "Legs are", "Chest is" — the group names that read as plurals are the ones
+	// that end in s, and that holds for every group in the library.
+	const verb = thinnest.group.endsWith('s') ? 'are' : 'is';
+	return `${thinnest.group} ${verb} still the thin part of the plan.`;
+}
+
+/**
+ * The take-away under the session summary: what the movement on the chart has
+ * done lately, and which group the plan is thinnest on. Either half is dropped
+ * when it has nothing to say, and with neither there is no note and no card.
+ */
+export function summaryNote(args: {
+	workouts: Workout[];
+	unit: LoadUnit;
+	/** The window the volume half looks over, as the volume card uses. */
+	sinceISO: string;
+}): string {
+	return [loadSentence(args.workouts, args.unit), thinGroupSentence(args.workouts, args.sinceISO)]
+		.filter((sentence) => sentence !== '')
+		.join(' ');
 }

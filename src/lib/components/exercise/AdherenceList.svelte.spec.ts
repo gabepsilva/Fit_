@@ -7,21 +7,43 @@ import { todayISO } from '$lib/domain/utils';
 import { workoutFromRoutine } from '$lib/domain/workout';
 import AdherenceList from './AdherenceList.svelte';
 
-const push: Routine = { id: 'r1', name: 'Push', freq: 3, exercises: [] };
+const push: Routine = {
+	id: 'r1',
+	name: 'Push',
+	freq: 3,
+	exercises: [{ name: 'Bench Press', group: 'Chest', sets: 1, reps: 8, load: 40 }]
+};
 const now = weekOf(todayISO());
 const plannedNow: PlannedWeek[] = [{ year: now.year, week: now.week, routineId: push.id }];
 
-const today: Workout = {
-	...workoutFromRoutine(push, { id: 'w1', date: todayISO(), startedAt: 0 }),
-	finishedAt: 1
-};
+/**
+ * A session that actually logged something. A finished session with nothing
+ * ticked is filed so the summary can say so, but it is not a session the plan
+ * asked for, so it is not what this list counts.
+ */
+const today: Workout = (() => {
+	const workout = workoutFromRoutine(push, { id: 'w1', date: todayISO(), startedAt: 0 });
+	for (const exercise of workout.exercises) {
+		for (const set of exercise.sets) set.done = true;
+	}
+	return { ...workout, finishedAt: 1 };
+})();
 
 describe('AdherenceList', () => {
-	it('keeps the reading the design asks for', async () => {
-		await render(AdherenceList, { props: { workouts: [], plan: [], routines: [] } });
-		await expect
-			.element(page.getByText(/A missed week is information, not a failure/))
-			.toBeInTheDocument();
+	it('draws a cell per planned session and fills only the ones that happened', async () => {
+		await render(AdherenceList, {
+			props: { workouts: [today], plan: plannedNow, routines: [push] }
+		});
+		const row = [...document.querySelectorAll('li')].find((li) =>
+			li.textContent?.includes(`Week ${now.week}`)
+		);
+		const cells = [...(row?.querySelectorAll('[aria-hidden="true"] > span') ?? [])];
+		// Three sessions were asked for and one was logged, so one cell is filled.
+		expect(cells.map((cell) => cell.className.includes('bg-primary'))).toEqual([
+			true,
+			false,
+			false
+		]);
 	});
 
 	it('holds finished sessions against what the week planned', async () => {

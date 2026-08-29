@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import type { Routine } from '$lib/domain/types';
+import { tend } from '$lib/state/tend.svelte';
 import RoutineSheet from './RoutineSheet.svelte';
 
 /** Chest is split by a Back movement, so grouping cannot preserve the order. */
@@ -22,6 +23,8 @@ async function renderSheet(routine: Routine = ROUTINE) {
 	return onload;
 }
 
+afterEach(() => tend.setLoadUnit('kg'));
+
 describe('RoutineSheet', () => {
 	it('gathers the movements under the muscle they train', async () => {
 		await renderSheet();
@@ -35,6 +38,13 @@ describe('RoutineSheet', () => {
 		await expect.element(page.getByText('Exercise').first()).toBeInTheDocument();
 		await expect.element(page.getByText('Load (kg)').first()).toBeInTheDocument();
 		expect(document.querySelectorAll('section')[0]?.textContent).toContain('Reps');
+	});
+
+	it('heads the load column in the unit the loads are actually read in', async () => {
+		await renderSheet();
+		await expect.element(page.getByText('Load (kg)').first()).toBeInTheDocument();
+		tend.setLoadUnit('lb');
+		await expect.element(page.getByText('Load (lb)').first()).toBeInTheDocument();
 	});
 
 	it('reports the position in the routine, not the position on the sheet', async () => {

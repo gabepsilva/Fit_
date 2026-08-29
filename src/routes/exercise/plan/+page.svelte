@@ -2,21 +2,27 @@
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import { resolve } from '$app/paths';
-	import { calendarWeeks, MONTHS_LONG } from '$lib/domain/training-plan';
+	import { calendarWeeks, MONTHS_LONG, plannedRoutineId } from '$lib/domain/training-plan';
 	import { tend } from '$lib/state/tend.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import MonthWeekRow from '$lib/components/exercise/MonthWeekRow.svelte';
-	import { assignedCount, planOptions } from '$lib/components/exercise/plan-options';
+	import { planOptions } from '$lib/components/exercise/plan-options';
 	import RoutineBrushes from '$lib/components/exercise/RoutineBrushes.svelte';
 	import ScreenHeader from '$lib/components/exercise/ScreenHeader.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import LinkButton from '$lib/ui/LinkButton.svelte';
 
 	const year = new Date().getFullYear();
+	const yearHref = resolve('/exercise/plan/year');
 	let month = $state(new Date().getMonth());
 	let picked = $state('');
 
 	const routines = $derived(tend.state.routines);
 	const options = $derived(planOptions(routines));
 	const weeks = $derived(calendarWeeks(year).filter((week) => week.month === month));
-	const assigned = $derived(assignedCount(weeks, tend.state.trainingPlan, year));
+	const assigned = $derived(
+		weeks.filter((week) => plannedRoutineId(tend.state.trainingPlan, year, week.week)).length
+	);
 	// Until a pill is tapped the first routine is the brush, so a week row means
 	// something on arrival rather than doing nothing until something is chosen.
 	const brush = $derived(
@@ -31,28 +37,17 @@
 <div class="flex flex-col gap-5 pb-10">
 	<ScreenHeader back="/exercise" title="Plan">
 		{#snippet action()}
-			<a
-				href={resolve('/exercise/plan/year')}
-				class="border-border bg-card text-foreground hover:bg-secondary flex h-9 items-center rounded-xl border px-3 text-sm"
-			>
-				Year
-			</a>
+			<LinkButton variant="outline" size="sm" href={yearHref}>Year</LinkButton>
 		{/snippet}
 	</ScreenHeader>
 
 	{#if routines.length === 0}
-		<section class="bg-card shadow-border flex flex-col items-start gap-3 rounded-3xl p-5">
-			<h2 class="font-display text-xl">Nothing to plan yet</h2>
-			<p class="text-muted-foreground text-sm">
-				A week names one routine. Add a routine first, then the year has something to hold.
-			</p>
-			<a
-				href={resolve('/exercise')}
-				class="bg-primary text-primary-foreground flex h-11 items-center rounded-xl px-4 text-sm font-medium"
-			>
-				Back to Exercise
-			</a>
-		</section>
+		<EmptyState title="Nothing to plan yet">
+			A week names one routine. Add a routine first, then the year has something to hold.
+			{#snippet action()}
+				<LinkButton href={resolve('/exercise')}>Back to Exercise</LinkButton>
+			{/snippet}
+		</EmptyState>
 	{:else}
 		<div class="flex items-center justify-between gap-2">
 			<button
@@ -93,17 +88,17 @@
 			{/each}
 		</div>
 
-		<button
-			type="button"
+		<Button
+			size="lg"
+			class="w-full text-[15px]"
 			onclick={() =>
 				tend.planWeeks(
 					year,
 					weeks.map((week) => week.week),
 					brush
 				)}
-			class="bg-primary text-primary-foreground h-12 w-full rounded-2xl text-[15px] font-medium"
 		>
 			Apply to all {weeks.length} weeks
-		</button>
+		</Button>
 	{/if}
 </div>

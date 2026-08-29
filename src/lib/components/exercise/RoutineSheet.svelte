@@ -1,10 +1,12 @@
 <script lang="ts">
+	import EmptyState from '$lib/components/EmptyState.svelte';
 	import FormCheckModal from '$lib/components/exercise/FormCheckModal.svelte';
 	import RoutineSheetRow from '$lib/components/exercise/RoutineSheetRow.svelte';
 	import { muscleSections } from '$lib/domain/exercises';
 	import type { Routine } from '$lib/domain/types';
+	import { tend } from '$lib/state/tend.svelte';
 	import { cn } from '$lib/ui/cn';
-	import { SHEET_GRID } from './routine-sheet-grid';
+	import { SHEET_GRID } from './sheet-grids';
 
 	/**
 	 * The routine as the paper sheet it replaces: muscle group down the left,
@@ -32,6 +34,13 @@
 				.filter((row) => row.exercise.group === section.group)
 		}))
 	);
+
+	/**
+	 * Built here rather than interpolated into the heading: the load column is
+	 * read in whatever unit the store is set to, and one expression keeps the
+	 * whole heading a single reactive reading.
+	 */
+	const loadHeading = $derived(`Load (${tend.state.loadUnit})`);
 
 	let openIndex = $state<number | null>(null);
 	let formOpen = $state(false);
@@ -67,7 +76,7 @@
 					<span>Exercise</span>
 					<span class="text-center">Set</span>
 					<span class="text-center">Reps</span>
-					<span class="text-right">Load (kg)</span>
+					<span class="text-right">{loadHeading}</span>
 				</div>
 				{#each section.rows as row (row.index)}
 					<RoutineSheetRow
@@ -81,11 +90,7 @@
 			</div>
 		</section>
 	{:else}
-		<p
-			class="text-muted-foreground bg-card rounded-3xl px-5 py-8 text-center text-sm shadow-border"
-		>
-			No movements on this sheet yet. Edit the routine to put some on it.
-		</p>
+		<EmptyState>No movements on this sheet yet. Edit the routine to put some on it.</EmptyState>
 	{/each}
 </div>
 

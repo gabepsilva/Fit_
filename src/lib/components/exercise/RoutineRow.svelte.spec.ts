@@ -62,6 +62,12 @@ describe('RoutineRow', () => {
 		expect(onstart).toHaveBeenCalledWith('push');
 	});
 
+	it('will not start a routine with nothing on it', async () => {
+		const bare: Routine = { id: 'bare', name: 'Blank', freq: 2, exercises: [] };
+		await render(RoutineRow, { props: { routine: bare, index: 0, onstart: noop } });
+		await expect.element(page.getByRole('button', { name: 'Start Blank' })).toBeDisabled();
+	});
+
 	it('tones the badge by position, so two routines never look alike', async () => {
 		await render(RoutineRow, { props: { routine, index: 1, onstart: noop } });
 		expect(document.querySelectorAll('[class*="bg-sage-soft"]')).toHaveLength(1);

@@ -1,17 +1,19 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import SectionLabel from '$lib/components/SectionLabel.svelte';
 	import BuilderExerciseRow from '$lib/components/exercise/BuilderExerciseRow.svelte';
 	import LibrarySheet from '$lib/components/exercise/LibrarySheet.svelte';
+	import RoutineGone from '$lib/components/exercise/RoutineGone.svelte';
 	import ScreenHeader from '$lib/components/exercise/ScreenHeader.svelte';
 	import { routineTotals } from '$lib/domain/exercises';
 	import { tend } from '$lib/state/tend.svelte';
 	import Input from '$lib/ui/Input.svelte';
+	import LinkButton from '$lib/ui/LinkButton.svelte';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
 	const FREQUENCIES = [1, 2, 3, 4, 5, 6];
-	const LABEL =
-		'text-muted-foreground px-1 text-[0.625rem] font-medium tracking-[0.14em] uppercase';
 
 	const id = $derived(page.params.id ?? '');
 	const routine = $derived(tend.routine(id));
@@ -28,12 +30,7 @@
 	{@const totals = routineTotals(routine)}
 	<!-- "Save" only leaves: every edit below is written to the store as it is made. -->
 	{#snippet save()}
-		<a
-			href={home}
-			class="bg-primary text-primary-foreground flex h-9 shrink-0 items-center rounded-xl px-4 text-sm"
-		>
-			Save
-		</a>
+		<LinkButton size="sm" class="shrink-0" href={home}>Save</LinkButton>
 	{/snippet}
 
 	<div class="flex flex-col gap-6">
@@ -45,7 +42,7 @@
 		/>
 
 		<section class="flex flex-col gap-2">
-			<p class={LABEL}>Name</p>
+			<SectionLabel class="px-1">Name</SectionLabel>
 			<Input
 				aria-label="Routine name"
 				bind:value={
@@ -59,7 +56,7 @@
 		</section>
 
 		<section class="flex flex-col gap-2">
-			<p class={LABEL}>Days a week</p>
+			<SectionLabel class="px-1">Days a week</SectionLabel>
 			<div class="flex gap-1.5">
 				{#each FREQUENCIES as freq (freq)}
 					<ToggleButton
@@ -78,12 +75,17 @@
 
 		<section class="flex flex-col gap-2">
 			<div class="flex items-baseline justify-between">
-				<p class={LABEL}>Exercises</p>
+				<SectionLabel class="px-1">Exercises</SectionLabel>
 				<span class="text-muted-foreground px-1 text-xs">tap ↑ to reorder</span>
 			</div>
 			{#if routine.exercises.length > 0}
 				<ul class="flex flex-col gap-2">
-					{#each routine.exercises as exercise, index (index)}
+					<!-- Keyed by the exercise itself, not by its position: this list
+					     reorders and deletes, and Svelte's state proxies follow a
+					     movement's object across a patch, so the key moves with the row
+					     rather than repainting every row beneath it. Name would not do —
+					     the same movement may appear twice. -->
+					{#each routine.exercises as exercise, index (exercise)}
 						<BuilderExerciseRow
 							{index}
 							{exercise}
@@ -95,11 +97,7 @@
 					{/each}
 				</ul>
 			{:else}
-				<p
-					class="text-muted-foreground bg-card rounded-3xl px-5 py-8 text-center text-sm shadow-border"
-				>
-					Nothing on this routine yet. Pick the movements it should ask for.
-				</p>
+				<EmptyState>Nothing on this routine yet. Pick the movements it should ask for.</EmptyState>
 			{/if}
 			<button
 				type="button"
@@ -119,9 +117,5 @@
 		onclose={() => (libraryOpen = false)}
 	/>
 {:else}
-	<div class="flex flex-col gap-4">
-		<ScreenHeader back="/exercise" backLabel="Back to Exercise" title="Edit routine" />
-		<p class="text-muted-foreground px-1 text-sm">That routine is gone.</p>
-		<a href={home} class="text-primary px-1 text-sm underline">Back to Exercise</a>
-	</div>
+	<RoutineGone title="Edit routine" />
 {/if}

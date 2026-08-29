@@ -34,11 +34,25 @@ export function workoutSetsDone(workout: Workout): number {
 	return workout.exercises.reduce((total, e) => total + setsDone(e.sets), 0);
 }
 
+/**
+ * Whether a filed session counts as training. A session can be walked out of
+ * with nothing ticked — `finishWorkout` files it so the summary has something
+ * kind to say — but a week is not met by walking in and out again, so nothing
+ * that counts sessions or marks a day as trained may count that one.
+ *
+ * Every screen that answers "did this happen?" reads through here, so the
+ * answer cannot differ between the week strip, the today card, the progress
+ * screen and the adherence chart.
+ */
+export function countsAsTraining(workout: Workout): boolean {
+	return workout.finishedAt !== null && workoutSetsDone(workout) > 0;
+}
+
 export function workoutSetsPlanned(workout: Workout): number {
 	return workout.exercises.reduce((total, e) => total + e.sets.length, 0);
 }
 
-/** Kilograms actually moved: reps times load, over the sets that were ticked. */
+/** Load actually moved: reps times load, over the sets that were ticked. */
 export function workoutVolume(workout: Workout): number {
 	return workout.exercises.reduce(
 		(total, e) => total + e.sets.filter((s) => s.done).reduce((sum, s) => sum + s.reps * s.load, 0),

@@ -5,14 +5,11 @@ import {
 	bumpField,
 	emptyRoutine,
 	exercisesFromLibrary,
-	FIELD_STEPS,
 	formatLoad,
 	formCues,
 	libraryExercise,
 	libraryFor,
-	MINUTES_PER_SET,
 	muscleSections,
-	routineSets,
 	routinesFromTemplate,
 	routineTotals
 } from './exercises';
@@ -79,18 +76,19 @@ describe('form cues', () => {
 
 describe('routine arithmetic', () => {
 	it('adds up the sets across the movements', () => {
-		expect(routineSets(routine([row('Squat', 'Legs', 5), row('Leg Press', 'Legs', 4)]))).toBe(9);
+		expect(
+			routineTotals(routine([row('Squat', 'Legs', 5), row('Leg Press', 'Legs', 4)])).sets
+		).toBe(9);
 	});
 
 	it('counts no sets in an empty routine', () => {
-		expect(routineSets(routine([]))).toBe(0);
+		expect(routineTotals(routine([])).sets).toBe(0);
 	});
 
 	it('reports movements, sets and an estimated length together', () => {
 		const totals = routineTotals(routine([row('Squat', 'Legs', 5), row('Leg Press', 'Legs', 5)]));
 		expect(totals.exercises).toBe(2);
 		expect(totals.sets).toBe(10);
-		expect(totals.minutes).toBe(Math.round(10 * MINUTES_PER_SET));
 		expect(totals.minutes).toBe(32);
 	});
 
@@ -185,7 +183,6 @@ describe('an empty routine', () => {
 
 describe('stepping a field', () => {
 	it('moves sets and reps by one and load by a plate', () => {
-		expect(FIELD_STEPS).toEqual({ sets: 1, reps: 1, load: 2.5 });
 		expect(bumpField('sets', 3, 1)).toBe(4);
 		expect(bumpField('reps', 10, 1)).toBe(11);
 		expect(bumpField('load', 40, 1)).toBe(42.5);

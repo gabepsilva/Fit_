@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SectionLabel from '$lib/components/SectionLabel.svelte';
 	import { cn } from '$lib/ui/cn';
 	import type { PlanOption } from './plan-options';
 
@@ -19,9 +20,7 @@
 </script>
 
 <section class="bg-card shadow-border rounded-3xl p-4">
-	<p class="text-muted-foreground mb-2 text-[0.65rem] font-medium tracking-[0.14em] uppercase">
-		Series to apply
-	</p>
+	<SectionLabel class="mb-2">Series to apply</SectionLabel>
 	<div class="flex flex-wrap gap-1.5">
 		{#each options as option (option.id)}
 			{@const on = option.id === selected}

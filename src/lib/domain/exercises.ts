@@ -11,7 +11,7 @@ import type { LibraryExercise, MuscleGroup, Routine, RoutineExercise } from '$li
  * number on "about 40 min" beside a routine, so it stays a constant here rather
  * than becoming a setting nobody would tune.
  */
-export const MINUTES_PER_SET = 3.2;
+const MINUTES_PER_SET = 3.2;
 
 /** What a freshly added library exercise prescribes until someone edits it. */
 const NEW_EXERCISE_SETS = 3;
@@ -44,7 +44,7 @@ export function formCues(name: string): readonly string[] {
 	return FORM_CUES[name] ?? DEFAULT_FORM_CUES;
 }
 
-export function routineSets(routine: Routine): number {
+function routineSets(routine: Routine): number {
 	return routine.exercises.reduce((total, e) => total + e.sets, 0);
 }
 
@@ -106,7 +106,7 @@ export function emptyRoutine(id: string): Routine {
 }
 
 /** How far one tap on a stepper moves each field, in that field's own units. */
-export const FIELD_STEPS = { sets: 1, reps: 1, load: 2.5 } as const;
+const FIELD_STEPS = { sets: 1, reps: 1, load: 2.5 } as const;
 
 export type BumpField = keyof typeof FIELD_STEPS;
 
@@ -126,7 +126,7 @@ export function bumpField(field: BumpField, current: number, direction: number):
 	return field === 'sets' ? Math.min(MAX_SETS, floored) : floored;
 }
 
-/** Zero load is bodyweight, which reads as an em dash rather than as a 0 kg lift. */
+/** Zero load is bodyweight, which reads as an em dash rather than as a lift of nothing. */
 export function formatLoad(load: number): string {
 	return load === 0 ? '—' : String(load);
 }

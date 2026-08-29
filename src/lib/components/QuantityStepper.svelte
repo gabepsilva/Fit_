@@ -1,7 +1,11 @@
 <script lang="ts">
-	import Minus from '@lucide/svelte/icons/minus';
-	import Plus from '@lucide/svelte/icons/plus';
+	import Stepper from '$lib/ui/Stepper.svelte';
 
+	/**
+	 * A `Stepper` that owns the number instead of reporting a direction: the
+	 * servings on a log row are the caller's state, not a domain quantity with
+	 * rules of its own. The layout, targets and labels come from the primitive.
+	 */
 	let {
 		value = $bindable(),
 		step = 0.5,
@@ -13,26 +17,9 @@
 		Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
 	);
 
-	const button =
-		'flex size-10 items-center justify-center rounded-xl bg-secondary text-foreground transition-transform duration-150 active:scale-[0.96]';
+	function bump(direction: number) {
+		value = Math.max(min, Math.round((value + step * direction) * 100) / 100);
+	}
 </script>
 
-<div class="flex items-center gap-1">
-	<button
-		type="button"
-		class={button}
-		aria-label="Decrease"
-		onclick={() => (value = Math.max(min, Math.round((value - step) * 100) / 100))}
-	>
-		<Minus class="size-4" />
-	</button>
-	<span class="tabular min-w-10 text-center text-sm font-medium">{display}</span>
-	<button
-		type="button"
-		class={button}
-		aria-label="Increase"
-		onclick={() => (value = Math.round((value + step) * 100) / 100)}
-	>
-		<Plus class="size-4" />
-	</button>
-</div>
+<Stepper value={display} size="md" onstep={bump} />

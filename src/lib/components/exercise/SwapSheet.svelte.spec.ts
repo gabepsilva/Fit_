@@ -34,6 +34,13 @@ describe('SwapSheet', () => {
 		expect(page.getByText('Bench Press', { exact: true }).elements()).toHaveLength(0);
 	});
 
+	it('makes the whole row the choice, with nothing to tick', async () => {
+		const { props } = setup('Bench Press');
+		await render(SwapSheet, { props });
+		expect(page.getByRole('checkbox').elements()).toHaveLength(0);
+		await expect.element(page.getByRole('button', { name: /Pec Deck/ })).toBeInTheDocument();
+	});
+
 	it('reports the pick and closes behind it', async () => {
 		const { props, picked, closed } = setup('Bench Press');
 		await render(SwapSheet, { props });

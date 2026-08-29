@@ -47,6 +47,12 @@ describe('WeekRoutineSheet', () => {
 		await expect.element(page.getByText('Nothing scheduled, on purpose.')).toBeInTheDocument();
 	});
 
+	it('says a routine covers every session of the week, and the rest week does not', async () => {
+		await render(WeekRoutineSheet, { props: props() });
+		await expect.element(page.getByText('Every session that week').first()).toBeInTheDocument();
+		expect(page.getByText('Every session that week').elements()).toHaveLength(1);
+	});
+
 	it('shows the current assignment as chosen', async () => {
 		await render(WeekRoutineSheet, { props: props({ current: 'push' }) });
 		await expect

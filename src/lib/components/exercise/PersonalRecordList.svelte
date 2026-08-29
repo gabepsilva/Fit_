@@ -2,13 +2,14 @@
 	import { personalRecords } from '$lib/domain/training-progress';
 	import type { Workout } from '$lib/domain/types';
 	import { monthDay } from '$lib/domain/utils';
+	import { tend } from '$lib/state/tend.svelte';
 
 	let { workouts }: { workouts: Workout[] } = $props();
 
 	const records = $derived(
 		personalRecords(workouts).map((r) => ({
 			name: r.name,
-			best: `${r.load} kg × ${r.reps}`,
+			best: `${r.load} ${tend.state.loadUnit} × ${r.reps}`,
 			when: monthDay(r.date)
 		}))
 	);

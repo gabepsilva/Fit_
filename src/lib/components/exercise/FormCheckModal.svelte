@@ -26,7 +26,10 @@
 		<p class="text-xs">A demonstration clip belongs here</p>
 	</div>
 	<ul class="mt-4 flex flex-col gap-2.5">
-		{#each cues as cue, i (cue)}
+		<!-- Keyed by position: the cue lists are written by hand, and a repeated
+		     line keyed by its own text is a runtime error rather than a repeated
+		     line. Nothing reorders this list. -->
+		{#each cues as cue, i (i)}
 			<li class="flex items-start gap-2.5">
 				<span
 					class="bg-accent text-accent-foreground tabular mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-lg text-xs font-medium"

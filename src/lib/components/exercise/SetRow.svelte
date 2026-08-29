@@ -5,6 +5,7 @@
 	import { cn } from '$lib/ui/cn';
 	import Stepper from '$lib/ui/Stepper.svelte';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
+	import { SET_GRID } from './sheet-grids';
 
 	/**
 	 * One line of the set list: which set, what it is being done at, and whether
@@ -25,12 +26,7 @@
 	} = $props();
 </script>
 
-<div
-	class={cn(
-		'grid grid-cols-[2rem_1fr_1fr_2.5rem] items-center gap-2 rounded-2xl px-1 py-1',
-		set.done && 'bg-muted/70'
-	)}
->
+<div class={cn(SET_GRID, 'items-center rounded-2xl px-1 py-1', set.done && 'bg-muted/70')}>
 	<span
 		class={cn(
 			'tabular flex size-7 items-center justify-center rounded-lg text-xs',

@@ -1,10 +1,24 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { DEFAULT_FORM_CUES, FORM_CUES } from '$lib/domain/exercise-catalog';
 import FormCheckModal from './FormCheckModal.svelte';
 
 const BENCH_CUES = FORM_CUES['Bench Press'] ?? [];
+
+/**
+ * The cue lists are written by hand, so nothing stops two of them reading the
+ * same. Keying the list by its own text would make that a runtime error, so the
+ * catalog is given a movement that repeats itself for the length of one test.
+ */
+const REPEATED = 'Brace before the descent';
+const REPEATER = 'Repeated Cue Movement';
+beforeAll(() => {
+	(FORM_CUES as Record<string, readonly string[]>)[REPEATER] = [REPEATED, REPEATED];
+});
+afterAll(() => {
+	delete (FORM_CUES as Record<string, readonly string[]>)[REPEATER];
+});
 
 describe('FormCheckModal', () => {
 	it('shows nothing until it is opened', async () => {
@@ -45,6 +59,12 @@ describe('FormCheckModal', () => {
 			await expect.element(page.getByText(cue)).toBeInTheDocument();
 		}
 		await expect.element(page.getByText(BENCH_CUES[0] ?? '')).not.toBeInTheDocument();
+	});
+
+	it('lists a repeated cue twice rather than falling over on it', async () => {
+		await render(FormCheckModal, { props: { open: true, name: REPEATER, onclose: vi.fn() } });
+		expect(page.getByText(REPEATED).elements()).toHaveLength(2);
+		await expect.element(page.getByText('2', { exact: true })).toBeInTheDocument();
 	});
 
 	it('is honest that the demonstration is not there yet', async () => {

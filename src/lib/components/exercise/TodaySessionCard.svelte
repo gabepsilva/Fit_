@@ -5,27 +5,46 @@
 	import { plannedRoutineId, trainingDays, weekOf, weekdayIndex } from '$lib/domain/training-plan';
 	import type { PlannedWeek, Routine, Workout } from '$lib/domain/types';
 	import { startOfWeek } from '$lib/domain/utils';
+	import { countsAsTraining } from '$lib/domain/workout';
+	import SectionLabel from '$lib/components/SectionLabel.svelte';
 	import Button from '$lib/ui/Button.svelte';
 
 	/**
 	 * What today asks for, decided by the plan rather than by a picker: the week
 	 * names a routine, and the routine's frequency decides which days of that
-	 * week it lands on. Every other day is a rest day, said plainly.
+	 * week it lands on. Every other day is a rest day, said plainly — and with
+	 * no routines at all, the card says that instead of inventing a rest day.
 	 */
 	let {
 		routines,
 		plan,
 		workouts,
 		today,
-		onstart
+		onstart,
+		onpick,
+		onopen
 	}: {
 		routines: Routine[];
 		plan: PlannedWeek[];
-		/** Finished workouts, so a rest day can say what the week already holds. */
+		/** Filed workouts, so a rest day can say what the week already holds. */
 		workouts: Workout[];
 		today: string;
 		onstart: (routineId: string) => void;
+		/** Opens the shelf of starter routines. */
+		onpick: () => void;
+		/** Opens a blank routine in the builder. */
+		onopen: () => void;
 	} = $props();
+
+	/**
+	 * Someone with history but no routines left. The design calls for this card,
+	 * and it is built and tested, but no user can reach it yet: emptying the list
+	 * needs `tend.removeRoutine`, which nothing in the UI calls today. Deleting a
+	 * routine is a backend concern, so this stays here deliberately, ready for the
+	 * affordance that lands with it. First run — no routines AND no history — is a
+	 * different state and shows the template shelf instead.
+	 */
+	const nothingYet = $derived(routines.length === 0);
 
 	const planned = $derived.by(() => {
 		const { year, week } = weekOf(today);
@@ -39,8 +58,23 @@
 	/** Training anyway on a rest day trains this week's routine, or the first one. */
 	const anyway = $derived(planned ?? routines[0]);
 
+	/**
+	 * A routine with no movements has no session in it — `tend.startWorkout`
+	 * refuses one — so the control that would run it is dead rather than
+	 * looking live and doing nothing, exactly as the routine rows behave.
+	 */
+	function runnable(r: Routine | undefined) {
+		return r !== undefined && r.exercises.length > 0;
+	}
+
+	/**
+	 * Sessions this week that were actually trained. A session walked out of with
+	 * nothing ticked is filed so the summary has something kind to say about it,
+	 * but a week is not met by walking in and out again.
+	 */
 	const doneThisWeek = $derived(
-		workouts.filter((w) => w.date >= startOfWeek(today) && w.date <= today).length
+		workouts.filter((w) => w.date >= startOfWeek(today) && w.date <= today && countsAsTraining(w))
+			.length
 	);
 
 	const restMeta = $derived.by(() => {
@@ -51,6 +85,12 @@
 	});
 
 	const head = $derived.by(() => {
+		if (nothingYet)
+			return {
+				kicker: 'Today',
+				title: 'No routines yet',
+				meta: 'A routine is the list of exercises for one session. Start from a template, or build your own.'
+			};
 		if (!routine) return { kicker: 'Today', title: 'Rest day', meta: restMeta };
 		const totals = routineTotals(routine);
 		return {
@@ -62,22 +102,35 @@
 </script>
 
 <section class="bg-card rounded-3xl p-4 shadow-border">
-	<p class="text-muted-foreground text-[0.65rem] font-medium tracking-[0.16em] uppercase">
-		{head.kicker}
-	</p>
+	<SectionLabel>{head.kicker}</SectionLabel>
 	<h2 class="font-display mt-1.5 text-2xl tracking-tight">{head.title}</h2>
 	<p class="text-muted-foreground mt-2 text-sm">{head.meta}</p>
 
-	{#if routine}
+	{#if nothingYet}
+		<div class="mt-4 flex gap-2">
+			<Button size="lg" class="flex-1" onclick={onpick}>Pick a starter</Button>
+			<Button variant="outline" size="lg" class="shrink-0" onclick={onopen}>Build one</Button>
+		</div>
+	{:else if routine}
 		<div class="mt-3.5 flex flex-wrap gap-1.5">
-			{#each routine.exercises.slice(0, 4) as exercise (exercise.name)}
+			<!-- Keyed by position, not by name: the same movement may appear twice in
+			     a routine, and two chips keyed alike is a runtime error. Nothing
+			     reorders this preview, so position is a stable identity. -->
+			{#each routine.exercises.slice(0, 4) as exercise, index (index)}
 				<span class="bg-secondary text-foreground/70 rounded-full px-2.5 py-1 text-xs">
 					{exercise.name}
 				</span>
 			{/each}
 		</div>
 		<div class="mt-4 flex gap-2">
-			<Button size="lg" class="flex-1" onclick={() => onstart(routine.id)}>Start session</Button>
+			<Button
+				size="lg"
+				class="flex-1"
+				disabled={!runnable(routine)}
+				onclick={() => onstart(routine.id)}
+			>
+				Start session
+			</Button>
 			<a
 				href={resolve('/exercise/routines/[id]', { id: routine.id })}
 				aria-label="See the whole routine"
@@ -98,7 +151,7 @@
 				variant="secondary"
 				size="lg"
 				class="flex-1"
-				disabled={!anyway}
+				disabled={!runnable(anyway)}
 				onclick={() => anyway && onstart(anyway.id)}
 			>
 				Train anyway

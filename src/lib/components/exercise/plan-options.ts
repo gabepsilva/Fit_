@@ -1,4 +1,4 @@
-import { plannedRoutineId, trainingDays, type CalendarWeek } from '$lib/domain/training-plan';
+import { plannedRoutineId, trainingDays } from '$lib/domain/training-plan';
 import { REST_WEEK, type PlannedWeek, type Routine } from '$lib/domain/types';
 import { REST_TONE, routineLetter, routineTone, type RoutineTone } from './routine-tone';
 
@@ -6,7 +6,6 @@ import { REST_TONE, routineLetter, routineTone, type RoutineTone } from './routi
 export type PlanOption = {
 	id: string;
 	name: string;
-	note: string;
 	letter: string;
 	tone: RoutineTone;
 	/** Weekday indexes the week trains on, Monday first. Empty for a rest week. */
@@ -22,7 +21,6 @@ export function planOptions(routines: Routine[]): PlanOption[] {
 	const rest: PlanOption = {
 		id: REST_WEEK,
 		name: 'Rest week',
-		note: 'Nothing scheduled, on purpose.',
 		// An em dash rather than an initial: a rest week is the absence of a
 		// routine, and an "R" beside a "B" reads as one more of them.
 		letter: '—',
@@ -33,8 +31,6 @@ export function planOptions(routines: Routine[]): PlanOption[] {
 		...routines.map((routine, index) => ({
 			id: routine.id,
 			name: routine.name,
-			// A planned week names one routine, not a day-by-day schedule.
-			note: 'Every session that week',
 			letter: routineLetter(routine.name),
 			tone: routineTone(index),
 			days: trainingDays(routine.freq)
@@ -52,9 +48,4 @@ export function plannedOption(
 ): PlanOption | undefined {
 	const id = plannedRoutineId(plan, year, week);
 	return options.find((option) => option.id === id);
-}
-
-/** How many of a month's weeks already name something, for the line under the month. */
-export function assignedCount(weeks: CalendarWeek[], plan: PlannedWeek[], year: number): number {
-	return weeks.filter((week) => plannedRoutineId(plan, year, week.week)).length;
 }

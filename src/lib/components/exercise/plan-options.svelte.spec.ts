@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { CalendarWeek } from '$lib/domain/training-plan';
 import { REST_WEEK, type PlannedWeek, type Routine } from '$lib/domain/types';
-import { assignedCount, plannedOption, planOptions } from './plan-options';
+import { plannedOption, planOptions } from './plan-options';
 
 function routine(id: string, name: string, freq = 3): Routine {
 	return { id, name, freq, exercises: [] };
@@ -11,28 +10,13 @@ const ROUTINES = [routine('push', 'Chest & Shoulders'), routine('legs', 'Legs', 
 const OPTIONS = planOptions(ROUTINES);
 const PLAN: PlannedWeek[] = [{ year: 2026, week: 5, routineId: 'legs' }];
 
-const WEEK: CalendarWeek = {
-	week: 5,
-	month: 0,
-	startISO: '2026-02-02',
-	endISO: '2026-02-08',
-	label: 'Feb 2–8'
-};
-
 describe('planOptions', () => {
 	it('offers every routine plus a rest week', () => {
 		expect(OPTIONS.map((option) => option.id)).toEqual(['push', 'legs', REST_WEEK]);
 	});
 
-	it('names the rest week and says it is deliberate', () => {
-		expect(planOptions([]).at(-1)).toMatchObject({
-			name: 'Rest week',
-			note: 'Nothing scheduled, on purpose.'
-		});
-	});
-
-	it('says a routine covers the whole week', () => {
-		expect(OPTIONS[0]?.note).toBe('Every session that week');
+	it('names the rest week', () => {
+		expect(planOptions([]).at(-1)?.name).toBe('Rest week');
 	});
 
 	it('carries the routine initial and the days its frequency lands on', () => {
@@ -63,15 +47,5 @@ describe('plannedOption', () => {
 
 	it('returns nothing for a week planned in a different year', () => {
 		expect(plannedOption(OPTIONS, PLAN, 2025, 5)).toBeUndefined();
-	});
-});
-
-describe('assignedCount', () => {
-	it('counts only the weeks that name something', () => {
-		expect(assignedCount([WEEK, { ...WEEK, week: 6 }], PLAN, 2026)).toBe(1);
-	});
-
-	it('ignores assignments made in another year', () => {
-		expect(assignedCount([WEEK], PLAN, 2025)).toBe(0);
 	});
 });

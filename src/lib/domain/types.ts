@@ -162,11 +162,24 @@ export type LibraryExercise = {
 	group: MuscleGroup;
 };
 
+/** The units a load can be read in. Which one is on show is `TendState.loadUnit`. */
+export type LoadUnit = 'kg' | 'lb';
+
+export const DEFAULT_LOAD_UNIT: LoadUnit = 'kg';
+
+/** The rest between sets, in seconds: what it opens at, and how far it can be moved. */
+export const DEFAULT_REST_SECONDS = 90;
+export const MIN_REST_SECONDS = 30;
+export const MAX_REST_SECONDS = 180;
+
 /** One movement as a routine prescribes it: how many sets, at what reps and load. */
 export type RoutineExercise = LibraryExercise & {
 	sets: number;
 	reps: number;
-	/** Kilograms. Zero means bodyweight, and reads as an em dash rather than a 0. */
+	/**
+	 * The number on the bar, in whatever `loadUnit` is set to. Zero means
+	 * bodyweight, and reads as an em dash rather than a 0.
+	 */
 	load: number;
 };
 
@@ -236,4 +249,12 @@ export type TendState = {
 	/** Finished workouts, oldest first. The unfinished one is `activeWorkout`. */
 	workouts: Workout[];
 	activeWorkout: Workout | null;
+	/**
+	 * The label every load is read in. It is a label and nothing else: a load is
+	 * stored as the number that was on the bar, and switching this relabels the
+	 * readouts rather than rewriting what was lifted.
+	 */
+	loadUnit: LoadUnit;
+	/** How long the rest between sets runs, in seconds. */
+	restSeconds: number;
 };

@@ -77,7 +77,6 @@
 		"onpickmatch",
 		"onplay",
 		"onremove",
-		"onselect",
 		"onstep",
 		"ontype",
 		"pscan",

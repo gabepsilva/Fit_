@@ -83,13 +83,6 @@ test.describe('once a routine is in the rotation', () => {
 		await expect(page.getByRole('heading', { name: 'What you did' })).toBeVisible();
 	});
 
-	test('leaving a session with nothing ticked files nothing', async ({ page }) => {
-		await page.getByRole('button', { name: 'Start Full body' }).click();
-		await page.getByRole('button', { name: 'Finish' }).click();
-		// Straight back to the rotation, because there is no session to show.
-		await expect(page.getByRole('heading', { name: 'Exercise', level: 1 })).toBeVisible();
-	});
-
 	test('keeps a session running across a reload', async ({ page }) => {
 		await page.getByRole('button', { name: 'Start Full body' }).click();
 		await page.getByRole('button', { name: 'Set 1 done' }).click();
@@ -167,5 +160,65 @@ test.describe('once a routine is in the rotation', () => {
 		await page.getByRole('link', { name: 'See training progress' }).click();
 		await expect(page.getByText(/top set/)).toBeVisible();
 		expect(await axeViolations(page)).toEqual([]);
+	});
+});
+
+/**
+ * Turning up and logging nothing. The session is filed rather than dropped, so
+ * the summary has something to say about it — and it is still not a session the
+ * week asked for, which is a different question answered on a different screen.
+ *
+ * The clock is pinned to a Tuesday so that question can be asked at all: the
+ * today-card only reports what the week already holds on a rest day, and the
+ * `Full body` template trains Mondays and Thursdays. Left to the real date the
+ * assertion would be vacuous five days in seven.
+ */
+test.describe('a session where nothing was ticked', () => {
+	/** Tuesday, week 1 of 2026 — a rest day under the two-day template. */
+	const TUESDAY = new Date('2026-01-06T09:00:00');
+
+	test.beforeEach(async ({ page }) => {
+		await page.clock.setFixedTime(TUESDAY);
+		await onboard(page);
+		await pickFullBody(page);
+	});
+
+	test('is filed, and the summary says so kindly', async ({ page }) => {
+		await page.getByRole('button', { name: 'Start Full body' }).click();
+		await expect(page.getByRole('heading', { name: 'Squat', level: 1 })).toBeVisible();
+
+		await page.getByRole('button', { name: 'Finish' }).click();
+
+		// The summary, not the home screen: the session happened and was filed.
+		await expect(page.getByRole('heading', { name: 'Full body', level: 1 })).toBeVisible();
+		await expect(page.getByText('Session done', { exact: true })).toBeVisible();
+		await expect(
+			page.getByText('Nothing logged this time. Showing up counts; the numbers can wait.')
+		).toBeVisible();
+		// A page of zeroes is still shown honestly beside the sentence.
+		await expect(page.getByText('Sets done')).toBeVisible();
+		await expect(page.getByText('not done').first()).toBeVisible();
+	});
+
+	test('does not count as this week’s training', async ({ page }) => {
+		await page.getByRole('button', { name: 'Start Full body' }).click();
+		await page.getByRole('button', { name: 'Finish' }).click();
+		await expect(page.getByText('Session done', { exact: true })).toBeVisible();
+		await page.getByRole('link', { name: 'Done', exact: true }).click();
+
+		// Home, on a rest day, with the week reported as empty: showing up earns
+		// the sentence on the summary, not a session on the count.
+		await expect(page.getByRole('heading', { name: 'Rest day', level: 2 })).toBeVisible();
+		await expect(page.getByText('The calendar has nothing scheduled.')).toBeVisible();
+		await expect(page.getByText(/done this week already/)).toHaveCount(0);
+		await expect(page.getByRole('link', { name: /trained$/ })).toHaveCount(0);
+
+		// The same screen, one ticked set later, does count it — so the absence
+		// above is the rule at work rather than a card that never counts at all.
+		await page.getByRole('button', { name: 'Start Full body' }).click();
+		await page.getByRole('button', { name: 'Set 1 done' }).click();
+		await page.getByRole('button', { name: 'Finish' }).click();
+		await page.getByRole('link', { name: 'Done', exact: true }).click();
+		await expect(page.getByText(/1 session done this week already/)).toBeVisible();
 	});
 });

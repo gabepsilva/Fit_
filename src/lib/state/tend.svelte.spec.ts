@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ROUTINE_TEMPLATES } from '$lib/domain/exercise-catalog';
 import { logFromFood } from '$lib/domain/log-entry';
 import { emptyProfile } from '$lib/domain/profile';
@@ -14,6 +14,7 @@ import type {
 } from '$lib/domain/types';
 import { PLANNED_MEALS, REST_WEEK, ZERO_MICROS } from '$lib/domain/types';
 import { todayISO } from '$lib/domain/utils';
+import { countsAsTraining } from '$lib/domain/workout';
 import { STORAGE_KEY, TendStore } from './tend.svelte';
 
 function freshStore() {
@@ -144,6 +145,17 @@ describe('hydration', () => {
 		expect(store.state.pantry).toEqual([]);
 		expect(store.state.weekPlan).toEqual([]);
 		expect(store.state.activeProfileId).toBe('');
+	});
+
+	// A payload written before the units and the rest length were settings at
+	// all: those keys are absent, and a session opened on `undefined` seconds
+	// would count down from NaN.
+	it('gives an older payload the default unit and rest length', () => {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded: true, workouts: [] }));
+		const store = new TendStore();
+		store.hydrate();
+		expect(store.state.loadUnit).toBe('kg');
+		expect(store.state.restSeconds).toBe(90);
 	});
 
 	it('does not re-read storage once hydrated', () => {
@@ -898,6 +910,25 @@ describe('the movements in a routine', () => {
 		expect(exercises[0]?.reps).toBe(8);
 	});
 
+	it('steps the field where it lives, leaving every other row the object it was', () => {
+		const store = withRoutine();
+		const routine = store.routine('full-body');
+		const otherRow = routine?.exercises[1];
+		store.bumpRoutineExercise('full-body', 0, 'load', 1);
+		// The sheet groups these rows by muscle; rebuilding the routine would
+		// redraw every group for one stepper tap.
+		expect(store.routine('full-body')).toBe(routine);
+		expect(store.routine('full-body')?.exercises[1]).toBe(otherRow);
+	});
+
+	it('steps nothing for a row that is not there', () => {
+		const store = withRoutine();
+		store.bumpRoutineExercise('full-body', 99, 'load', 1);
+		store.bumpRoutineExercise('nope', 0, 'load', 1);
+		store.flushPersist();
+		expect(stored().routines[0]?.exercises).toHaveLength(6);
+	});
+
 	it('stops a load at bodyweight however often it is stepped down', () => {
 		const store = withRoutine();
 		for (let i = 0; i < 40; i++) store.bumpRoutineExercise('full-body', 0, 'load', -1);
@@ -913,6 +944,7 @@ describe('the movements in a routine', () => {
 		store.moveExerciseUp('full-body', 1);
 		expect(stored().routines[0]?.exercises[0]?.name).toBe('Bench Press');
 		store.bumpRoutineExercise('full-body', 0, 'sets', 1);
+		store.flushPersist();
 		expect(stored().routines[0]?.exercises[0]?.sets).toBe(4);
 	});
 });
@@ -976,9 +1008,9 @@ describe('planning weeks', () => {
 describe('running a session', () => {
 	it('opens the routine into a workout to record it', () => {
 		const store = inSession();
-		expect(store.activeWorkout?.routineName).toBe('Full body');
-		expect(store.activeWorkout?.date).toBe(todayISO());
-		expect(store.activeWorkout?.exercises).toHaveLength(6);
+		expect(store.state.activeWorkout?.routineName).toBe('Full body');
+		expect(store.state.activeWorkout?.date).toBe(todayISO());
+		expect(store.state.activeWorkout?.exercises).toHaveLength(6);
 		expect(store.currentExercise?.name).toBe('Squat');
 	});
 
@@ -991,7 +1023,22 @@ describe('running a session', () => {
 	it('starts nothing for a routine that is not there', () => {
 		const store = withRoutine();
 		expect(store.startWorkout('nope')).toBeNull();
-		expect(store.activeWorkout).toBeNull();
+		expect(store.state.activeWorkout).toBeNull();
+	});
+
+	it('starts nothing for a routine with no movements in it', () => {
+		const store = freshStore();
+		const routine = store.createRoutine();
+		expect(store.startWorkout(routine.id)).toBeNull();
+		expect(store.state.activeWorkout).toBeNull();
+		expect(stored().activeWorkout).toBeNull();
+	});
+
+	it('starts a routine as soon as it has something to do', () => {
+		const store = freshStore();
+		const routine = store.createRoutine();
+		store.addExercises(routine.id, ['Deadlift']);
+		expect(store.startWorkout(routine.id)?.exercises).toHaveLength(1);
 	});
 
 	it('has no exercise on screen when no session is running', () => {
@@ -1009,7 +1056,7 @@ describe('running a session', () => {
 	it('leaves the other movements of the session untouched', () => {
 		const store = inSession();
 		store.toggleSet(0);
-		expect(store.activeWorkout?.exercises[1]?.sets.some((s) => s.done)).toBe(false);
+		expect(store.state.activeWorkout?.exercises[1]?.sets.some((s) => s.done)).toBe(false);
 	});
 
 	it('steps the reps and the load of one set', () => {
@@ -1033,7 +1080,7 @@ describe('running a session', () => {
 		const store = inSession();
 		store.noteExercise('bar felt heavy');
 		expect(store.currentExercise?.note).toBe('bar felt heavy');
-		expect(store.activeWorkout?.exercises[1]?.note).toBe('');
+		expect(store.state.activeWorkout?.exercises[1]?.note).toBe('');
 	});
 
 	it('swaps the movement without losing the sets already logged', () => {
@@ -1043,7 +1090,7 @@ describe('running a session', () => {
 		expect(store.currentExercise?.name).toBe('Leg Press');
 		expect(store.currentExercise?.group).toBe('Legs');
 		expect(store.currentExercise?.sets[0]?.done).toBe(true);
-		expect(store.activeWorkout?.exercises[1]?.name).toBe('Bench Press');
+		expect(store.state.activeWorkout?.exercises[1]?.name).toBe('Bench Press');
 	});
 
 	it('will not swap in a movement the library does not know', () => {
@@ -1055,15 +1102,50 @@ describe('running a session', () => {
 	it('moves on to the next movement', () => {
 		const store = inSession();
 		store.nextExercise();
-		expect(store.activeWorkout?.exerciseIndex).toBe(1);
+		expect(store.state.activeWorkout?.exerciseIndex).toBe(1);
 		expect(store.currentExercise?.name).toBe('Bench Press');
 	});
 
 	it('stops at the last movement rather than running off the end', () => {
 		const store = inSession();
 		for (let i = 0; i < 20; i++) store.nextExercise();
-		expect(store.activeWorkout?.exerciseIndex).toBe(5);
+		expect(store.state.activeWorkout?.exerciseIndex).toBe(5);
 		expect(store.currentExercise?.name).toBe('Calf Raise');
+	});
+
+	it('ticks the set where it lives, leaving every other set the object it was', () => {
+		const store = inSession();
+		const workout = store.state.activeWorkout;
+		const exercise = store.currentExercise;
+		const laterSet = exercise?.sets[1];
+		const otherExercise = workout?.exercises[1];
+		store.toggleSet(0);
+		// A rebuilt workout would answer these with new objects, and every row of
+		// the session screen would rerender for one tick.
+		expect(store.state.activeWorkout).toBe(workout);
+		expect(store.currentExercise).toBe(exercise);
+		expect(store.currentExercise?.sets[1]).toBe(laterSet);
+		expect(store.state.activeWorkout?.exercises[1]).toBe(otherExercise);
+		expect(store.currentExercise?.sets[0]?.done).toBe(true);
+	});
+
+	it('steps a set where it lives, leaving the sets around it the objects they were', () => {
+		const store = inSession();
+		const laterSet = store.currentExercise?.sets[2];
+		store.bumpSet(0, 'load', 1);
+		expect(store.currentExercise?.sets[2]).toBe(laterSet);
+		expect(store.currentExercise?.sets[0]?.load).toBe(62.5);
+	});
+
+	it('points the next set at the first one still open, not at the count of them', () => {
+		const store = inSession();
+		store.toggleSet(0);
+		store.toggleSet(2);
+		const sets = store.currentExercise?.sets ?? [];
+		// Two of three are ticked, but the one left to log is the middle one: the
+		// session screen labels its button from this index, never from the count.
+		expect(sets.filter((s) => s.done)).toHaveLength(2);
+		expect(sets.findIndex((s) => !s.done)).toBe(1);
 	});
 
 	it('replaces an unfinished session rather than queueing a second one', () => {
@@ -1084,7 +1166,7 @@ describe('a session nobody is running', () => {
 		store.noteExercise('nothing');
 		store.swapExercise('Squat');
 		store.nextExercise();
-		expect(store.activeWorkout).toBeNull();
+		expect(store.state.activeWorkout).toBeNull();
 		expect(localStorage.getItem('tend.v1')).toBeNull();
 	});
 
@@ -1109,23 +1191,125 @@ describe('filing a session', () => {
 		const store = inSession();
 		store.toggleSet(0);
 		store.finishWorkout();
-		expect(store.activeWorkout).toBeNull();
+		expect(store.state.activeWorkout).toBeNull();
 		expect(store.currentExercise).toBeNull();
 	});
 
-	it('drops a session where nothing was ticked rather than filing a zero', () => {
+	// Turning up and logging nothing is still something that happened, and the
+	// summary has a line for it. Dropping it would send someone back to the home
+	// screen as though the session had never been opened.
+	it('files a session where nothing was ticked rather than dropping it', () => {
 		const store = inSession();
-		expect(store.finishWorkout()).toBeNull();
-		expect(store.state.workouts).toEqual([]);
-		expect(store.activeWorkout).toBeNull();
+		const filed = store.finishWorkout();
+		expect(filed).not.toBeNull();
+		expect(filed?.finishedAt).not.toBeNull();
+		expect(store.state.workouts).toHaveLength(1);
+		expect(store.state.workouts[0]?.id).toBe(filed?.id);
+		expect(store.state.activeWorkout).toBeNull();
+	});
+
+	it('files an empty session with every set still not ticked', () => {
+		const store = inSession();
+		const filed = store.finishWorkout();
+		expect(filed?.exercises.flatMap((e) => e.sets).every((set) => !set.done)).toBe(true);
+		expect(stored().workouts[0]?.id).toBe(filed?.id);
 	});
 
 	it('throws away a session on request', () => {
 		const store = inSession();
 		store.toggleSet(0);
 		store.discardWorkout();
-		expect(store.activeWorkout).toBeNull();
+		expect(store.state.activeWorkout).toBeNull();
 		expect(store.state.workouts).toEqual([]);
+	});
+});
+
+/**
+ * The one answer to "did this happen?", so the week strip, the today card and
+ * the adherence chart cannot disagree about a session someone walked out of.
+ */
+describe('what counts as training', () => {
+	it('counts a filed session with a set ticked in it', () => {
+		const store = inSession();
+		store.toggleSet(0);
+		const filed = store.finishWorkout();
+		expect(filed && countsAsTraining(filed)).toBe(true);
+	});
+
+	it('does not count a filed session with nothing ticked', () => {
+		const store = inSession();
+		const filed = store.finishWorkout();
+		expect(filed && countsAsTraining(filed)).toBe(false);
+	});
+
+	it('does not count a session that is still running', () => {
+		const store = inSession();
+		store.toggleSet(0);
+		const running = store.state.activeWorkout;
+		expect(running && countsAsTraining(running)).toBe(false);
+	});
+});
+
+describe('the load unit and the rest length', () => {
+	it('opens on kilograms and a ninety-second rest', () => {
+		const store = freshStore();
+		expect(store.state.loadUnit).toBe('kg');
+		expect(store.state.restSeconds).toBe(90);
+	});
+
+	it('takes the other unit and writes it down at once', () => {
+		const store = freshStore();
+		store.setLoadUnit('lb');
+		expect(store.state.loadUnit).toBe('lb');
+		expect(stored().loadUnit).toBe('lb');
+		expect(reloaded().state.loadUnit).toBe('lb');
+	});
+
+	// The unit is a label on a number, not a conversion of it: 60 was on the bar
+	// whichever word is printed beside it, and rewriting the log every time
+	// somebody looked at the other unit would lose what was actually lifted.
+	it('leaves every load already logged exactly as it was', () => {
+		const store = inSession();
+		store.toggleSet(0);
+		store.finishWorkout();
+		const loggedLoad = store.state.workouts[0]?.exercises[0]?.sets[0]?.load;
+		const prescribedLoad = store.state.routines[0]?.exercises[0]?.load;
+		store.setLoadUnit('lb');
+		expect(store.state.workouts[0]?.exercises[0]?.sets[0]?.load).toBe(loggedLoad);
+		expect(store.state.routines[0]?.exercises[0]?.load).toBe(prescribedLoad);
+	});
+
+	it('moves the rest length within the range the control offers', async () => {
+		const store = freshStore();
+		store.setRestSeconds(120);
+		expect(store.state.restSeconds).toBe(120);
+		await vi.waitFor(() => expect(stored().restSeconds).toBe(120));
+	});
+
+	it('holds the rest length to the range rather than opening on nothing', () => {
+		const store = freshStore();
+		store.setRestSeconds(10);
+		expect(store.state.restSeconds).toBe(30);
+		store.setRestSeconds(600);
+		expect(store.state.restSeconds).toBe(180);
+		store.setRestSeconds(-5);
+		expect(store.state.restSeconds).toBe(30);
+	});
+
+	it('keeps the rest length a whole number of seconds', () => {
+		const store = freshStore();
+		store.setRestSeconds(92.4);
+		expect(store.state.restSeconds).toBe(92);
+	});
+
+	// The rest length is moved on a stepper, so it shares a save with the taps
+	// either side of it rather than serializing the whole state on each one.
+	it('lets a burst of steps share one save', async () => {
+		const store = freshStore();
+		store.setRestSeconds(105);
+		store.setRestSeconds(120);
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+		await vi.waitFor(() => expect(stored().restSeconds).toBe(120));
 	});
 });
 
@@ -1134,8 +1318,10 @@ describe('training across a reload', () => {
 		const store = inSession();
 		expect(stored().activeWorkout?.routineName).toBe('Full body');
 		store.toggleSet(0);
+		store.flushPersist();
 		expect(stored().activeWorkout?.exercises[0]?.sets[0]?.done).toBe(true);
 		store.noteExercise('felt strong');
+		store.flushPersist();
 		expect(stored().activeWorkout?.exercises[0]?.note).toBe('felt strong');
 		store.nextExercise();
 		expect(stored().activeWorkout?.exerciseIndex).toBe(1);
@@ -1148,7 +1334,7 @@ describe('training across a reload', () => {
 		store.toggleSet(0);
 		store.addSet();
 		const next = reloaded();
-		expect(next.activeWorkout?.exercises[0]?.sets).toHaveLength(4);
+		expect(next.state.activeWorkout?.exercises[0]?.sets).toHaveLength(4);
 		expect(next.currentExercise?.sets[0]?.done).toBe(true);
 	});
 
@@ -1166,5 +1352,46 @@ describe('training across a reload', () => {
 		});
 		expect(next.state.workouts).toHaveLength(1);
 		expect(next.state.activeWorkout).toBeNull();
+	});
+});
+
+describe('saving a session without paying for it on every tap', () => {
+	it('lets a burst of taps share one save, and makes it on its own', async () => {
+		const store = inSession();
+		store.toggleSet(0);
+		store.bumpSet(0, 'load', 1);
+		store.bumpSet(0, 'load', 1);
+		// Still the session as it was opened: the taps have not each serialized
+		// the whole state on the way through.
+		expect(stored().activeWorkout?.exercises[0]?.sets[0]?.done).toBe(false);
+		await vi.waitFor(() => {
+			expect(stored().activeWorkout?.exercises[0]?.sets[0]?.done).toBe(true);
+			expect(stored().activeWorkout?.exercises[0]?.sets[0]?.load).toBe(65);
+		});
+	});
+
+	it('writes what the last taps were holding before the session is filed', () => {
+		const store = inSession();
+		store.toggleSet(0);
+		const filed = store.finishWorkout();
+		expect(stored().workouts[0]?.id).toBe(filed?.id);
+		expect(stored().workouts[0]?.exercises[0]?.sets[0]?.done).toBe(true);
+		expect(stored().activeWorkout).toBeNull();
+	});
+
+	it('writes what the last taps were holding when the tab goes away', () => {
+		const store = inSession();
+		store.toggleSet(1);
+		window.dispatchEvent(new Event('pagehide'));
+		expect(stored().activeWorkout?.exercises[0]?.sets[1]?.done).toBe(true);
+	});
+
+	it('comes back to a burst that was never flushed by hand', async () => {
+		const store = inSession();
+		store.toggleSet(0);
+		store.toggleSet(2);
+		await vi.waitFor(() => expect(stored().activeWorkout?.exercises[0]?.sets[2]?.done).toBe(true));
+		const next = reloaded();
+		expect(next.currentExercise?.sets.map((s) => s.done)).toEqual([true, false, true]);
 	});
 });

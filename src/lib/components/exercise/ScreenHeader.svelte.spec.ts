@@ -16,15 +16,17 @@ describe('ScreenHeader', () => {
 	});
 
 	it('leads back to where it was told to', async () => {
-		await render(ScreenHeader, { props: { back: '/exercise/plan', title: 'Year' } });
+		await render(ScreenHeader, {
+			props: { back: '/exercise/plan', title: 'Year', backLabel: 'Back to month' }
+		});
 		await expect
-			.element(page.getByRole('link', { name: 'Back' }))
+			.element(page.getByRole('link', { name: 'Back to month' }))
 			.toHaveAttribute('href', '/exercise/plan');
 	});
 
 	it('names the way back plainly when nobody said what it leads to', async () => {
 		await render(ScreenHeader, { props: { back: '/exercise', title: 'Session' } });
-		await expect.element(page.getByRole('link', { name: 'Back' })).toBeInTheDocument();
+		await expect.element(page.getByRole('link')).toHaveAttribute('aria-label', 'Back');
 	});
 
 	it('takes a more particular name for the way back', async () => {

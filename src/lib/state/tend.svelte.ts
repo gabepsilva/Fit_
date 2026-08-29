@@ -13,6 +13,7 @@ import { emptyProfile, isGlp1 } from '$lib/domain/profile';
 import { recipeFits, RECIPES } from '$lib/domain/recipes';
 import type {
 	Injection,
+	LoadUnit,
 	LogItem,
 	PlannedMeal,
 	PlannedMealSlot,
@@ -23,11 +24,24 @@ import type {
 	WeightEntry,
 	Workout
 } from '$lib/domain/types';
-import { PLANNED_MEALS } from '$lib/domain/types';
+import {
+	DEFAULT_LOAD_UNIT,
+	DEFAULT_REST_SECONDS,
+	MAX_REST_SECONDS,
+	MIN_REST_SECONDS,
+	PLANNED_MEALS
+} from '$lib/domain/types';
 import { addDaysISO, round1, startOfWeek, todayISO, uid } from '$lib/domain/utils';
-import { currentExercise, workoutFromRoutine, workoutSetsDone } from '$lib/domain/workout';
+import { currentExercise, workoutFromRoutine } from '$lib/domain/workout';
 
 export const STORAGE_KEY = 'tend.v1';
+
+/**
+ * How long a burst of writes is allowed to share one save, in milliseconds.
+ * Long enough that a held-down stepper writes once, short enough that the tab
+ * can be closed a moment after the last tap without losing it.
+ */
+const PERSIST_WINDOW_MS = 200;
 
 function emptyState(): TendState {
 	return {
@@ -39,7 +53,9 @@ function emptyState(): TendState {
 		routines: [],
 		trainingPlan: [],
 		workouts: [],
-		activeWorkout: null
+		activeWorkout: null,
+		loadUnit: DEFAULT_LOAD_UNIT,
+		restSeconds: DEFAULT_REST_SECONDS
 	};
 }
 
@@ -116,6 +132,10 @@ export class TendStore {
 	state = $state<TendState>(emptyState());
 	hydrated = $state(false);
 
+	/** The timer of a save that has been asked for but not made yet. */
+	private pendingWrite: ReturnType<typeof setTimeout> | null = null;
+	private lifecycleFlushBound = false;
+
 	get profile(): Profile | null {
 		return this.state.profiles.find((p) => p.id === this.state.activeProfileId) ?? null;
 	}
@@ -139,10 +159,59 @@ export class TendStore {
 		this.hydrated = true;
 	}
 
-	/** Write the current state back to `localStorage`. */
+	/** Write the current state back to `localStorage`, now. */
 	persist() {
+		this.cancelPendingWrite();
+		this.write();
+	}
+
+	/**
+	 * Ask for a save, and let a burst of them share one. Ticking a set and holding
+	 * a stepper fire faster than anyone can read, and every save serializes the
+	 * whole state; doing that on each tap puts the cost in the tap handler. The
+	 * window is a ceiling rather than a reset, so a stepper held down still
+	 * reaches storage while it is held, instead of only when it is let go.
+	 */
+	private persistSoon() {
+		if (!this.hydrated) return;
+		this.bindLifecycleFlush();
+		if (this.pendingWrite !== null) return;
+		this.pendingWrite = setTimeout(() => {
+			this.pendingWrite = null;
+			this.write();
+		}, PERSIST_WINDOW_MS);
+	}
+
+	/** Make a save the debounce is still holding. A no-op when nothing is waiting. */
+	flushPersist() {
+		if (this.pendingWrite === null) return;
+		this.persist();
+	}
+
+	private write() {
 		if (!this.hydrated) return;
 		globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify($state.snapshot(this.state)));
+	}
+
+	private cancelPendingWrite() {
+		if (this.pendingWrite === null) return;
+		clearTimeout(this.pendingWrite);
+		this.pendingWrite = null;
+	}
+
+	/**
+	 * A phone can close, or background and then kill, a tab inside the save
+	 * window. `pagehide` and a hidden document are the last moments a mobile
+	 * browser reliably gives us; `beforeunload` is not one of them.
+	 */
+	private bindLifecycleFlush() {
+		if (this.lifecycleFlushBound) return;
+		if (typeof globalThis.addEventListener !== 'function') return;
+		this.lifecycleFlushBound = true;
+		globalThis.addEventListener('pagehide', () => this.flushPersist());
+		globalThis.addEventListener('visibilitychange', () => {
+			if (globalThis.document.visibilityState === 'hidden') this.flushPersist();
+		});
 	}
 
 	// -- profiles ------------------------------------------------------------
@@ -314,10 +383,6 @@ export class TendStore {
 
 	// -- training ------------------------------------------------------------
 
-	get activeWorkout(): Workout | null {
-		return this.state.activeWorkout;
-	}
-
 	routine(id: string): Routine | undefined {
 		return this.state.routines.find((r) => r.id === id);
 	}
@@ -355,42 +420,43 @@ export class TendStore {
 		this.persist();
 	}
 
-	private patchRoutine(id: string, fn: (r: Routine) => Routine) {
-		this.state.routines = this.state.routines.map((r) =>
-			r.id === id ? fn($state.snapshot(r)) : r
-		);
-		this.persist();
-	}
-
-	/** One tap on a stepper against a routine row. `direction` is +1 or -1. */
+	/**
+	 * One tap on a stepper against a routine row. `direction` is +1 or -1.
+	 *
+	 * The one field is written where it lives, rather than through a rebuilt
+	 * routine: every other section and row of the sheet is looking at the same
+	 * objects, and rebuilding would tell all of them that they had changed.
+	 */
 	bumpRoutineExercise(id: string, index: number, field: BumpField, direction: number) {
-		this.patchRoutine(id, (r) => ({
-			...r,
-			exercises: r.exercises.map((e, i) =>
-				i === index ? { ...e, [field]: bumpField(field, e[field], direction) } : e
-			)
-		}));
+		const exercise = this.routine(id)?.exercises[index];
+		if (!exercise) return;
+		exercise[field] = bumpField(field, exercise[field], direction);
+		this.persistSoon();
 	}
 
 	addExercises(id: string, names: string[]) {
+		const routine = this.routine(id);
 		const added = exercisesFromLibrary(names);
-		if (added.length === 0) return;
-		this.patchRoutine(id, (r) => ({ ...r, exercises: [...r.exercises, ...added] }));
+		if (!routine || added.length === 0) return;
+		routine.exercises.push(...added);
+		this.persist();
 	}
 
 	removeExercise(id: string, index: number) {
-		this.patchRoutine(id, (r) => ({ ...r, exercises: r.exercises.filter((_, i) => i !== index) }));
+		const routine = this.routine(id);
+		if (!routine || !routine.exercises[index]) return;
+		routine.exercises.splice(index, 1);
+		this.persist();
 	}
 
 	/** Reordering is one step at a time; the first row has nowhere to go. */
 	moveExerciseUp(id: string, index: number) {
 		if (index <= 0) return;
-		this.patchRoutine(id, (r) => {
-			const exercises = [...r.exercises];
-			const [moved] = exercises.splice(index, 1);
-			if (moved) exercises.splice(index - 1, 0, moved);
-			return { ...r, exercises };
-		});
+		const exercises = this.routine(id)?.exercises;
+		if (!exercises?.[index]) return;
+		const [moved] = exercises.splice(index, 1);
+		if (moved) exercises.splice(index - 1, 0, moved);
+		this.persist();
 	}
 
 	// -- training plan -------------------------------------------------------
@@ -408,6 +474,32 @@ export class TendStore {
 		this.persist();
 	}
 
+	// -- training settings ---------------------------------------------------
+
+	/**
+	 * Which unit every load is read in. Nothing already logged is touched: a load
+	 * is the number that was on the bar, and 60 under a `lb` label is the same
+	 * row of the log as 60 under `kg`. Converting instead would rewrite history
+	 * every time somebody looked at the other unit.
+	 */
+	setLoadUnit(unit: LoadUnit) {
+		this.state.loadUnit = unit;
+		this.persist();
+	}
+
+	/**
+	 * How long the rest between sets runs. Held to the range the control offers,
+	 * so a stored value from elsewhere cannot open a session on a rest of zero.
+	 * Saved through the debounce, because this is moved on a stepper.
+	 */
+	setRestSeconds(seconds: number) {
+		this.state.restSeconds = Math.min(
+			MAX_REST_SECONDS,
+			Math.max(MIN_REST_SECONDS, Math.round(seconds))
+		);
+		this.persistSoon();
+	}
+
 	// -- workouts ------------------------------------------------------------
 
 	/**
@@ -418,6 +510,10 @@ export class TendStore {
 	startWorkout(routineId: string): Workout | null {
 		const routine = this.routine(routineId);
 		if (!routine) return null;
+		// A routine with no movements opens a session with nothing to tick, no way
+		// to reach a finish, and a clock counting nothing. There is no session to
+		// start here; the caller is told so rather than shown an empty one.
+		if (routine.exercises.length === 0) return null;
 		const workout = workoutFromRoutine(routine, {
 			id: uid('w-'),
 			date: todayISO(),
@@ -428,77 +524,80 @@ export class TendStore {
 		return workout;
 	}
 
-	private patchWorkout(fn: (w: Workout) => Workout) {
-		const current = this.state.activeWorkout;
-		if (!current) return;
-		this.state.activeWorkout = fn($state.snapshot(current));
-		this.persist();
-	}
-
-	private patchCurrentExercise(
-		fn: (e: Workout['exercises'][number]) => Workout['exercises'][number]
-	) {
-		this.patchWorkout((w) => ({
-			...w,
-			exercises: w.exercises.map((e, i) => (i === w.exerciseIndex ? fn(e) : e))
-		}));
+	/**
+	 * The exercise the session is on, as the live object rather than a copy, so a
+	 * change to one set is a change to that set and to nothing else. Rebuilding
+	 * the workout instead would hand every exercise and every set a new identity
+	 * on each tick, and the whole session screen would rerender for one checkbox.
+	 */
+	private get liveExercise(): Workout['exercises'][number] | null {
+		const workout = this.state.activeWorkout;
+		if (!workout) return null;
+		return workout.exercises[workout.exerciseIndex] ?? null;
 	}
 
 	/** Tick or untick a set of the exercise on screen. */
 	toggleSet(index: number) {
-		this.patchCurrentExercise((e) => ({
-			...e,
-			sets: e.sets.map((s, i) => (i === index ? { ...s, done: !s.done } : s))
-		}));
+		const set = this.liveExercise?.sets[index];
+		if (!set) return;
+		set.done = !set.done;
+		this.persistSoon();
 	}
 
 	bumpSet(index: number, field: 'reps' | 'load', direction: number) {
-		this.patchCurrentExercise((e) => ({
-			...e,
-			sets: e.sets.map((s, i) =>
-				i === index ? { ...s, [field]: bumpField(field, s[field], direction) } : s
-			)
-		}));
+		const set = this.liveExercise?.sets[index];
+		if (!set) return;
+		set[field] = bumpField(field, set[field], direction);
+		this.persistSoon();
 	}
 
 	/** One more set than the routine asked for, opened at the last set's numbers. */
 	addSet() {
-		this.patchCurrentExercise((e) => {
-			const last = e.sets.at(-1) ?? { reps: 10, load: 0, done: false };
-			return { ...e, sets: [...e.sets, { ...last, done: false }] };
-		});
+		const exercise = this.liveExercise;
+		if (!exercise) return;
+		const last = exercise.sets.at(-1) ?? { reps: 10, load: 0, done: false };
+		exercise.sets.push({ reps: last.reps, load: last.load, done: false });
+		this.persist();
 	}
 
 	noteExercise(note: string) {
-		this.patchCurrentExercise((e) => ({ ...e, note }));
+		const exercise = this.liveExercise;
+		if (!exercise) return;
+		exercise.note = note;
+		this.persistSoon();
 	}
 
 	/** Machine taken: the movement changes, the sets already logged do not. */
 	swapExercise(name: string) {
 		const replacement = exercisesFromLibrary([name])[0];
-		if (!replacement) return;
-		this.patchCurrentExercise((e) => ({ ...e, name: replacement.name, group: replacement.group }));
+		const exercise = this.liveExercise;
+		if (!replacement || !exercise) return;
+		exercise.name = replacement.name;
+		exercise.group = replacement.group;
+		this.persist();
 	}
 
 	nextExercise() {
-		this.patchWorkout((w) => ({
-			...w,
-			exerciseIndex: Math.min(w.exercises.length - 1, w.exerciseIndex + 1)
-		}));
+		const workout = this.state.activeWorkout;
+		if (!workout) return;
+		workout.exerciseIndex = Math.min(workout.exercises.length - 1, workout.exerciseIndex + 1);
+		this.persist();
 	}
 
 	/**
-	 * File the session. A session where nothing was ticked is dropped rather than
-	 * filed: it would otherwise count as a completed week in the plan and as a
-	 * zero in every average.
+	 * File the session, whether or not anything was ticked. Turning up and
+	 * logging nothing is still a thing that happened, and the summary has words
+	 * for it; dropping it silently would send someone back to the home screen as
+	 * though they had never opened the door.
+	 *
+	 * Every aggregate reads through the sets that were ticked rather than
+	 * through the count of filed sessions, so an empty one sets no record, draws
+	 * no point on the trend, adds no volume, and does not count as a session the
+	 * plan asked for.
 	 */
 	finishWorkout(): Workout | null {
 		const current = this.state.activeWorkout;
 		if (!current) return null;
-		if (workoutSetsDone(current) === 0) {
-			this.discardWorkout();
-			return null;
-		}
 		const finished: Workout = { ...$state.snapshot(current), finishedAt: Date.now() };
 		this.state.workouts.push(finished);
 		this.state.activeWorkout = null;

@@ -10,7 +10,7 @@ import {
 	parseMfpCsv
 } from './export-data';
 import type { LogItem, Profile, TendState } from './types';
-import { ZERO_MICROS } from './types';
+import { DEFAULT_LOAD_UNIT, DEFAULT_REST_SECONDS, ZERO_MICROS } from './types';
 import { todayISO } from './utils';
 
 const state: TendState = {
@@ -22,7 +22,9 @@ const state: TendState = {
 	routines: [],
 	trainingPlan: [],
 	workouts: [],
-	activeWorkout: null
+	activeWorkout: null,
+	loadUnit: DEFAULT_LOAD_UNIT,
+	restSeconds: DEFAULT_REST_SECONDS
 };
 
 /**

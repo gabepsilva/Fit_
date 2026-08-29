@@ -5,17 +5,42 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { todayISO, weekdayLong } from '$lib/domain/utils';
+	import { plannedRoutineId, weekOf } from '$lib/domain/training-plan';
 	import { tend } from '$lib/state/tend.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
+	import SectionLabel from '$lib/components/SectionLabel.svelte';
 	import FirstRunTemplates from '$lib/components/exercise/FirstRunTemplates.svelte';
 	import ResumeWorkoutBanner from '$lib/components/exercise/ResumeWorkoutBanner.svelte';
 	import RoutineRow from '$lib/components/exercise/RoutineRow.svelte';
 	import TodaySessionCard from '$lib/components/exercise/TodaySessionCard.svelte';
 	import TrainingWeekStrip from '$lib/components/exercise/TrainingWeekStrip.svelte';
+	import LinkButton from '$lib/ui/LinkButton.svelte';
 
 	const today = todayISO();
 
 	const routines = $derived(tend.state.routines);
+	const workouts = $derived(tend.state.workouts);
+	const currentRoutineId = $derived.by(() => {
+		const { year, week } = weekOf(today);
+		return plannedRoutineId(tend.state.trainingPlan, year, week);
+	});
+
+	/**
+	 * The template shelf and the empty today-card are two different states, not
+	 * one. The shelf is the opening screen of an app that has never been used:
+	 * no routines and nothing ever trained. Once there is history behind the
+	 * screen — someone deleted the routines they had been training — the home
+	 * screen stays, and the card says there is nothing on it. From there the
+	 * shelf is somewhere you go, which is what `asked` records.
+	 */
+	let asked = $state(false);
+	const firstRun = $derived(routines.length === 0 && workouts.length === 0);
+	const templates = $derived(asked || firstRun);
+
+	function useTemplate(templateId: string) {
+		tend.useTemplate(templateId);
+		asked = false;
+	}
 
 	async function buildRoutine() {
 		const routine = tend.createRoutine();
@@ -31,56 +56,54 @@
 	<title>Exercise · Fit_</title>
 </svelte:head>
 
-{#if routines.length === 0}
-	<FirstRunTemplates onpick={(id: string) => tend.useTemplate(id)} onopen={buildRoutine} />
+{#if templates}
+	<FirstRunTemplates onpick={useTemplate} onopen={buildRoutine} />
 {:else}
 	<div class="flex flex-col gap-6 pb-10">
-		<ResumeWorkoutBanner workout={tend.activeWorkout} />
+		<ResumeWorkoutBanner workout={tend.state.activeWorkout} />
 
 		<div class="flex items-start justify-between gap-2">
 			<PageHeader kicker={weekdayLong(today)} title="Exercise" />
 			<div class="flex shrink-0 gap-2 pt-1">
-				<a
-					href={resolve('/exercise/plan')}
-					class="border-border bg-card text-foreground hover:bg-secondary flex h-10 items-center gap-1.5 rounded-xl border px-3 text-sm"
-				>
+				<LinkButton href={resolve('/exercise/plan')} variant="outline">
 					<CalendarDays class="size-4" />
 					Plan
-				</a>
-				<a
+				</LinkButton>
+				<LinkButton
 					href={resolve('/exercise/progress')}
+					variant="outline"
+					size="icon"
 					aria-label="Training progress"
-					class="border-border bg-card text-foreground hover:bg-secondary flex size-10 items-center justify-center rounded-xl border"
 				>
 					<ChartColumn class="size-4" />
-				</a>
+				</LinkButton>
 			</div>
 		</div>
 
 		<TodaySessionCard
 			{routines}
 			{today}
+			{workouts}
 			plan={tend.state.trainingPlan}
-			workouts={tend.state.workouts}
 			onstart={startRoutine}
+			onpick={() => (asked = true)}
+			onopen={buildRoutine}
 		/>
 
-		<TrainingWeekStrip
-			{routines}
-			{today}
-			plan={tend.state.trainingPlan}
-			workouts={tend.state.workouts}
-		/>
+		<TrainingWeekStrip {routines} {today} {workouts} plan={tend.state.trainingPlan} />
 
 		<div class="flex flex-col gap-2">
 			<div class="flex items-baseline justify-between px-1">
-				<p class="text-muted-foreground text-[0.65rem] font-medium tracking-[0.14em] uppercase">
-					Routines
-				</p>
+				<SectionLabel>Routines</SectionLabel>
 				<span class="text-muted-foreground text-xs">{routines.length} in rotation</span>
 			</div>
 			{#each routines as routine, index (routine.id)}
-				<RoutineRow {routine} {index} onstart={startRoutine} />
+				<RoutineRow
+					{routine}
+					{index}
+					current={routine.id === currentRoutineId}
+					onstart={startRoutine}
+				/>
 			{/each}
 			<button
 				type="button"
