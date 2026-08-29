@@ -150,10 +150,111 @@ export type ProposedItem = {
 	note?: string | undefined;
 };
 
+// -- training -----------------------------------------------------------------
+
+/** The muscle groups the exercise library is filed under, in menu order. */
+export const MUSCLE_GROUPS = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs'] as const;
+
+export type MuscleGroup = (typeof MUSCLE_GROUPS)[number];
+
+export type LibraryExercise = {
+	name: string;
+	group: MuscleGroup;
+};
+
+/** The units a load can be read in. Which one is on show is `TendState.loadUnit`. */
+export type LoadUnit = 'kg' | 'lb';
+
+export const DEFAULT_LOAD_UNIT: LoadUnit = 'kg';
+
+/** The rest between sets, in seconds: what it opens at, and how far it can be moved. */
+export const DEFAULT_REST_SECONDS = 90;
+export const MIN_REST_SECONDS = 30;
+export const MAX_REST_SECONDS = 180;
+
+/** One movement as a routine prescribes it: how many sets, at what reps and load. */
+export type RoutineExercise = LibraryExercise & {
+	sets: number;
+	reps: number;
+	/**
+	 * The number on the bar, in whatever `loadUnit` is set to. Zero means
+	 * bodyweight, and reads as an em dash rather than a 0.
+	 */
+	load: number;
+};
+
+export type Routine = {
+	id: string;
+	name: string;
+	/** Sessions a week, which is what decides the days the week strip marks. */
+	freq: number;
+	exercises: RoutineExercise[];
+};
+
+/** One set as it was actually performed, which is why `done` lives here and not on the routine. */
+export type WorkoutSet = {
+	reps: number;
+	load: number;
+	done: boolean;
+};
+
+export type WorkoutExercise = {
+	name: string;
+	group: MuscleGroup;
+	sets: WorkoutSet[];
+	note: string;
+};
+
+/**
+ * One trip to the gym. Copied from the routine at the moment it starts rather
+ * than referenced: editing a routine afterwards must not rewrite what was
+ * lifted last Tuesday.
+ */
+export type Workout = {
+	id: string;
+	routineId: string;
+	routineName: string;
+	date: string;
+	/** Epoch milliseconds, so elapsed time survives a reload rather than being counted in memory. */
+	startedAt: number;
+	finishedAt: number | null;
+	exerciseIndex: number;
+	exercises: WorkoutExercise[];
+};
+
+/** The routine id a planned week carries when the week is deliberately empty. */
+export const REST_WEEK = 'rest';
+
+export type PlannedWeek = {
+	year: number;
+	/** 1-based week of the training year — see `calendarWeeks`. */
+	week: number;
+	/** A routine id, or `REST_WEEK`. */
+	routineId: string;
+};
+
 export type TendState = {
 	onboarded: boolean;
 	activeProfileId: string;
 	profiles: Profile[];
 	weekPlan: PlannedMeal[];
 	pantry: string[];
+	/**
+	 * Training lives beside the household rather than inside a profile: meals are
+	 * cooked for everyone at the table, but the gym log belongs to whoever holds
+	 * the phone. Split it per profile when a second person starts lifting.
+	 */
+	routines: Routine[];
+	trainingPlan: PlannedWeek[];
+	/** Finished workouts, oldest first. The unfinished one is `activeWorkout`. */
+	workouts: Workout[];
+	activeWorkout: Workout | null;
+	/**
+	 * The label every load is read in. It is a label and nothing else: a load is
+	 * stored as the number that was on the bar, and switching this relabels the
+	 * readouts rather than rewriting what was lifted.
+	 */
+	loadUnit: LoadUnit;
+	/** How long the rest between sets runs, in seconds. */
+	restSeconds: number;
 };

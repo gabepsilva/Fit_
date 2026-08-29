@@ -1,0 +1,210 @@
+import type { LibraryExercise, RoutineExercise } from '$lib/domain/types';
+
+/**
+ * The movements the app knows about, and the three cues it can offer for each.
+ * Data only: everything that reads or reshapes it lives in `exercises.ts`, the
+ * same split the food catalog uses.
+ */
+export const EXERCISE_LIBRARY: readonly LibraryExercise[] = [
+	{ name: 'Bench Press', group: 'Chest' },
+	{ name: 'Incline Bench Press', group: 'Chest' },
+	{ name: 'Decline Bench Press', group: 'Chest' },
+	{ name: 'Dumbbell Fly', group: 'Chest' },
+	{ name: 'Pec Deck', group: 'Chest' },
+	{ name: 'Cable Cross-over', group: 'Chest' },
+	{ name: 'Lat Pulldown', group: 'Back' },
+	{ name: 'Seated Row', group: 'Back' },
+	{ name: 'Pull-up', group: 'Back' },
+	{ name: 'Reverse Fly', group: 'Back' },
+	{ name: 'Pullover', group: 'Back' },
+	{ name: 'Machine Press', group: 'Shoulders' },
+	{ name: 'Lateral Raise', group: 'Shoulders' },
+	{ name: 'Upright Row', group: 'Shoulders' },
+	{ name: 'Shrug', group: 'Shoulders' },
+	{ name: 'Triceps Pushdown', group: 'Triceps' },
+	{ name: 'Rope Pushdown', group: 'Triceps' },
+	{ name: 'Kickback', group: 'Triceps' },
+	{ name: 'Barbell Curl', group: 'Biceps' },
+	{ name: 'Hammer Curl', group: 'Biceps' },
+	{ name: 'Preacher Curl', group: 'Biceps' },
+	{ name: 'Squat', group: 'Legs' },
+	{ name: 'Leg Press', group: 'Legs' },
+	{ name: 'Leg Extension', group: 'Legs' },
+	{ name: 'Leg Curl', group: 'Legs' },
+	{ name: 'Calf Raise', group: 'Legs' },
+	{ name: 'Deadlift', group: 'Legs' }
+];
+
+/**
+ * What to watch on the way down, for the movements where getting it wrong hurts.
+ * A movement with nothing written for it falls back to `DEFAULT_FORM_CUES`
+ * rather than showing an empty panel.
+ */
+export const FORM_CUES: Readonly<Record<string, readonly string[]>> = {
+	'Bench Press': [
+		'Shoulder blades pinned back and down, chest open.',
+		'Bar travels to mid-chest, elbows at about 75°.',
+		'Feet planted, ribs down — no bounce off the chest.'
+	],
+	'Incline Bench Press': [
+		'Bench at 30–45°; any higher becomes a shoulder press.',
+		'Wrists stacked over elbows through the whole path.',
+		'Lower to the upper chest, not the collarbone.'
+	],
+	'Lat Pulldown': [
+		'Sit tall, slight lean back, chest lifted.',
+		'Lead with the elbows, not the hands.',
+		'Stop at the collarbone; control the way up.'
+	],
+	Squat: [
+		'Bar over mid-foot, whole foot loaded.',
+		'Knees track over the toes as you descend.',
+		'Neutral spine — no rounding at the bottom.'
+	],
+	'Lateral Raise': [
+		'Lift to shoulder height, thumbs level with the little finger.',
+		'Small forward lean, elbows softly bent.',
+		'Shoulders stay down; the traps do not shrug.'
+	],
+	'Triceps Pushdown': [
+		'Upper arms locked to the ribs.',
+		'Extend fully, then release slowly.',
+		'Wrists neutral, no swinging from the hips.'
+	]
+};
+
+export const DEFAULT_FORM_CUES: readonly string[] = [
+	'Set up braced: ribs down, spine neutral.',
+	'Move through the full range under control.',
+	'Two seconds down, one second up.'
+];
+
+/** A routine as a template ships it, before it has an id of its own. */
+type TemplateRoutine = {
+	id: string;
+	name: string;
+	freq: number;
+	exercises: RoutineExercise[];
+};
+
+export type RoutineTemplate = {
+	id: string;
+	/** How many days a week the whole template asks for, as a badge. */
+	freq: string;
+	name: string;
+	sub: string;
+	body: string;
+	routines: TemplateRoutine[];
+};
+
+/**
+ * Somewhere to start on the first run. The loads are a beginner's opening
+ * offer, not a prescription — every one of them is editable afterwards, which
+ * is the point of showing them rather than asking for them up front.
+ */
+export const ROUTINE_TEMPLATES: readonly RoutineTemplate[] = [
+	{
+		id: 'ppl',
+		freq: '3×',
+		name: 'Chest & Shoulders / Back & Arms / Legs',
+		sub: 'Three days a week',
+		body: 'The classic rotation. Each day covers a couple of muscle groups, so nothing waits a fortnight for its turn.',
+		routines: [
+			{
+				id: 'push',
+				name: 'Chest & Shoulders',
+				freq: 3,
+				exercises: [
+					{ name: 'Bench Press', group: 'Chest', sets: 4, reps: 8, load: 45 },
+					{ name: 'Incline Bench Press', group: 'Chest', sets: 3, reps: 10, load: 30 },
+					{ name: 'Dumbbell Fly', group: 'Chest', sets: 3, reps: 12, load: 14 },
+					{ name: 'Machine Press', group: 'Shoulders', sets: 3, reps: 10, load: 25 },
+					{ name: 'Lateral Raise', group: 'Shoulders', sets: 3, reps: 15, load: 8 },
+					{ name: 'Triceps Pushdown', group: 'Triceps', sets: 3, reps: 12, load: 27 }
+				]
+			},
+			{
+				id: 'pull',
+				name: 'Back & Arms',
+				freq: 2,
+				exercises: [
+					{ name: 'Lat Pulldown', group: 'Back', sets: 4, reps: 10, load: 50 },
+					{ name: 'Seated Row', group: 'Back', sets: 3, reps: 10, load: 45 },
+					{ name: 'Pull-up', group: 'Back', sets: 3, reps: 8, load: 0 },
+					{ name: 'Reverse Fly', group: 'Back', sets: 3, reps: 15, load: 10 },
+					{ name: 'Barbell Curl', group: 'Biceps', sets: 3, reps: 12, load: 20 },
+					{ name: 'Hammer Curl', group: 'Biceps', sets: 3, reps: 12, load: 14 }
+				]
+			},
+			{
+				id: 'legs',
+				name: 'Legs',
+				freq: 2,
+				exercises: [
+					{ name: 'Squat', group: 'Legs', sets: 5, reps: 5, load: 70 },
+					{ name: 'Leg Press', group: 'Legs', sets: 4, reps: 10, load: 120 },
+					{ name: 'Leg Extension', group: 'Legs', sets: 3, reps: 12, load: 35 },
+					{ name: 'Leg Curl', group: 'Legs', sets: 3, reps: 12, load: 30 },
+					{ name: 'Calf Raise', group: 'Legs', sets: 4, reps: 20, load: 60 }
+				]
+			}
+		]
+	},
+	{
+		id: 'ul',
+		freq: '4×',
+		name: 'Upper / Lower',
+		sub: 'Four days a week',
+		body: 'Two upper-body days and two lower-body days. More frequency per muscle group, more days in the gym.',
+		routines: [
+			{
+				id: 'upper',
+				name: 'Upper',
+				freq: 2,
+				exercises: [
+					{ name: 'Bench Press', group: 'Chest', sets: 4, reps: 8, load: 45 },
+					{ name: 'Lat Pulldown', group: 'Back', sets: 4, reps: 10, load: 50 },
+					{ name: 'Machine Press', group: 'Shoulders', sets: 3, reps: 10, load: 25 },
+					{ name: 'Seated Row', group: 'Back', sets: 3, reps: 10, load: 45 },
+					{ name: 'Lateral Raise', group: 'Shoulders', sets: 3, reps: 15, load: 8 },
+					{ name: 'Barbell Curl', group: 'Biceps', sets: 3, reps: 12, load: 20 },
+					{ name: 'Triceps Pushdown', group: 'Triceps', sets: 3, reps: 12, load: 27 }
+				]
+			},
+			{
+				id: 'lower',
+				name: 'Lower',
+				freq: 2,
+				exercises: [
+					{ name: 'Squat', group: 'Legs', sets: 4, reps: 6, load: 70 },
+					{ name: 'Leg Press', group: 'Legs', sets: 4, reps: 10, load: 120 },
+					{ name: 'Leg Curl', group: 'Legs', sets: 3, reps: 12, load: 30 },
+					{ name: 'Leg Extension', group: 'Legs', sets: 3, reps: 12, load: 35 },
+					{ name: 'Calf Raise', group: 'Legs', sets: 4, reps: 20, load: 60 }
+				]
+			}
+		]
+	},
+	{
+		id: 'fb',
+		freq: '2×',
+		name: 'Full body',
+		sub: 'Two days a week',
+		body: 'Six compound movements, twice a week. The least time in the gym for a first month back.',
+		routines: [
+			{
+				id: 'full-body',
+				name: 'Full body',
+				freq: 2,
+				exercises: [
+					{ name: 'Squat', group: 'Legs', sets: 3, reps: 8, load: 60 },
+					{ name: 'Bench Press', group: 'Chest', sets: 3, reps: 8, load: 45 },
+					{ name: 'Seated Row', group: 'Back', sets: 3, reps: 10, load: 45 },
+					{ name: 'Machine Press', group: 'Shoulders', sets: 3, reps: 10, load: 25 },
+					{ name: 'Barbell Curl', group: 'Biceps', sets: 2, reps: 12, load: 20 },
+					{ name: 'Calf Raise', group: 'Legs', sets: 3, reps: 15, load: 60 }
+				]
+			}
+		]
+	}
+];

@@ -31,17 +31,21 @@ const WORKER_MEMORY_BYTES = 1024 ** 3;
 const MEMORY_HEADROOM = 0.7;
 
 /**
- * A hosted CI runner has two to four shared cores, so it keeps a conservative
- * pair of workers; a 32-core workstation should not idle for half an hour.
- * `availableParallelism` respects cgroup limits, so a container gets its own
- * share rather than the host's, and `availableMemory` moves with whatever else
- * is running right now. `STRYKER_CONCURRENCY` overrides the lot.
+ * A hosted runner has four shared cores, so it keeps one in hand for the job's
+ * own overhead rather than idling half the machine; a 32-core workstation
+ * should not idle for half an hour. `availableParallelism` respects cgroup
+ * limits, so a container gets its own share rather than the host's, and
+ * `availableMemory` moves with whatever else is running right now.
+ * `STRYKER_CONCURRENCY` overrides the lot.
  */
 function concurrency() {
 	const override = Number(process.env.STRYKER_CONCURRENCY);
 	if (Number.isInteger(override) && override > 0) return override;
-	if (process.env.CI) return 2;
-	const byCores = Math.floor(availableParallelism() * LOCAL_CORE_SHARE);
+	// A hosted runner has four cores and does nothing else, so it can spare all
+	// but one. A workstation is somebody's desk and keeps a share back.
+	const byCores = process.env.CI
+		? availableParallelism() - 1
+		: Math.floor(availableParallelism() * LOCAL_CORE_SHARE);
 	const byMemory = Math.floor((process.availableMemory() * MEMORY_HEADROOM) / WORKER_MEMORY_BYTES);
 	return Math.max(2, Math.min(byCores, byMemory));
 }
@@ -61,6 +65,11 @@ export default {
 		// Seed food rows and the two literal label lookup tables. Mutants here are
 		// food names, aliases and label strings.
 		'!src/lib/domain/food-catalog.ts',
+		// Seed exercise rows, form cues and starter routines. Mutants here are
+		// movement names, cue wording and template loads — data, not logic. What
+		// reads it (the library index, the group filter, the template copy) is
+		// still mutated in exercises.ts.
+		'!src/lib/domain/exercise-catalog.ts',
 		// Seed recipe rows. Mutants here are recipe names, notes and portions.
 		'!src/lib/domain/recipe-book.ts',
 		// Demo-journal fixture builder. Its meal templates are data, and the jitter
@@ -76,6 +85,11 @@ export default {
 		// rename, which fails as ENOTEMPTY. CI hits this because the coverage step
 		// populates the cache immediately before mutation runs in the same job.
 		'node_modules/.vite/**',
+		// The nutrition ETL pipeline: several gigabytes of Python environment,
+		// data extracts and a food database. Stryker copies what it does not
+		// ignore into every sandbox, which exhausted the disk quota before a
+		// single mutant ran, and failed first on a symlink inside it.
+		'data/**',
 		'.security-cache/**',
 		'.svelte-kit/**',
 		'build/**',

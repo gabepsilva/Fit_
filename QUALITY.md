@@ -99,6 +99,31 @@ add more maintenance and noise than useful protection.
   dependency. CSS was left at 50 KiB and passes at 40 KiB. The better fix is to weigh
   transferred bytes and to budget the first-load path separately from lazily-loaded
   routes; that is the trigger for revisiting `scripts/quality/bundle-budget.ts`.
+- **`--color-ink-subtle` is a placeholder color, not an ink (recorded 2026-08-29).** The
+  exercise screens used it the way the design did, for small uppercase labels, and the Axe
+  scans failed 82 times: `#9a9286` on a card is 2.87:1, against a 4.5:1 requirement. The
+  same scan caught `--color-muted-foreground` failing on the tinted surfaces (4.16–4.47:1
+  on `accent`, `secondary` and `muted`), and `--color-sage-soft` failing as both an ink on
+  a card (2.78:1) and a fill under pale text (2.65:1). None of this is visible in a design
+  file or to `svelte-check`; only a rendered scan finds it. The rules that came out of it:
+  `ink-subtle` is for placeholder text only, `muted-foreground` is for text on `card` or
+  `background` and `text-foreground/70` for text on a tint, and `sage-soft` carries dark
+  text or none. The exercise tab is scanned screen by screen in `src/routes/exercise.e2e.ts`
+  — the rotation, a running session, the routine sheet, the library sheet, both planners,
+  the week sheet, the summary and progress — which is the pattern each new interactive
+  page should follow rather than trusting the palette to be safe everywhere.
+- **The JavaScript budget was raised to 400 KiB when the exercise tab landed (recorded
+  2026-08-29).** The 320 KiB budget was measured against a six-route application; the
+  exercise tab took it to fifteen routes, and the build to 391 KiB of raw JavaScript. The
+  roughly 71 KiB added is the feature itself — nine screens, thirty components and the
+  training domain — not a dependency: no package was added, and the icons are still deep
+  imports. The same caveats as the previous raise apply and are why the raw figure
+  overstates it: about 52 KiB of the addition sits in route chunks that load only when
+  that screen is opened, and the whole build is 145 KiB gzipped, 129 KiB brotli. As
+  before, the budget sits just above the measured build rather than at a round
+  aspiration. This is the second raise for the same reason, which is the signal that the
+  metric is wrong rather than the number: budgeting the first-load path separately from
+  lazily-loaded routes, and weighing transferred bytes, is now overdue.
 - **Mutation testing measures behavior, not seed data (recorded 2026-08-28).** The
   mutation glob was `src/lib/**/*.ts`, which swept in roughly 1,800 lines of catalog and
   fixture data and held the score at 53.84 percent against a break threshold of 80. Almost
