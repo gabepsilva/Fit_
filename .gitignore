@@ -35,10 +35,19 @@ reports
 # Mutation testing
 .stryker-tmp
 
+# Agent worktrees. Claude Code checks a second branch out under here, dependencies
+# and build output and all. Linting that copy is a verdict on another branch, not
+# on this one — the same reason .stryker-tmp is excluded below in the linters.
+/.claude/worktrees
+
 # Capacitor
 /build-capacitor
 
-# Nutrition data pipeline (payloads only; scripts and docs stay tracked)
+# Nutrition data pipeline. Only the generated payloads are ignored here, so
+# data/scripts and data/docs stay tracked. Tracked is not the same as linted:
+# the pipeline is a Python subproject, and .prettierignore, cspell.json and
+# .markdownlint-cli2.jsonc deliberately exclude all of data/ from this
+# repository's linters.
 /data/.venv
 /data/raw
 /data/interim

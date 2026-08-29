@@ -14,3 +14,6 @@ bun.lockb
 
 # Nutrition data pipeline
 /data/
+
+# Agent worktrees: a whole second checkout, not this branch's source
+/.claude/worktrees/
