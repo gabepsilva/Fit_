@@ -11,7 +11,7 @@ iOS shell and no Tauri.
 - **Deployment**: `@sveltejs/adapter-node` (web), `@sveltejs/adapter-static` in a Capacitor
   shell (Android)
 
-## Current phase: front end in place, no backend
+## Current phase: front end in place, backend started at the users module
 
 The product UI is in: six routes (today, catalog, plan, progress, exercise, profile),
 onboarding, and the logging flow. It is a port of an earlier React prototype, rebuilt in
@@ -29,9 +29,22 @@ it, so do not treat the empty page as an oversight to fill in unasked.
 - `src/lib/components/` and `src/lib/ui/` are the Svelte components, on Tailwind 4 and
   `bits-ui`. Tested by the `client` vitest project, in a real browser.
 
-**There is no server yet.** No database, no accounts, no sync, no assisted parsing. When
-the SQLite backend lands, the store's methods are the call sites that talk to it. Do not
-describe the app as having a backend, and do not add one without being asked.
+- `src/lib/server/` is the backend, and it is one module deep: `db.ts` opens SQLite
+  through Node's built-in `node:sqlite` and owns the migration list, and `users/` holds
+  accounts, sessions, passwords and household membership. `src/hooks.server.ts` resolves
+  the session once per request onto `locals.auth`.
+
+**The server does not do anything yet.** The users module is wired to `hooks.server.ts`
+and to nothing else: no routes, no endpoints, no sync. The app still keeps every gram and
+every workout in `localStorage`, and the store's methods remain the call sites that will
+one day talk to the server. Do not describe the app as syncing or as having accounts a
+person can use, and do not extend the backend beyond what has been asked for.
+
+Three concepts stay separate, and collapsing them is the mistake to avoid: an **account**
+signs in, a **household** is the tenancy boundary every row is filtered by, and a
+**profile** is a person whose intake is tracked — a partner or a child has a profile and
+no account. `household_id` belongs on every table that holds a member's data, from the
+migration that creates it.
 
 Coverage is split by which project tests what: `client` measures everything under
 `src/lib` except `domain/` and `server/`; `server` measures `domain/` and `server/`.

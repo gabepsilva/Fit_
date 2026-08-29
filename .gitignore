@@ -37,3 +37,7 @@ reports
 
 # Capacitor
 /build-capacitor
+
+# The application database, and the food database the ETL pipeline builds.
+# Both are generated; neither belongs in the repository.
+/data

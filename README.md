@@ -6,8 +6,9 @@ A fitness application for Android and iOS, built on SvelteKit. Food logging, an 
 calorie and macro model, a household meal plan, and progress tracking, behind a set of
 deterministic, reviewable quality gates.
 
-Data currently lives in the browser's `localStorage`. The SQLite backend is not built yet,
-so nothing leaves the device and nothing syncs between devices.
+Data currently lives in the browser's `localStorage`, so nothing leaves the device and
+nothing syncs between devices. The SQLite backend has been started — `src/lib/server/`
+holds accounts, sessions and household membership — but nothing in the app calls it yet.
 
 ## Requirements
 
