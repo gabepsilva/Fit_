@@ -11,3 +11,6 @@ bun.lockb
 # Generated native project
 /android/
 /build-capacitor/
+
+# Nutrition data pipeline
+/data/

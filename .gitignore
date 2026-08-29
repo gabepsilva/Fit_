@@ -37,3 +37,11 @@ reports
 
 # Capacitor
 /build-capacitor
+
+# Nutrition data pipeline (payloads only; scripts and docs stay tracked)
+/data/.venv
+/data/raw
+/data/interim
+/data/clean
+/data/db
+/data/logs

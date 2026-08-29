@@ -9,6 +9,9 @@
 		"**/*.md",
 		"!android/**",
 		"!build-capacitor/**",
+		// The nutrition ETL pipeline is a Python project that happens to live in
+		// this tree. Its docs are not this repository's prose.
+		"!data/**",
 		"!node_modules/**",
 		// An interrupted mutation run leaves a sandbox behind, holding a copy of
 		// every dependency's README. Linting those is not a verdict on this repo.
