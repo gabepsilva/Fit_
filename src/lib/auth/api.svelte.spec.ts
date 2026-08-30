@@ -244,6 +244,18 @@ describe('register', () => {
 		const result = await register(REGISTRATION);
 		expect(result).toMatchObject({ failure: { code: 'username-taken', field: 'username' } });
 	});
+
+	it('calls a dropped connection unreachable rather than a created account', async () => {
+		// The one failure where the request may still have been carried out: the
+		// caller has to be able to tell "no account" from "no answer", because
+		// retrying the first is right and retrying the second can collide with an
+		// account that now exists.
+		stub(new TypeError('Failed to fetch'));
+		await expect(register(REGISTRATION)).resolves.toEqual({
+			ok: false,
+			failure: { code: 'unreachable' }
+		});
+	});
 });
 
 describe('signOut', () => {
