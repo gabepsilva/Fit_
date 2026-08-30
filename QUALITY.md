@@ -124,27 +124,41 @@ add more maintenance and noise than useful protection.
   aspiration. This is the second raise for the same reason, which is the signal that the
   metric is wrong rather than the number: budgeting the first-load path separately from
   lazily-loaded routes, and weighing transferred bytes, is now overdue.
-- **The JavaScript budget was raised to 420 KiB when sign-in landed (recorded
-  2026-08-30).** The 400 KiB budget was measured against an application with no
-  authentication interface and no server `load` anywhere in it. Adding `/signin`, `/signup`,
-  the account block in the drawer, and the browser's side of the endpoints took the build
-  from 406,261 to 426,873 raw JavaScript bytes. The 20 KiB is the feature: no package was
-  added and no icon import changed. Two parts of it were measured separately, because one
-  of them is a cost the repository had never paid. The two route chunks are 6,578 bytes
-  between them and load only when a form is opened. A further 5,432 bytes is SvelteKit's
-  server-data pathway, pulled into the client the moment the first `+page.server.ts`
-  existed — until this change the app had none, so nothing needed the code that fetches and
-  parses `__data.json`. That cost buys the only authoritative session check a browser can
-  have, since an `HttpOnly` cookie cannot be read by script, and it is not somewhere to
-  economize. The remainder is the auth client, the wording table, the session store and the
-  account menu, which the drawer puts in the root layout chunk. As with the previous two
-  raises the budget sits just above the measured build rather than at an aspiration, so it
-  still fails on a careless dependency, and the raw figure still overstates what a phone
-  pays: the same build is 156 KiB gzipped and 138 KiB brotli. This is the third raise for
-  the same reason, and it does not change the conclusion recorded against the second — the
-  metric is wrong rather than the number. Budgeting the first-load path separately from
-  lazily-loaded routes, and weighing transferred bytes, is the fix, and it is now the
-  overdue one rather than the next one.
+- **The JavaScript budget was raised to 414 KiB when sign-in landed, after the redirect
+  guard was removed rather than paid for (recorded 2026-08-30).** The 400 KiB budget was
+  measured against an application with no authentication interface. Adding `/signin`,
+  `/signup`, the account block in the drawer, and the browser's side of the endpoints first
+  took the build from 406,261 to 426,873 raw JavaScript bytes, and the budget was raised to
+  420 KiB to match. Of that 20 KiB, 5,432 bytes were not the feature at all: they are
+  SvelteKit's server-data pathway, which the client loads the moment a `+page.server.ts`
+  exists anywhere in the app, and the repository's first two existed only to run a 303
+  sending an already-signed-in visitor away from a form. Nothing was behind that guard —
+  no destination is gated — and it never fired in the Capacitor build at all, so it was
+  removed and the build measured again: 421,326 bytes. Hence 414 KiB rather than 420. What
+  is left above the 400 KiB baseline is 15,065 bytes and is the feature: 6,468 bytes of
+  route chunk for the two forms, loaded only when a form is opened, and the rest the auth
+  client, the wording table, the session store and the account menu, which the drawer puts
+  in the root layout chunk. No package was added and no icon import changed. As with the
+  previous two raises the budget sits just above the measured build rather than at an
+  aspiration — 2,610 bytes of headroom, tighter than either of them — so it still fails on
+  a careless dependency, and the raw figure still overstates what a phone pays: the same
+  build is 154 KiB gzipped and 137 KiB brotli. This is the third raise for the same reason
+  and it does not change the conclusion recorded against the second, but it is the first
+  one where the first move was to trim: 5,432 bytes came off by asking what the cost was
+  buying. Budgeting the first-load path separately from lazily-loaded routes, and weighing
+  transferred bytes, remains the fix.
+- **A server `load` runs on one of the two targets, so behavior cannot live in one
+  (recorded 2026-08-30).** `+layout.ts` sets `ssr = false`, so a `+page.server.ts` reaches
+  the browser only through a `__data.json` request. The web build answers it. The Capacitor
+  build is `adapter-static` with an SPA fallback, so the same request answers the fallback
+  HTML, the client logs a JSON parse error, and `data` arrives empty — verified by building
+  that target and loading it. Nothing catches this: it type-checks, it passes
+  `bun run check`, and the end-to-end suite runs against the web build, which is the half
+  that works. So a server `load` is web-only here until somebody decides whether the
+  Android build has a server to talk to, and anything both targets need belongs in a
+  universal load or in the component. The endpoints under `src/routes/api/` are unaffected:
+  the Android build calls them over the network with a bearer token, which is what
+  `hooks.server.ts` resolves alongside the cookie.
 - **Mutation testing measures behavior, not seed data (recorded 2026-08-28).** The
   mutation glob was `src/lib/**/*.ts`, which swept in roughly 1,800 lines of catalog and
   fixture data and held the score at 53.84 percent against a break threshold of 80. Almost
