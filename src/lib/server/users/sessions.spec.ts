@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openDatabase } from '../db';
 import { registerAccount } from './accounts';
 import {
@@ -34,6 +34,17 @@ beforeEach(async () => {
 	);
 	if (!result.ok) throw new Error(`registration failed: ${JSON.stringify(result.problem)}`);
 	account = result.account;
+});
+
+/**
+ * Every case opens its own in-memory database; closing it is not tidiness. A
+ * mutation run puts one vitest inside every worker and replays this suite
+ * hundreds of times, and hundreds of live `node:sqlite` handles left for the
+ * collector took the worker down with SIGSEGV -- which Stryker records as a
+ * timeout against whichever mutant happened to be running.
+ */
+afterEach(() => {
+	db.close();
 });
 
 function storedFor(token: string) {

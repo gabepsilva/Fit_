@@ -53,6 +53,14 @@ describe('addressSource', () => {
 		);
 	});
 
+	it('names every source it would have accepted, so the fix is in the failure', () => {
+		// A security setting that stops the server has to say what to set it to,
+		// or the next attempt is another guess.
+		expect(() => addressSource({ [ADDRESS_SOURCE_VARIABLE]: 'trusted' })).toThrow(
+			'socket, forwarded, none'
+		);
+	});
+
 	it('reads the process environment when none is given', () => {
 		expect(withSource('none', () => addressSource())).toBe('none');
 	});

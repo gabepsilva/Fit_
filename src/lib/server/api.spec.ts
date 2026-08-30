@@ -63,6 +63,15 @@ describe('readTextBody', () => {
 		expect(await readTextBody(request)).toEqual({ username: 'jordan' });
 	});
 
+	it('reads the media type past its case and the spacing around it', async () => {
+		// `Content-Type` is case-insensitive and may carry space before its
+		// parameters, so a client that spells it that way is still declaring JSON.
+		const request = jsonRequest('{"username":"jordan"}', {
+			'content-type': 'Application/JSON ; charset=UTF-8'
+		});
+		expect(await readTextBody(request)).toEqual({ username: 'jordan' });
+	});
+
 	it('refuses a body that does not declare JSON, whatever it contains', async () => {
 		const request = new Request(SITE, {
 			method: 'POST',

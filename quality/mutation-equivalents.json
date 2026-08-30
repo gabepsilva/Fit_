@@ -5,7 +5,16 @@
 			"file": "src/lib/server/db.ts",
 			"mutatorName": "ConditionalExpression",
 			"replacement": "true",
-			"location": { "end": { "column": 24, "line": 144 }, "start": { "column": 3, "line": 143 } },
+			"location": {
+				"end": {
+					"column": 24,
+					"line": 144
+				},
+				"start": {
+					"column": 3,
+					"line": 143
+				}
+			},
 			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
 			"fingerprint": "131a457badc4358385bcb4d86d10f1861b34c6d3c04fb5385459126928948274",
 			"classification": "host-specific-defense-in-depth",
@@ -16,7 +25,16 @@
 			"file": "src/lib/server/db.ts",
 			"mutatorName": "LogicalOperator",
 			"replacement": "process.platform !== 'win32' || created === undefined",
-			"location": { "end": { "column": 24, "line": 144 }, "start": { "column": 3, "line": 143 } },
+			"location": {
+				"end": {
+					"column": 24,
+					"line": 144
+				},
+				"start": {
+					"column": 3,
+					"line": 143
+				}
+			},
 			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
 			"fingerprint": "f6041c342498a6a53f1b9667b31313293f942a9864758c4c1cdd86eec4a34f55",
 			"classification": "host-specific-defense-in-depth",
@@ -27,7 +45,16 @@
 			"file": "src/lib/server/db.ts",
 			"mutatorName": "ConditionalExpression",
 			"replacement": "true",
-			"location": { "end": { "column": 31, "line": 143 }, "start": { "column": 3, "line": 143 } },
+			"location": {
+				"end": {
+					"column": 31,
+					"line": 143
+				},
+				"start": {
+					"column": 3,
+					"line": 143
+				}
+			},
 			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
 			"fingerprint": "9cab0ef83e62ba744e3985a8af4e1756f25d37d88113fa0c87ca9e53753bf3d4",
 			"classification": "host-specific-defense-in-depth",
@@ -38,7 +65,16 @@
 			"file": "src/lib/server/db.ts",
 			"mutatorName": "StringLiteral",
 			"replacement": "\"\"",
-			"location": { "end": { "column": 31, "line": 143 }, "start": { "column": 24, "line": 143 } },
+			"location": {
+				"end": {
+					"column": 31,
+					"line": 143
+				},
+				"start": {
+					"column": 24,
+					"line": 143
+				}
+			},
 			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
 			"fingerprint": "a0b51943929e22348bee58089e2f6ee9c7c79f83e7bfe0f2ad2edc321e4af33d",
 			"classification": "host-specific-defense-in-depth",
@@ -49,7 +85,16 @@
 			"file": "src/lib/server/db.ts",
 			"mutatorName": "ConditionalExpression",
 			"replacement": "true",
-			"location": { "end": { "column": 24, "line": 144 }, "start": { "column": 3, "line": 144 } },
+			"location": {
+				"end": {
+					"column": 24,
+					"line": 144
+				},
+				"start": {
+					"column": 3,
+					"line": 144
+				}
+			},
 			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
 			"fingerprint": "43185a276172019c04cfcf4cbd4aad3a4ab856edf17aaa48432efc0c6fdcefd6",
 			"classification": "equivalent",
@@ -60,7 +105,16 @@
 			"file": "src/lib/server/db.ts",
 			"mutatorName": "ConditionalExpression",
 			"replacement": "true",
-			"location": { "end": { "column": 9, "line": 188 }, "start": { "column": 7, "line": 188 } },
+			"location": {
+				"end": {
+					"column": 9,
+					"line": 188
+				},
+				"start": {
+					"column": 7,
+					"line": 188
+				}
+			},
 			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
 			"fingerprint": "1e9c99e077bdb1840038531b598b69b58ef476dd567be80f9a1add2555581648",
 			"classification": "equivalent",
@@ -71,11 +125,100 @@
 			"file": "src/lib/server/users/password.ts",
 			"mutatorName": "StringLiteral",
 			"replacement": "\"Stryker was here!\"",
-			"location": { "end": { "column": 60, "line": 154 }, "start": { "column": 58, "line": 154 } },
+			"location": {
+				"end": {
+					"column": 60,
+					"line": 154
+				},
+				"start": {
+					"column": 58,
+					"line": 154
+				}
+			},
 			"sourceHash": "1b37c84252c96c8bd8c98c48ea77930a16866d7345460c553afc33980fd090f1",
 			"fingerprint": "12d7ff5caa02c918a8c3b08e05e0aa2ee3dd1bf5aad18765eeb54e0bedfaa444",
 			"classification": "equivalent",
 			"rationale": "For a non-string stored credential, both the empty fallback and this exact replacement fail the anchored fixed-width serialized-hash grammar before any derivation or authentication.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/api.ts",
+			"mutatorName": "OptionalChaining",
+			"replacement": "request.headers.get('content-type')?.split(';')[0].trim",
+			"location": {
+				"end": {
+					"column": 79,
+					"line": 82
+				},
+				"start": {
+					"column": 23,
+					"line": 82
+				}
+			},
+			"sourceHash": "65c90fb369b50da928bf96ac42bca5ab61670102a52e44b657b33f4f282ed1a8",
+			"fingerprint": "57b3529ad78e6441944ffe9af7a4d1bacf9aac8f3fbb46b1719f50884c25fdb2",
+			"classification": "equivalent",
+			"rationale": "String.prototype.split always returns at least one element, so the element at index 0 is never null or undefined and the optional access before trim can only ever take its defined branch.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/api.ts",
+			"mutatorName": "BlockStatement",
+			"replacement": "{}",
+			"location": {
+				"end": {
+					"column": 3,
+					"line": 91
+				},
+				"start": {
+					"column": 10,
+					"line": 88
+				}
+			},
+			"sourceHash": "65c90fb369b50da928bf96ac42bca5ab61670102a52e44b657b33f4f282ed1a8",
+			"fingerprint": "e424a3332bfe49e37c701c4393b604c5bc46848df5a3587e86803a35dff0988a",
+			"classification": "equivalent",
+			"rationale": "Emptying the catch leaves parsed as undefined, which textFieldsOf already refuses because it is not an object, so a malformed body still answers null on both the guarded and the unguarded path.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/request-auth.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 31,
+					"line": 42
+				},
+				"start": {
+					"column": 9,
+					"line": 42
+				}
+			},
+			"sourceHash": "df84e05ecf1707f6395c92633a09c5cb408cba8cd5f467a07c9df3e5e0c239ba",
+			"fingerprint": "17ef8f5b38adec83c70b87a8a8f34a45f3b7d87ad5885dd6d5bfb08782edd81d",
+			"classification": "equivalent",
+			"rationale": "RegExp.prototype.test stringifies a null argument to the four characters null, which the anchored bearer pattern cannot match, so dropping the null guard still answers false for a request carrying no Authorization header.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/auth-endpoints.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"Stryker was here!\"",
+			"location": {
+				"end": {
+					"column": 83,
+					"line": 206
+				},
+				"start": {
+					"column": 81,
+					"line": 206
+				}
+			},
+			"sourceHash": "e6b05c38f3b7eae34ceccbd793d5a2624753c92ff20ccf59011085f95928db10",
+			"fingerprint": "911fb4236dfda7c9e08de230c46b587fd0a672b288d44dc479045bd892ceb0eb",
+			"classification": "equivalent",
+			"rationale": "The fallback for an absent password field is only ever verified against a stored hash and never persisted, so any literal that is not somebody's password yields the same invalid-credentials answer; the upgrade candidate a longer literal would derive is discarded because verification failed.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		}
 	]

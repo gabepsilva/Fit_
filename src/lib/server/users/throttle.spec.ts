@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../db';
 import {
 	ADDRESS_POLICY,
@@ -20,6 +21,17 @@ let db: DatabaseSync;
 
 beforeEach(() => {
 	db = openDatabase(':memory:');
+});
+
+/**
+ * Every case opens its own in-memory database; closing it is not tidiness. A
+ * mutation run puts one vitest inside every worker and replays this suite
+ * hundreds of times, and hundreds of live `node:sqlite` handles left for the
+ * collector took the worker down with SIGSEGV -- which Stryker records as a
+ * timeout against whichever mutant happened to be running.
+ */
+afterEach(() => {
+	db.close();
 });
 
 function at(offsetMs: number): Date {
@@ -134,6 +146,59 @@ describe('checkSignIn', () => {
 		});
 	});
 
+	it('reports the address wait when that is the longer of the two', () => {
+		// The mirror of the case above: whichever scope holds the caller longest is
+		// the one it is told about, or it comes back before the other lock ends.
+		const sprayed = '198.51.100.4';
+		for (let index = 0; index < ADDRESS_POLICY.limit + 3; index += 1) {
+			recordFailedSignIn(db, { username: `victim-${index}`, clientAddress: sprayed }, NOW);
+		}
+		// Ground down from somewhere else, so the address lock has doubled three
+		// times while the username has only just reached its own limit.
+		fail({ username: 'jordan', clientAddress: '203.0.113.9' }, USERNAME_POLICY.limit);
+		expect(checkSignIn(db, { username: 'jordan', clientAddress: sprayed }, NOW)).toEqual({
+			allowed: false,
+			scope: 'address',
+			retryAfterMs: 8 * MINUTE_MS
+		});
+	});
+
+	it('keeps the first scope when both waits are exactly as long as each other', () => {
+		const sprayed = '198.51.100.4';
+		fail({ username: 'jordan', clientAddress: sprayed }, USERNAME_POLICY.limit);
+		for (let index = 0; index < ADDRESS_POLICY.limit - USERNAME_POLICY.limit; index += 1) {
+			recordFailedSignIn(db, { username: `victim-${index}`, clientAddress: sprayed }, NOW);
+		}
+		// Both scopes have just reached their limit at the same instant, so both
+		// carry the same first lock; a tie is not a reason to change the answer.
+		expect(checkSignIn(db, { username: 'jordan', clientAddress: sprayed }, NOW)).toEqual({
+			allowed: false,
+			scope: 'username',
+			retryAfterMs: USERNAME_POLICY.baseLockMs
+		});
+	});
+
+	it('counts an oversized username in the bucket the name it truncates to owns', () => {
+		// The key is bounded before it is hashed, so the bound has to be part of
+		// the identity: otherwise ten thousand characters is a fresh allowance.
+		const long = 'j'.repeat(10_000);
+		fail({ username: long, clientAddress: null }, USERNAME_POLICY.limit);
+		expect(checkSignIn(db, { username: 'j'.repeat(128), clientAddress: null }, NOW)).toMatchObject({
+			allowed: false,
+			scope: 'username'
+		});
+	});
+
+	it('counts an oversized address in the bucket the address it truncates to owns', () => {
+		const long = `198.51.100.4${'0'.repeat(10_000)}`;
+		for (let index = 0; index < ADDRESS_POLICY.limit; index += 1) {
+			recordFailedSignIn(db, { username: `victim-${index}`, clientAddress: long }, NOW);
+		}
+		expect(
+			checkSignIn(db, { username: 'someone-else', clientAddress: long.slice(0, 128) }, NOW)
+		).toMatchObject({ allowed: false, scope: 'address' });
+	});
+
 	it('counts the username alone when the deployment has no client address', () => {
 		const anonymous: SignInAttempt = { username: 'jordan', clientAddress: null };
 		fail(anonymous, USERNAME_POLICY.limit);
@@ -177,6 +242,33 @@ describe('recordFailedSignIn', () => {
 		expect(checkSignIn(db, jordan, at(8 * MINUTE_MS))).toMatchObject({ allowed: false });
 	});
 
+	it('puts the scope inside the hash, so the two counters cannot collide', () => {
+		// The key is the SHA-256 of the scope, a NUL, and the normalized value:
+		// pinned exactly, because a scope that dropped out of the digest would let
+		// one address quietly spend the username counter's allowance.
+		fail({ username: 'jordan', clientAddress: '203.0.113.7' }, 1);
+		const digest = (value: string): string => createHash('sha256').update(value).digest('hex');
+		const rows = db.prepare('select scope, key_hash from sign_in_throttle order by scope').all();
+		expect(rows.map((row) => [row['scope'], row['key_hash']])).toEqual([
+			['address', digest('address\u0000203.0.113.7')],
+			['username', digest('username\u0000jordan')]
+		]);
+	});
+
+	it('records no lock at all while the attempt is still inside its allowance', () => {
+		fail(jordan, 1);
+		const rows = db.prepare('select locked_until from sign_in_throttle').all();
+		expect(rows.map((row) => row['locked_until'])).toEqual([null, null]);
+	});
+
+	it('starts a fresh count for a failure at the very moment the window closes', () => {
+		fail(jordan, USERNAME_POLICY.limit - 1);
+		// The window ends exactly here, so this failure opens a new one rather
+		// than being the sixth of the old one.
+		fail(jordan, 1, at(USERNAME_POLICY.windowMs));
+		expect(checkSignIn(db, jordan, at(USERNAME_POLICY.windowMs))).toEqual({ allowed: true });
+	});
+
 	it('stores no attacker-supplied text, only its hash', () => {
 		fail({ username: 'jordan', clientAddress: '203.0.113.7' }, 1);
 		const stored = JSON.stringify(db.prepare('select * from sign_in_throttle').all());
@@ -209,6 +301,15 @@ describe('clearSignInFailures', () => {
 		fail(jordan, USERNAME_POLICY.limit);
 		clearSignInFailures(db, 'Jordan');
 		expect(checkSignIn(db, jordan, NOW)).toEqual({ allowed: true });
+	});
+
+	it('clears the bucket an oversized username was counted in', () => {
+		const long = 'j'.repeat(10_000);
+		fail({ username: long, clientAddress: null }, USERNAME_POLICY.limit);
+		clearSignInFailures(db, long);
+		expect(checkSignIn(db, { username: long, clientAddress: null }, NOW)).toEqual({
+			allowed: true
+		});
 	});
 
 	it('leaves the address counter alone, so one valid account cannot reset a spray', () => {

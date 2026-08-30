@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
 	register,
 	SESSION_DELIVERY_HEADER,
@@ -81,6 +81,17 @@ beforeEach(() => {
 	db = openDatabase(':memory:');
 });
 
+/**
+ * Every case opens its own in-memory database; closing it is not tidiness. A
+ * mutation run puts one vitest inside every worker and replays this suite
+ * hundreds of times, and hundreds of live `node:sqlite` handles left for the
+ * collector took the worker down with SIGSEGV -- which Stryker records as a
+ * timeout against whichever mutant happened to be running.
+ */
+afterEach(() => {
+	db.close();
+});
+
 describe('register', () => {
 	it('creates the account, its household and its profile', async () => {
 		const { event } = eventFor({ body: REGISTRATION });
@@ -138,6 +149,67 @@ describe('register', () => {
 		const { event } = eventFor({ body: { ...REGISTRATION, deviceLabel: 'Pixel 7' } });
 		await register(db, event, CHEAP);
 		expect(db.prepare('select device_label from session').get()?.['device_label']).toBe('Pixel 7');
+	});
+
+	it('answers a bearer registration with the created status, not a plain 200', async () => {
+		const { event } = eventFor({
+			body: REGISTRATION,
+			headers: { [SESSION_DELIVERY_HEADER]: 'bearer' }
+		});
+		const response = await register(db, event, CHEAP);
+		expect(response.status).toBe(201);
+		expect(String((await bodyOf(response))['token'])).toMatch(/^[A-Za-z0-9_-]{43}$/);
+	});
+
+	it('reads an absent username as an empty one rather than as a name of its own', async () => {
+		const { event } = eventFor({
+			body: {
+				displayName: REGISTRATION.displayName,
+				password: REGISTRATION.password,
+				householdName: REGISTRATION.householdName
+			}
+		});
+		expect(await bodyOf(await register(db, event, CHEAP))).toEqual({
+			error: { code: 'invalid-input', field: 'username', reason: 'too-short' }
+		});
+	});
+
+	it('reads an absent password as an empty one rather than as a password', async () => {
+		const { event } = eventFor({
+			body: {
+				username: REGISTRATION.username,
+				displayName: REGISTRATION.displayName,
+				householdName: REGISTRATION.householdName
+			}
+		});
+		expect(await bodyOf(await register(db, event, CHEAP))).toEqual({
+			error: { code: 'invalid-input', field: 'password', reason: 'too-short' }
+		});
+		expect(db.prepare('select count(*) as n from account').get()?.['n']).toBe(0);
+	});
+
+	it('falls back to the username when no display name is given', async () => {
+		const { event } = eventFor({
+			body: {
+				username: REGISTRATION.username,
+				password: REGISTRATION.password,
+				householdName: REGISTRATION.householdName
+			}
+		});
+		const body = await bodyOf(await register(db, event, CHEAP));
+		expect(body['account']).toMatchObject({ displayName: 'jordan' });
+	});
+
+	it('names the household after the display name when none is given', async () => {
+		const { event } = eventFor({
+			body: {
+				username: REGISTRATION.username,
+				displayName: REGISTRATION.displayName,
+				password: REGISTRATION.password
+			}
+		});
+		const body = await bodyOf(await register(db, event, CHEAP));
+		expect(body['households']).toMatchObject([{ name: 'Jordan', role: 'owner' }]);
 	});
 
 	it('refuses a username already in use', async () => {
@@ -223,6 +295,17 @@ async function failUntilLocked(): Promise<void> {
 
 describe('signIn', () => {
 	beforeEach(registered);
+
+	// First in this block on purpose. The endpoint's injected cost governs every
+	// derivation below it, and a mutant that dropped it would otherwise be caught
+	// only after two dozen sign-ins had each paid the production KDF.
+	it('fails closed rather than deriving at a policy weaker than the stored hash', async () => {
+		// The account was hashed at r=8; a server whose current policy is weaker on
+		// any axis must refuse it rather than verify at the database's own cost.
+		const response = await signIn(db, signInEvent().event, { ...CHEAP, r: 4 });
+		expect(response.status).toBe(401);
+		expect(db.prepare('select count(*) as n from session').get()?.['n']).toBe(1);
+	});
 
 	it('answers with the account and the household it may read', async () => {
 		const response = await signIn(db, signInEvent().event, CHEAP);
@@ -340,6 +423,45 @@ describe('signIn', () => {
 		await signIn(db, event, CHEAP);
 		const scopes = db.prepare('select scope from sign_in_throttle').all();
 		expect(scopes.map((row) => row['scope'])).toEqual(['username']);
+	});
+
+	it('records the device label the client named', async () => {
+		await signIn(db, signInEvent({ deviceLabel: 'Pixel 7' }).event, CHEAP);
+		const labels = db
+			.prepare('select device_label from session')
+			.all()
+			.map((row) => row['device_label']);
+		expect(labels).toContain('Pixel 7');
+	});
+
+	it('says how long to wait in whole seconds, and never in one', async () => {
+		// The lock is the policy's first minute, so the answer is that wait in
+		// whole seconds -- not a single second, and not a thousand times too many.
+		await failUntilLocked();
+		const response = await signIn(db, signInEvent().event, CHEAP);
+		const seconds = Number(response.headers.get('retry-after'));
+		expect(seconds).toBeGreaterThan(50);
+		expect(seconds).toBeLessThanOrEqual(60);
+	});
+
+	it('counts a sign-in with no username field against the empty name it becomes', async () => {
+		// An absent field is the empty username, not a distinct identity that
+		// carries its own fresh allowance.
+		for (let attempt = 0; attempt < 6; attempt += 1) {
+			const { event } = eventFor({ path: '/api/sessions', body: { password: 'wrong entirely' } });
+			await signIn(db, event, CHEAP);
+		}
+		expect((await signIn(db, signInEvent({ username: '' }).event, CHEAP)).status).toBe(429);
+	});
+
+	it('refuses a sign-in that carries no password field at all', async () => {
+		const { event, written } = eventFor({
+			path: '/api/sessions',
+			body: { username: REGISTRATION.username }
+		});
+		const response = await signIn(db, event, CHEAP);
+		expect(response.status).toBe(401);
+		expect(written).toHaveLength(0);
 	});
 
 	it('refuses a body that is not JSON text fields', async () => {

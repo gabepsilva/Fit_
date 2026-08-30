@@ -54,6 +54,13 @@ describe('configuredOrigins', () => {
 		).toEqual([SITE]);
 	});
 
+	it('drops the empty entry a trailing comma leaves rather than refusing to start', () => {
+		// The value is trimmed before it is weighed, so a list written across
+		// lines or with a trailing separator configures the origins it names and
+		// nothing else -- an untrimmed blank would reach `new URL` and throw.
+		expect(configuredOrigins({ [ALLOWED_ORIGINS_VARIABLE]: `${SITE}, ` })).toEqual([SITE]);
+	});
+
 	it('configures nothing when neither variable is set', () => {
 		expect(configuredOrigins({})).toEqual([]);
 	});
