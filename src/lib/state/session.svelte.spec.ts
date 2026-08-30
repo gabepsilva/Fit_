@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignedInSession } from '$lib/auth/api';
-import { session, SESSION_STORAGE_KEY } from './session.svelte';
+import { isSession, session, SESSION_STORAGE_KEY, SessionStore } from './session.svelte';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -27,6 +27,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
 });
 
 /**
@@ -171,5 +172,123 @@ describe('session', () => {
 		await expect(session.refresh()).resolves.toBe(false);
 		expect(session.signedIn).toBe(true);
 		expect(localStorage.getItem(SESSION_STORAGE_KEY)).toContain('robin');
+	});
+});
+
+describe('SESSION_STORAGE_KEY', () => {
+	it('is the key already in the browsers that have it', () => {
+		// Renaming this is not a refactor: every device holding the old key reads
+		// as signed out on the next load, so the name is part of the contract.
+		expect(SESSION_STORAGE_KEY).toBe('fit.session.v1');
+	});
+});
+
+describe('a fresh store', () => {
+	it('has not read storage yet', () => {
+		expect(new SessionStore().hydrated).toBe(false);
+	});
+
+	it('knows nobody until something tells it', () => {
+		expect(new SessionStore().current).toBeNull();
+	});
+
+	it('reads a session that expires this very instant as over', () => {
+		// `expiresAt` is the moment the server stops honouring it, not the last
+		// moment it does, so the boundary belongs on the expired side.
+		const now = Date.parse('2026-08-30T12:00:00.000Z');
+		vi.spyOn(Date, 'now').mockReturnValue(now);
+		const store = new SessionStore();
+		store.begin(signedInSession(new Date(now).toISOString()));
+		expect(store.signedIn).toBe(false);
+	});
+
+	it('leaves storage alone when there was nothing to restore', () => {
+		// Hydrating an empty browser must not look like a sign-out.
+		const removeItem = vi.spyOn(Storage.prototype, 'removeItem');
+		new SessionStore().hydrate();
+		expect(removeItem).not.toHaveBeenCalled();
+	});
+});
+
+describe('a browser with no localStorage', () => {
+	// The Capacitor WebView and a browser with site data blocked both reach this
+	// code with `globalThis.localStorage` missing. Nothing here may throw: the
+	// store is a cache, and losing it is not losing the session.
+	beforeEach(() => {
+		vi.stubGlobal('localStorage', undefined);
+	});
+
+	it('still records the session a sign-in handed back', () => {
+		const store = new SessionStore();
+		const value = signedInSession(inDays(90));
+		store.begin(value);
+		expect(store.current).toEqual(value);
+	});
+
+	it('still forgets the session', () => {
+		const store = new SessionStore();
+		store.begin(signedInSession(inDays(90)));
+		store.forget();
+		expect(store.current).toBeNull();
+	});
+
+	it('hydrates to nobody rather than throwing', () => {
+		const store = new SessionStore();
+		store.hydrate();
+		expect(store.current).toBeNull();
+	});
+});
+
+describe('isSession', () => {
+	function payload(overrides: Record<string, unknown>): Record<string, unknown> {
+		return {
+			expiresAt: inDays(90),
+			households: [],
+			account: { displayName: 'Robin', username: 'robin' },
+			...overrides
+		};
+	}
+
+	it('accepts what the endpoints hand back', () => {
+		expect(isSession(payload({}))).toBe(true);
+	});
+
+	it('rejects nothing at all', () => {
+		expect(isSession(null)).toBe(false);
+	});
+
+	it('rejects a payload that is not an object', () => {
+		expect(isSession(5)).toBe(false);
+	});
+
+	it('rejects text where a session was stored', () => {
+		expect(isSession('robin')).toBe(false);
+	});
+
+	it('rejects a function wearing a session\u2019s properties, because it is not one', () => {
+		// The guard promises `value is SignedInSession`, so anything that is not an
+		// object has to fail it however convincing its properties look.
+		const impostor = Object.assign(() => undefined, payload({}));
+		expect(isSession(impostor)).toBe(false);
+	});
+
+	it('rejects a session with no expiry, which could never be read as over', () => {
+		expect(isSession(payload({ expiresAt: undefined }))).toBe(false);
+	});
+
+	it('rejects households that are not a list, which the drawer indexes into', () => {
+		expect(isSession(payload({ households: 'Home' }))).toBe(false);
+	});
+
+	it('rejects a payload with no account on it', () => {
+		expect(isSession(payload({ account: undefined }))).toBe(false);
+	});
+
+	it('rejects an account with no name to show', () => {
+		expect(isSession(payload({ account: { username: 'robin' } }))).toBe(false);
+	});
+
+	it('rejects an account with no username', () => {
+		expect(isSession(payload({ account: { displayName: 'Robin' } }))).toBe(false);
 	});
 });

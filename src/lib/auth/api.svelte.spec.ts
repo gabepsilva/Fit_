@@ -82,6 +82,12 @@ describe('signIn', () => {
 		expect(calls[0]?.path).toBe('/api/sessions');
 	});
 
+	it('posts, because signing in creates a session rather than reading one', async () => {
+		const calls = stub(jsonResponse(SESSION));
+		await signIn(CREDENTIALS);
+		expect(calls[0]?.method).toBe('POST');
+	});
+
 	it('declares JSON, which is the only body the endpoint accepts', async () => {
 		const calls = stub(jsonResponse(SESSION));
 		await signIn(CREDENTIALS);
@@ -134,6 +140,48 @@ describe('signIn', () => {
 		expect(result).toMatchObject({ failure: { field: 'deviceLabel', reason: 'too-long' } });
 	});
 
+	it('reads a failure body with no error in it as a malformed one', async () => {
+		// A proxy, a WAF or a stray 400 from something that is not this server all
+		// answer JSON without the `error` object the endpoints always send.
+		stub(jsonResponse({}, { status: 400 }));
+		const result = await signIn(CREDENTIALS);
+		expect(result).toMatchObject({ ok: false, failure: { code: 'invalid-body' } });
+	});
+
+	it('reads a failure body whose error is not an object as a malformed one', async () => {
+		stub(jsonResponse({ error: 'nope' }, { status: 400 }));
+		const result = await signIn(CREDENTIALS);
+		expect(result).toMatchObject({ ok: false, failure: { code: 'invalid-body' } });
+	});
+
+	it('ignores a field and reason that are not text, rather than showing a number', async () => {
+		stub(jsonResponse({ error: { code: 'invalid-input', field: 7, reason: 9 } }, { status: 400 }));
+		const result = await signIn(CREDENTIALS);
+		expect(result).toEqual({
+			ok: false,
+			failure: {
+				code: 'invalid-input',
+				field: undefined,
+				reason: undefined,
+				retryAfterSeconds: undefined
+			}
+		});
+	});
+
+	it('passes a refused origin through as its own code', async () => {
+		stub(jsonResponse({ error: { code: 'forbidden-origin' } }, { status: 403 }));
+		const result = await signIn(CREDENTIALS);
+		expect(result).toMatchObject({ ok: false, failure: { code: 'forbidden-origin' } });
+	});
+
+	it('refuses a 200 whose body is not a session object', async () => {
+		// A captive portal answers 200 with something that parses and is not a
+		// session. Believing it would sign someone in against nothing.
+		stub(jsonResponse(5));
+		const result = await signIn(CREDENTIALS);
+		expect(result).toEqual({ ok: false, failure: { code: 'unreachable' } });
+	});
+
 	it('calls a dropped connection unreachable rather than a rejection', async () => {
 		stub(new TypeError('Failed to fetch'));
 		const result = await signIn(CREDENTIALS);
@@ -152,6 +200,12 @@ describe('register', () => {
 		const calls = stub(jsonResponse(SESSION, { status: 201 }));
 		await register(REGISTRATION);
 		expect(calls[0]?.path).toBe('/api/accounts');
+	});
+
+	it('posts, because registering creates an account', async () => {
+		const calls = stub(jsonResponse(SESSION, { status: 201 }));
+		await register(REGISTRATION);
+		expect(calls[0]?.method).toBe('POST');
 	});
 
 	it('treats the 201 as a success', async () => {
@@ -186,6 +240,11 @@ describe('signOut', () => {
 		expect(calls[0]?.body).toBeNull();
 	});
 
+	it('calls a dropped connection unreachable rather than a completed sign-out', async () => {
+		stub(new TypeError('Failed to fetch'));
+		await expect(signOut()).resolves.toEqual({ ok: false, failure: { code: 'unreachable' } });
+	});
+
 	it('succeeds on the empty 204', async () => {
 		stub(new Response(null, { status: 204 }));
 		await expect(signOut()).resolves.toEqual({ ok: true, value: null });
@@ -202,7 +261,7 @@ describe('signOutEverywhere', () => {
 	it('reports the refusal when nothing was signed in', async () => {
 		stub(jsonResponse({ error: { code: 'unauthenticated' } }, { status: 401 }));
 		const result = await signOutEverywhere();
-		expect(result).toMatchObject({ failure: { code: 'unauthenticated' } });
+		expect(result).toMatchObject({ ok: false, failure: { code: 'unauthenticated' } });
 	});
 });
 

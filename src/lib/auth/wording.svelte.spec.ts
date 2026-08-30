@@ -20,6 +20,38 @@ describe('fieldWording', () => {
 		);
 	});
 
+	it('says how long a username may be', () => {
+		expect(fieldWording('username', 'too-long')).toBe('At most 32 characters.');
+	});
+
+	it('caps a password at the length the server stores', () => {
+		expect(fieldWording('password', 'too-long')).toBe('At most 128 characters.');
+	});
+
+	it('caps a display name at the length the server stores', () => {
+		expect(fieldWording('displayName', 'too-long')).toBe('At most 100 characters.');
+	});
+
+	it('caps a household name at the same length as a display name', () => {
+		expect(fieldWording('householdName', 'too-long')).toBe('At most 100 characters.');
+	});
+
+	it('describes an invisible character in a household name', () => {
+		expect(fieldWording('householdName', 'unsafe-characters')).toBe(
+			'Remove any invisible or control characters.'
+		);
+	});
+
+	it('caps a device label at the same length as a display name', () => {
+		expect(fieldWording('deviceLabel', 'too-long')).toBe('At most 100 characters.');
+	});
+
+	it('describes an invisible character in a device label', () => {
+		expect(fieldWording('deviceLabel', 'unsafe-characters')).toBe(
+			'Remove any invisible or control characters.'
+		);
+	});
+
 	it('falls back rather than showing a bare code for a reason it does not know', () => {
 		expect(fieldWording('username', 'reversed')).toBe('That value can’t be used.');
 	});

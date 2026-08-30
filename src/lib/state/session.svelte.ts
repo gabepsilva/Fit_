@@ -23,7 +23,7 @@ export const SESSION_STORAGE_KEY = 'fit.session.v1';
  * read or forge names an account and grants nothing; presenting it to the
  * server gets a 401 like any other unauthenticated request.
  */
-class SessionStore {
+export class SessionStore {
 	current = $state<SignedInSession | null>(null);
 	hydrated = $state(false);
 
@@ -109,7 +109,17 @@ class SessionStore {
 	}
 }
 
-function isSession(value: unknown): value is SignedInSession {
+/**
+ * Whether a payload read back from `localStorage` is a session this app wrote.
+ *
+ * Exported because it is a contract rather than a detail: the payload is the
+ * one thing here that arrives from outside the program — anybody with the
+ * developer tools open can put whatever they like under this key — and the
+ * rules for rejecting it are worth stating in tests directly. `read` calls it
+ * behind a `try`/`catch`, so a defect that made it throw instead of returning
+ * `false` would look identical from there.
+ */
+export function isSession(value: unknown): value is SignedInSession {
 	if (typeof value !== 'object' || value === null) return false;
 	const session = value as Partial<SignedInSession>;
 	return (
