@@ -36,8 +36,7 @@ export const DOM_FREE_CLIENT_SPECS = [
 ];
 
 /**
- * The DOM-free project deliberately runs first, and `sequence.groupOrder` --
- * not declaration order -- is what makes that true.
+ * Order matters, and the DOM-free project deliberately comes first.
  *
  * Stryker's vitest runner sets `bail: 1`, so a mutant run stops at the first
  * failing test. Under `coverageAnalysis: 'perTest'` a mutant in a shared module
@@ -48,10 +47,6 @@ export const DOM_FREE_CLIENT_SPECS = [
  * recorded as a Timeout, which Stryker credits as a kill while proving nothing.
  * Running the jsdom project first lets the unit spec fail in milliseconds, and
  * the same mutant is recorded as Killed by the assertion that actually caught it.
- *
- * Group 0 runs to completion before group 1 starts. Reordering this array is not
- * enough on its own -- Vitest schedules files through its own sequencer, which
- * sorts across every selected project -- so the guarantee lives in `groupOrder`.
  */
 const testProjects = [
 	{
@@ -59,7 +54,6 @@ const testProjects = [
 		test: {
 			name: 'client-node',
 			environment: 'jsdom',
-			sequence: { groupOrder: 0 },
 			setupFiles: ['./vitest-setup-client-node.ts'],
 			...(process.env.FIT_MUTATION_RUN ? { pool: 'threads' as const } : {}),
 			include: DOM_FREE_CLIENT_SPECS,
@@ -70,7 +64,6 @@ const testProjects = [
 		extends: './vite.config.ts',
 		test: {
 			name: 'client',
-			sequence: { groupOrder: 1 },
 			browser: {
 				enabled: true,
 				provider: playwright(),
