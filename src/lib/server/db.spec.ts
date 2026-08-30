@@ -1,9 +1,18 @@
-import { chmodSync, existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import {
+	chmodSync,
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	readlinkSync,
+	rmSync,
+	statSync,
+	writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getDatabase, migrate, openDatabase } from './db';
+import { applicationDatabasePath, getDatabase, migrate, openDatabase } from './db';
 
 const temporaryDirectories: string[] = [];
 
@@ -64,10 +73,36 @@ describe('migrate', () => {
 		expect(() => migrate(db)).toThrow();
 		expect(tableNames(db)).not.toContain('household');
 		expect(userVersion(db)).toBe(0);
+		expect(() => {
+			db.exec('begin');
+			db.exec('rollback');
+		}).not.toThrow();
 	});
 });
 
 describe('openDatabase', () => {
+	it('does not create a filesystem artifact for an in-memory database', () => {
+		expect(existsSync(':memory:')).toBe(false);
+		const db = openDatabase(':memory:');
+		expect(existsSync(':memory:')).toBe(false);
+		db.close();
+	});
+
+	it.skipIf(process.platform === 'win32')(
+		'does not treat a file named like the in-memory sentinel as database storage',
+		() => {
+			writeFileSync(':memory:', 'unrelated');
+			chmodSync(':memory:', 0o666);
+			try {
+				const db = openDatabase(':memory:');
+				expect(statSync(':memory:').mode & 0o777).toBe(0o666);
+				db.close();
+			} finally {
+				rmSync(':memory:', { force: true });
+			}
+		}
+	);
+
 	it('creates the directory the database file lives in', () => {
 		const path = temporaryPath('nested/deeper/app.sqlite');
 		const db = openDatabase(path);
@@ -96,6 +131,20 @@ describe('openDatabase', () => {
 			db.close();
 		}
 	);
+
+	it.skipIf(process.platform !== 'linux')('does not leak the file-hardening descriptor', () => {
+		const path = temporaryPath('descriptor/app.sqlite');
+		const db = openDatabase(path);
+		const descriptors = readdirSync('/proc/self/fd').filter((descriptor) => {
+			try {
+				return readlinkSync(`/proc/self/fd/${descriptor}`) === path;
+			} catch {
+				return false;
+			}
+		});
+		expect(descriptors).toHaveLength(1);
+		db.close();
+	});
 
 	it.skipIf(process.platform === 'win32')(
 		'refuses an existing public directory without changing its permissions',
@@ -129,6 +178,81 @@ describe('openDatabase', () => {
 		}
 	);
 
+	it.skipIf(process.platform === 'win32')(
+		'hardens existing credential files before opening SQLite',
+		() => {
+			const path = temporaryPath('app.sqlite');
+			const directory = dirname(path);
+			const setup = new DatabaseSync(path);
+			setup.close();
+			for (const candidate of [path, `${path}-wal`, `${path}-shm`]) {
+				if (!existsSync(candidate)) writeFileSync(candidate, 'pending recovery data');
+				chmodSync(candidate, 0o666);
+			}
+			const openingFailure = new Error('opening stopped after permission inspection');
+
+			expect(() =>
+				openDatabase(path, () => {
+					expect(statSync(directory).mode & 0o777).toBe(0o700);
+					for (const candidate of [path, `${path}-wal`, `${path}-shm`]) {
+						expect(statSync(candidate).mode & 0o777).toBe(0o600);
+					}
+					throw openingFailure;
+				})
+			).toThrow(openingFailure);
+		}
+	);
+
+	it.skipIf(process.platform === 'win32')(
+		'hardens sidecars created during a failed database open',
+		() => {
+			const path = temporaryPath('failed-open/app.sqlite');
+			const openingFailure = new Error('database setup failed');
+			const close = vi.fn();
+			const fake = {
+				exec: () => {
+					throw openingFailure;
+				},
+				close
+			} as unknown as DatabaseSync;
+
+			expect(() =>
+				openDatabase(path, () => {
+					for (const sidecar of [`${path}-wal`, `${path}-shm`]) {
+						writeFileSync(sidecar, 'pending recovery data');
+						chmodSync(sidecar, 0o666);
+					}
+					return fake;
+				})
+			).toThrow(openingFailure);
+			expect(close).toHaveBeenCalledOnce();
+			for (const sidecar of [`${path}-wal`, `${path}-shm`]) {
+				expect(statSync(sidecar).mode & 0o777).toBe(0o600);
+			}
+		}
+	);
+
+	it.skipIf(process.platform === 'win32')(
+		'hardens sidecars when the database constructor itself fails',
+		() => {
+			const path = temporaryPath('constructor-fails/app.sqlite');
+			const openingFailure = new Error('database constructor failed');
+
+			expect(() =>
+				openDatabase(path, () => {
+					for (const sidecar of [`${path}-wal`, `${path}-shm`]) {
+						writeFileSync(sidecar, 'pending recovery data');
+						chmodSync(sidecar, 0o666);
+					}
+					throw openingFailure;
+				})
+			).toThrow(openingFailure);
+			for (const sidecar of [`${path}-wal`, `${path}-shm`]) {
+				expect(statSync(sidecar).mode & 0o777).toBe(0o600);
+			}
+		}
+	);
+
 	it('enforces foreign keys, which SQLite leaves off by default', () => {
 		const db = openDatabase(':memory:');
 		expect(() =>
@@ -139,6 +263,33 @@ describe('openDatabase', () => {
 				.run('no-such-household', 'no-such-account', 'owner', '2026-08-29T00:00:00.000Z')
 		).toThrow();
 	});
+
+	it('configures WAL journal mode and the write-lock wait on file databases', () => {
+		const path = temporaryPath('configured/app.sqlite');
+		const db = openDatabase(path);
+		expect(db.prepare('pragma journal_mode').get()?.['journal_mode']).toBe('wal');
+		expect(db.prepare('pragma busy_timeout').get()?.['timeout']).toBe(5000);
+		db.close();
+	});
+
+	it.skipIf(process.platform === 'win32')(
+		'preserves the migration error if closing the failed connection also fails',
+		() => {
+			const path = temporaryPath('app.sqlite');
+			const raw = new DatabaseSync(path);
+			raw.exec('pragma user_version = 99');
+			raw.close();
+			const close = vi.spyOn(DatabaseSync.prototype, 'close').mockImplementationOnce(() => {
+				throw new Error('close failed');
+			});
+
+			try {
+				expect(() => openDatabase(path)).toThrow('newer than this server supports');
+			} finally {
+				close.mockRestore();
+			}
+		}
+	);
 
 	it('rejects a membership role outside the two the schema allows', () => {
 		const db = openDatabase(':memory:');
@@ -286,6 +437,19 @@ describe('openDatabase', () => {
 });
 
 describe('getDatabase', () => {
+	it('resolves the configured path or the private runtime default', () => {
+		expect(applicationDatabasePath('/srv/fit/app.sqlite')).toBe('/srv/fit/app.sqlite');
+		expect(applicationDatabasePath(undefined)).toBe('data/runtime/app.sqlite');
+		const previousPath = process.env['FIT_DB_PATH'];
+		process.env['FIT_DB_PATH'] = '/srv/fit/from-environment.sqlite';
+		try {
+			expect(applicationDatabasePath()).toBe('/srv/fit/from-environment.sqlite');
+		} finally {
+			if (previousPath === undefined) delete process.env['FIT_DB_PATH'];
+			else process.env['FIT_DB_PATH'] = previousPath;
+		}
+	});
+
 	it('owns one lazily opened application connection', () => {
 		const path = temporaryPath('runtime/app.sqlite');
 		const previousPath = process.env['FIT_DB_PATH'];

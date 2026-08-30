@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { openDatabase } from '../db';
 import { registerAccount } from './accounts';
 import {
@@ -88,9 +88,13 @@ describe('createSession', () => {
 });
 
 describe('resolveSession', () => {
+	it('uses a five-minute last-seen write interval', () => {
+		expect(LAST_SEEN_UPDATE_INTERVAL_MS).toBe(300_000);
+	});
+
 	it('returns the account behind the token', () => {
-		const { token } = createSession(db, account.id, null, NOW);
-		expect(resolveSession(db, token, NOW)?.account).toEqual(account);
+		const { token, session } = createSession(db, account.id, null, NOW);
+		expect(resolveSession(db, token, NOW)).toMatchObject({ account, session });
 	});
 
 	it('resolves the households the request may read, not just who is asking', () => {
@@ -131,13 +135,18 @@ describe('resolveSession', () => {
 
 	it('throttles last-seen writes and refreshes exactly at the interval boundary', () => {
 		const { token } = createSession(db, account.id, null, NOW);
+		const prepare = vi.spyOn(db, 'prepare');
 		const beforeBoundary = new Date(NOW.getTime() + LAST_SEEN_UPDATE_INTERVAL_MS - 1);
 		resolveSession(db, token, beforeBoundary);
 		expect(storedFor(token)?.['last_seen_at']).toBe(NOW.toISOString());
+		expect(prepare.mock.calls.some(([sql]) => String(sql).startsWith('update session'))).toBe(
+			false
+		);
 
 		const boundary = new Date(NOW.getTime() + LAST_SEEN_UPDATE_INTERVAL_MS);
 		resolveSession(db, token, boundary);
 		expect(storedFor(token)?.['last_seen_at']).toBe(boundary.toISOString());
+		expect(prepare.mock.calls.some(([sql]) => String(sql).startsWith('update session'))).toBe(true);
 	});
 });
 

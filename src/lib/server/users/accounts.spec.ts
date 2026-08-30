@@ -1,5 +1,6 @@
 import { scryptSync } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { runInNewContext } from 'node:vm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../db';
 import { authenticate, membershipsFor, registerAccount } from './accounts';
@@ -98,6 +99,11 @@ describe('registerAccount', () => {
 		expect(db.prepare('select name from household').get()?.['name']).toBe('Jordan');
 	});
 
+	it('falls back to the display name when the household name is only whitespace', async () => {
+		await register({ householdName: '   ' });
+		expect(db.prepare('select name from household').get()?.['name']).toBe('Jordan');
+	});
+
 	it('reports an unusable username', async () => {
 		const result = await registerAccount(db, { ...DEFAULTS, username: 'jo' }, CHEAP);
 		expect(result).toEqual({
@@ -166,6 +172,27 @@ describe('registerAccount', () => {
 		expect([countOf('account'), countOf('household')]).toEqual([1, 1]);
 	});
 
+	it('rolls back a duplicate attempt so the connection remains usable', async () => {
+		await register();
+		await registerAccount(db, DEFAULTS, CHEAP);
+		await expect(register({ username: 'alex' })).resolves.toMatchObject({ username: 'alex' });
+	});
+
+	it('does not classify a foreign-realm error as SQLite solely from its numeric property', async () => {
+		const failing = {
+			exec: () => undefined,
+			prepare: () => ({
+				run: () => {
+					runInNewContext(`throw Object.assign(new Error('foreign error'), { errcode: 2067 })`);
+				}
+			})
+		} as unknown as DatabaseSync;
+		await expect(registerAccount(failing, DEFAULTS, CHEAP)).rejects.toMatchObject({
+			message: 'foreign error',
+			errcode: 2067
+		});
+	});
+
 	it('does not swallow a failure that is not a duplicate username', async () => {
 		db.exec('drop table profile');
 		await expect(registerAccount(db, DEFAULTS, CHEAP)).rejects.toThrow();
@@ -197,6 +224,26 @@ describe('authenticate', () => {
 		await register();
 		expect(await authenticate(db, 'j'.repeat(129), PASSWORD, { cost: CHEAP })).toBeNull();
 		expect(await authenticate(db, 'jordan', 'x'.repeat(129), { cost: CHEAP })).toBeNull();
+	});
+
+	it('does not query the database for either independently invalid credential', async () => {
+		const unopened = {
+			prepare: () => {
+				throw new Error('database must remain untouched');
+			}
+		} as unknown as DatabaseSync;
+		await expect(
+			authenticate(unopened, `${' '.repeat(126)}abc`, PASSWORD, { cost: CHEAP })
+		).resolves.toBeNull();
+		await expect(
+			authenticate(unopened, 'jordan', 'x'.repeat(129), { cost: CHEAP })
+		).resolves.toBeNull();
+	});
+
+	it('accepts a password exactly at the bounded KDF input limit', async () => {
+		const password = 'x'.repeat(128);
+		const account = await register({ password });
+		expect(await authenticate(db, 'jordan', password, { cost: CHEAP })).toEqual(account);
 	});
 
 	it('upgrades an older password hash after successful authentication', async () => {

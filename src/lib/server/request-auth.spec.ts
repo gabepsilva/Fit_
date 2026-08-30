@@ -1,7 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
-import { resolveRequestAuth, sessionTokenFrom } from './request-auth';
+import { getDatabase } from './db';
+import { requestAuthDependencies, resolveRequestAuth, sessionTokenFrom } from './request-auth';
 import type { RequestAuthDependencies } from './request-auth';
+import { resolveSession } from './users/sessions';
 import type { Auth } from './users/types';
 
 const COOKIE_TOKEN = 'c'.repeat(43);
@@ -41,9 +43,24 @@ describe('sessionTokenFrom', () => {
 	it('rejects a malformed cookie token', () => {
 		expect(sessionTokenFrom(request(), 'not-a-session')).toBeUndefined();
 	});
+
+	it.each([`${COOKIE_TOKEN}x`, `x${COOKIE_TOKEN}`])(
+		'rejects a valid-looking cookie token with extra data: %s',
+		(token) => {
+			expect(sessionTokenFrom(request(), token)).toBeUndefined();
+		}
+	);
+
+	it('rejects text prefixed to an otherwise valid Bearer credential', () => {
+		expect(sessionTokenFrom(request(`xBearer ${BEARER_TOKEN}`), COOKIE_TOKEN)).toBeUndefined();
+	});
 });
 
 describe('resolveRequestAuth', () => {
+	it('wires the production database and session resolver by default', () => {
+		expect(requestAuthDependencies).toEqual({ database: getDatabase, resolve: resolveSession });
+	});
+
 	it('does not open the database when credentials are absent', () => {
 		const dependencies: RequestAuthDependencies = {
 			database: vi.fn(() => database),
@@ -61,6 +78,14 @@ describe('resolveRequestAuth', () => {
 		};
 		expect(resolveRequestAuth(request(), COOKIE_TOKEN, dependencies)).toBeNull();
 		expect(dependencies.resolve).toHaveBeenCalledWith(database, COOKIE_TOKEN);
+	});
+
+	it('returns the authentication resolved for a valid credential', () => {
+		const dependencies: RequestAuthDependencies = {
+			database: () => database,
+			resolve: () => auth
+		};
+		expect(resolveRequestAuth(request(), COOKIE_TOKEN, dependencies)).toBe(auth);
 	});
 
 	it('does not turn a database failure into anonymous access', () => {

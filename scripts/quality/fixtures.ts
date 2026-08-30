@@ -18,6 +18,14 @@ export interface GateFixture {
 	description: string;
 	docker?: boolean;
 	browser?: boolean;
+	/** Runs alone because this fixture owns a process-wide resource such as Stryker's sandbox. */
+	exclusive?: boolean;
+	/** Leave the generated file untracked to prove diff discovery cannot miss it. */
+	stage?: boolean;
+	/** Commit only support files, leaving the production defect outside the baseline. */
+	baselinePaths?: string[];
+	/** Text proving the gate rejected the intended defect instead of failing setup. */
+	failureIncludes?: string;
 	apply: (root: string) => Promise<void>;
 }
 
@@ -115,6 +123,60 @@ export const fixtures: GateFixture[] = [
 			)
 	},
 	{
+		name: 'weakened-mutation-policy',
+		gate: 'check:thresholds',
+		description: 'A security mutation floor lowered below the recorded baseline.',
+		apply: (root) =>
+			edit(root, 'quality/mutation-policy.json', (content) =>
+				content.replace('"aggregateKilled": 95', '"aggregateKilled": 80')
+			)
+	},
+	{
+		name: 'missing-mutation-policy-limit',
+		gate: 'check:thresholds',
+		failureIncludes: 'mutation policy.changed must have exactly keys',
+		description: 'A deleted mutation limit, which would otherwise make a comparison inert.',
+		apply: (root) =>
+			edit(root, 'quality/mutation-policy.json', (content) =>
+				content.replace('\n\t\t"perFileKilled": 80,', '')
+			)
+	},
+	{
+		name: 'broad-mutation-review',
+		gate: 'check:mutation-reviews',
+		failureIncludes: 'invalid reviewed-mutant entry',
+		description: 'A wildcard mutation-review entry, which could hide unrelated survivors.',
+		apply: (root) =>
+			write(
+				root,
+				'quality/mutation-equivalents.json',
+				`${JSON.stringify(
+					{
+						version: 1,
+						entries: [
+							{
+								fingerprint: 'd8a68ede8dc5df50a92add195c047649daa7bcc46e8a885bc076882ea36f592f',
+								file: 'src/**/*.ts',
+								mutatorName: 'Any',
+								replacement: 'true',
+								location: {
+									start: { line: 1, column: 0 },
+									end: { line: 1, column: 1 }
+								},
+								sourceHash: '0'.repeat(64),
+								classification: 'equivalent',
+								rationale:
+									'This deliberately broad entry must be rejected before mutation testing begins.',
+								review: 'https://github.com/gabepsilva/Fit_/pull/5'
+							}
+						]
+					},
+					null,
+					'\t'
+				)}\n`
+			)
+	},
+	{
 		name: 'unused-file',
 		gate: 'knip',
 		description: 'A file nothing imports.',
@@ -139,6 +201,29 @@ export const fixtures: GateFixture[] = [
 				root,
 				'.github/workflows/fixture.yml',
 				'name: Fixture\non: push\njobs:\n  broken:\n    runs-on: ubuntu-00.00\n    steps:\n      - run: echo "${{ github.no_such_context }}"\n'
+			)
+	},
+	{
+		name: 'missing-ci-job',
+		gate: 'check:ci-contract',
+		failureIncludes: 'CI workflow does not invoke declared jobs: mutation-full',
+		description: 'A declared CI job omitted from the hosted workflow.',
+		apply: (root) =>
+			edit(root, '.github/workflows/ci.yml', (content) =>
+				content.replace('            job: mutation-full\n', '')
+			)
+	},
+	{
+		name: 'unprotected-ci-job',
+		gate: 'check:ci-contract',
+		failureIncludes: 'all-green.needs does not protect hosted gate jobs: mutation',
+		description: 'A hosted mutation job omitted from the protected merge-gate aggregator.',
+		apply: (root) =>
+			edit(root, '.github/workflows/ci.yml', (content) =>
+				content.replace(
+					'needs: [static, unit, mutation, build, e2e, security, self-test]',
+					'needs: [static, unit, build, e2e, security, self-test]'
+				)
 			)
 	},
 	{
@@ -173,20 +258,101 @@ export const fixtures: GateFixture[] = [
 			)
 	},
 	{
-		name: 'surviving-mutant',
-		gate: 'test:mutation',
-		browser: true,
-		description: 'A test that asserts nothing the code actually does, so mutants survive.',
+		name: 'legacy-full-survivors',
+		gate: 'test:mutation:fixture:full',
+		failureIncludes: 'full-tree mutation score 70.00 is below 80',
+		description: 'A tiny synthetic full-tree report below the preserved 80 percent score.',
+		apply: async (root) => {
+			const source = 'export function add(a: number, b: number): number {\n\treturn a + b;\n}\n';
+			await write(root, 'src/lib/fixture.ts', source);
+			await write(
+				root,
+				'reports/mutation/fixture/scope.json',
+				`${JSON.stringify(
+					{
+						version: 2,
+						lane: 'full',
+						project: 'all',
+						base: null,
+						fallback: null,
+						files: [{ path: 'src/lib/fixture.ts', changeStatus: null, changedLines: [] }]
+					},
+					null,
+					'\t'
+				)}\n`
+			);
+			const mutants = Array.from({ length: 10 }, (_, index) => ({
+				id: String(index),
+				status: index < 7 ? 'Killed' : 'Survived',
+				mutatorName: 'ArithmeticOperator',
+				replacement: '-',
+				location: { start: { line: 2, column: 8 }, end: { line: 2, column: 13 } }
+			}));
+			await write(
+				root,
+				'reports/mutation/fixture/mutation.json',
+				`${JSON.stringify({ files: { 'src/lib/fixture.ts': { source, mutants } } }, null, '\t')}\n`
+			);
+		}
+	},
+	{
+		name: 'security-surviving-mutant',
+		gate: 'test:mutation:security',
+		exclusive: true,
+		failureIncludes: 'changed-line score',
+		description: 'A shallow server test leaves a security-boundary mutant alive.',
 		apply: async (root) => {
 			await write(
 				root,
-				'src/lib/fixture.ts',
-				'export function add(a: number, b: number): number {\n\treturn a + b;\n}\n'
+				'src/lib/server/fixture.ts',
+				'export function authorize(owner: string, actor: string): boolean {\n\treturn owner === actor;\n}\n'
 			);
 			await write(
 				root,
-				'src/lib/fixture.spec.ts',
-				"import { describe, expect, it } from 'vitest';\nimport { add } from './fixture';\n\ndescribe('add', () => {\n\tit('exists', () => {\n\t\texpect(typeof add).toBe('function');\n\t});\n});\n"
+				'src/lib/server/fixture.spec.ts',
+				"import { expect, it } from 'vitest';\nimport { authorize } from './fixture';\n\nit('returns an authorization decision', () => {\n\texpect(typeof authorize('owner', 'stranger')).toBe('boolean');\n});\n"
+			);
+		}
+	},
+	{
+		name: 'changed-node-surviving-mutant',
+		gate: 'test:mutation:changed:node',
+		exclusive: true,
+		stage: false,
+		failureIncludes: 'changed-line score',
+		description: 'A surviving mutant in an untracked Node module must fail change-scoped mutation.',
+		baselinePaths: ['src/lib/domain/fixture.spec.ts'],
+		apply: async (root) => {
+			await write(
+				root,
+				'src/lib/domain/fixture.ts',
+				'export function classify(value: number): string {\n\treturn value > 0 ? "positive" : "other";\n}\n'
+			);
+			await write(
+				root,
+				'src/lib/domain/fixture.spec.ts',
+				"import { expect, it } from 'vitest';\nimport { classify } from './fixture';\n\nit('exports the classifier', () => {\n\texpect(typeof classify).toBe('function');\n});\n"
+			);
+		}
+	},
+	{
+		name: 'changed-client-surviving-mutant',
+		gate: 'test:mutation:changed:client',
+		browser: true,
+		exclusive: true,
+		failureIncludes: 'changed-line score',
+		description: 'A surviving mutant in a changed client module must fail change-scoped mutation.',
+		baselinePaths: ['src/lib/ui/fixture.svelte.test.ts'],
+		apply: async (root) => {
+			await write(
+				root,
+				'src/lib/ui/fixture.ts',
+				'export function classify(value: number): string {\n\treturn value > 0 ? "positive" : "other";\n}\n'
+			);
+			await write(
+				root,
+				'src/lib/ui/fixture.svelte.test.ts',
+				"import { expect, it } from 'vitest';\nimport { classify } from './fixture';\n\nit('exports the classifier', () => {\n\texpect(typeof classify).toBe('function');\n});\n"
 			);
 		}
 	},

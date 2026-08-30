@@ -5,6 +5,12 @@ const { mutation } = JSON.parse(
 	readFileSync(new URL('./quality/thresholds.json', import.meta.url), 'utf8')
 );
 
+const scopeFile = process.env.FIT_MUTATION_SCOPE;
+const scopedMutate =
+	scopeFile === undefined
+		? null
+		: JSON.parse(readFileSync(scopeFile, 'utf8')).files.map(({ path }) => path);
+
 /**
  * Every Stryker worker starts its own vitest, and vitest sizes its pool to the
  * whole machine unless told otherwise — so raising `concurrency` alone would
@@ -29,6 +35,10 @@ const LOCAL_CORE_SHARE = 0.85;
  */
 const WORKER_MEMORY_BYTES = 1024 ** 3;
 const MEMORY_HEADROOM = 0.7;
+// Nine workers are the measured stable ceiling on the development workstation:
+// ten allowed a Chromium-backed worker to be OOM-killed and made the next
+// back-to-back Vitest project initialization unreliable.
+const MAX_LOCAL_WORKERS = 9;
 
 /**
  * A hosted runner has four shared cores, so it keeps one in hand for the job's
@@ -47,7 +57,8 @@ function concurrency() {
 		? availableParallelism() - 1
 		: Math.floor(availableParallelism() * LOCAL_CORE_SHARE);
 	const byMemory = Math.floor((process.availableMemory() * MEMORY_HEADROOM) / WORKER_MEMORY_BYTES);
-	return Math.max(2, Math.min(byCores, byMemory));
+	const stableLocalLimit = process.env.CI ? Number.POSITIVE_INFINITY : MAX_LOCAL_WORKERS;
+	return Math.max(2, Math.min(byCores, byMemory, stableLocalLimit));
 }
 
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
@@ -59,9 +70,9 @@ export default {
 	// exact contents, which pins wording and sample numbers that are free to change.
 	// Everything that reads the data — indexes, scaling, macros, the parser, the
 	// adaptive TDEE model — is still mutated.
-	mutate: [
+	mutate: scopedMutate ?? [
 		'src/lib/**/*.ts',
-		'!src/**/*.{test,spec}.ts',
+		'!src/**/*.{test,spec,e2e}.ts',
 		// Seed food rows and the two literal label lookup tables. Mutants here are
 		// food names, aliases and label strings.
 		'!src/lib/domain/food-catalog.ts',
@@ -105,12 +116,26 @@ export default {
 		related: true
 	},
 	reporters: ['clear-text', 'progress', 'html', 'json'],
-	htmlReporter: { fileName: 'reports/mutation/mutation.html' },
-	jsonReporter: { fileName: 'reports/mutation/mutation.json' },
-	thresholds: { high: mutation.high, low: mutation.low, break: mutation.break },
+	htmlReporter: {
+		fileName:
+			process.env.FIT_MUTATION_REPORT?.replace(/mutation\.json$/, 'mutation.html') ??
+			'reports/mutation/mutation.html'
+	},
+	jsonReporter: {
+		fileName: process.env.FIT_MUTATION_REPORT ?? 'reports/mutation/mutation.json'
+	},
+	// Keep the historical aggregate break as a first defense. The wrapper still
+	// applies the governing strict killed-only/per-file verdict where required,
+	// because Stryker's built-in score credits timeouts.
+	thresholds: {
+		high: mutation.high,
+		low: mutation.low,
+		break: mutation.break
+	},
 	// Only re-mutate what changed. The file is cached in CI, not committed.
 	incremental: true,
-	incrementalFile: 'reports/mutation/stryker-incremental.json',
+	incrementalFile:
+		process.env.FIT_MUTATION_INCREMENTAL ?? 'reports/mutation/stryker-incremental.json',
 	concurrency: concurrency(),
 	cleanTempDir: 'always'
 };

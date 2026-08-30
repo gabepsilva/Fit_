@@ -25,6 +25,8 @@ const staticSteps: GateStep[] = [
 		artifacts: ['reports/quality/suppressions.json']
 	},
 	{ name: 'check:thresholds', purpose: 'Threshold guard' },
+	{ name: 'check:mutation-reviews', purpose: 'Exact mutation-review ledger' },
+	{ name: 'check:ci-contract', purpose: 'Local and hosted CI job parity' },
 	{ name: 'knip', purpose: 'Unused files, exports, dependencies' },
 	{
 		name: 'duplicates',
@@ -57,10 +59,51 @@ const coverageStep: GateStep = {
 	browser: true
 };
 
-const mutationStep: GateStep = {
-	name: 'test:mutation',
-	purpose: 'Mutation score',
-	artifacts: ['reports/mutation/mutation.json'],
+const securityMutationStep: GateStep = {
+	name: 'test:mutation:security',
+	purpose: 'Security mutation strength',
+	artifacts: [
+		'reports/mutation/security/scope.json',
+		'reports/mutation/security/mutation.json',
+		'reports/mutation/security/verdict.json'
+	]
+};
+
+const changedNodeMutationStep: GateStep = {
+	name: 'test:mutation:changed:node',
+	purpose: 'Changed Node mutation strength',
+	artifacts: [
+		'reports/mutation/changed-node/scope.json',
+		'reports/mutation/changed-node/mutation.json',
+		'reports/mutation/changed-node/verdict.json'
+	]
+};
+
+const changedClientMutationStep: GateStep = {
+	name: 'test:mutation:changed:client',
+	purpose: 'Changed client mutation strength',
+	artifacts: [
+		'reports/mutation/changed-client/scope.json',
+		'reports/mutation/changed-client/mutation.json',
+		'reports/mutation/changed-client/verdict.json'
+	],
+	browser: true
+};
+
+const requiredMutationSteps = [
+	securityMutationStep,
+	changedNodeMutationStep,
+	changedClientMutationStep
+];
+
+const fullMutationStep: GateStep = {
+	name: 'test:mutation:full',
+	purpose: 'Full mutation audit',
+	artifacts: [
+		'reports/mutation/full/scope.json',
+		'reports/mutation/full/mutation.json',
+		'reports/mutation/full/verdict.json'
+	],
 	browser: true
 };
 
@@ -122,7 +165,11 @@ const advisorySecuritySteps: GateStep[] = [
  */
 export const ciJobs = {
 	static: [...staticSteps, workflowStep],
-	unit: [coverageStep, mutationStep],
+	unit: [coverageStep],
+	'mutation-security': [securityMutationStep],
+	'mutation-node': [changedNodeMutationStep],
+	'mutation-client': [changedClientMutationStep],
+	'mutation-full': [fullMutationStep],
 	build: buildSteps,
 	e2e: [e2eStep],
 	security: blockingSecuritySteps,
@@ -154,13 +201,16 @@ export const tiers = {
 		...staticSteps,
 		workflowStep,
 		coverageStep,
-		mutationStep,
+		...requiredMutationSteps,
+		fullMutationStep,
 		...buildSteps,
 		e2eStep,
 		selfTestStep
 	],
 	/** Ring 4. The complete merge gate, and the exact set CI runs. */
 	ci: ciSteps,
+	/** Deterministic full-tree audit, run on main and cold on schedule. */
+	audit: [fullMutationStep],
 	/** Ring 5. Scheduled, non-deterministic scanners. */
 	nightly: advisorySecuritySteps
 } satisfies Record<string, GateStep[]>;

@@ -6,6 +6,38 @@ import adapterStatic from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 
+const testProjects = [
+	{
+		extends: './vite.config.ts',
+		test: {
+			name: 'client',
+			browser: {
+				enabled: true,
+				provider: playwright(),
+				instances: [{ browser: 'chromium' as const, headless: true }]
+			},
+			include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+			exclude: ['src/lib/server/**']
+		}
+	},
+	{
+		extends: './vite.config.ts',
+		test: {
+			name: 'server',
+			environment: 'node',
+			...(process.env.FIT_MUTATION_RUN ? { pool: 'threads' as const } : {}),
+			include: ['src/**/*.{test,spec}.{js,ts}', 'scripts/**/*.{test,spec}.ts'],
+			exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
+		}
+	}
+];
+
+const mutationProject = process.env.FIT_MUTATION_PROJECT;
+const selectedTestProjects =
+	mutationProject === 'server' || mutationProject === 'client'
+		? testProjects.filter(({ test }) => test.name === mutationProject)
+		: testProjects;
+
 export default defineConfig({
 	plugins: [
 		tailwindcss(),
@@ -51,30 +83,6 @@ export default defineConfig({
 			// well-covered file from masking an uncovered one.
 			thresholds: thresholds.coverage
 		},
-		projects: [
-			{
-				extends: './vite.config.ts',
-				test: {
-					name: 'client',
-					browser: {
-						enabled: true,
-						provider: playwright(),
-						instances: [{ browser: 'chromium', headless: true }]
-					},
-					include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
-					exclude: ['src/lib/server/**']
-				}
-			},
-
-			{
-				extends: './vite.config.ts',
-				test: {
-					name: 'server',
-					environment: 'node',
-					include: ['src/**/*.{test,spec}.{js,ts}'],
-					exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
-				}
-			}
-		]
+		projects: selectedTestProjects
 	}
 });

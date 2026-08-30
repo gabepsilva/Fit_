@@ -48,6 +48,10 @@ describe('passwordProblem', () => {
 		expect(passwordProblem('x'.repeat(129))).toBe('too-long');
 	});
 
+	it('accepts a password exactly at the bounded KDF input limit', () => {
+		expect(passwordProblem('x'.repeat(128))).toBeNull();
+	});
+
 	it('imposes no composition rules', () => {
 		expect(passwordProblem('aaaaaaaaaaaa')).toBeNull();
 	});
@@ -73,15 +77,53 @@ describe('hashPassword', () => {
 	});
 
 	it('rejects passwords outside the creation policy', async () => {
-		await expect(hashPassword('too short', CHEAP)).rejects.toThrow(RangeError);
-		await expect(hashPassword('x'.repeat(129), CHEAP)).rejects.toThrow(RangeError);
+		await expect(hashPassword('too short', CHEAP)).rejects.toThrow('password is too short');
+		await expect(hashPassword('x'.repeat(129), CHEAP)).rejects.toThrow('password is too long');
+	});
+
+	it('rejects non-string input with a precise programmer error', async () => {
+		await expect(hashPassword(undefined as unknown as string, CHEAP)).rejects.toThrow(
+			'password must be a string'
+		);
 	});
 
 	it('rejects costs that would be unsafe to derive', async () => {
-		await expect(hashPassword(PASSWORD, { n: 5000, r: 8, p: 1 })).rejects.toThrow(RangeError);
-		await expect(hashPassword(PASSWORD, { n: 2 ** 12, r: 33, p: 1 })).rejects.toThrow(RangeError);
-		await expect(hashPassword(PASSWORD, { n: 2 ** 17, r: 32, p: 1 })).rejects.toThrow(RangeError);
-		await expect(hashPassword(PASSWORD, { n: 2 ** 17, r: 8, p: 16 })).rejects.toThrow(RangeError);
+		for (const cost of [
+			{ n: 5000, r: 8, p: 1 },
+			{ n: 2 ** 12, r: 33, p: 1 },
+			{ n: 2 ** 17, r: 32, p: 1 },
+			{ n: 2 ** 17, r: 8, p: 16 }
+		]) {
+			await expect(hashPassword(PASSWORD, cost)).rejects.toThrow(
+				'scrypt cost is outside the supported bounds'
+			);
+		}
+	});
+
+	it('rejects malformed cost objects with the policy error', async () => {
+		for (const cost of [
+			null,
+			{ n: '4096', r: 8, p: 1 },
+			{ n: 4096.5, r: 8, p: 1 },
+			{ n: 4096, r: 0, p: 1 },
+			{ n: 4096, r: 8, p: 0 }
+		]) {
+			await expect(hashPassword(PASSWORD, cost as never)).rejects.toThrow(
+				'scrypt cost is outside the supported bounds'
+			);
+		}
+	});
+
+	it('accepts each individual cost parameter at its supported boundary', async () => {
+		await expect(hashPassword(PASSWORD, { n: 2 ** 17, r: 2, p: 1 })).resolves.toContain(
+			'scrypt$131072$2$1$'
+		);
+		await expect(hashPassword(PASSWORD, { n: 2 ** 12, r: 32, p: 1 })).resolves.toContain(
+			'scrypt$4096$32$1$'
+		);
+		await expect(hashPassword(PASSWORD, { n: 2 ** 12, r: 1, p: 16 })).resolves.toContain(
+			'scrypt$4096$1$16$'
+		);
 	});
 });
 
@@ -104,12 +146,19 @@ describe('verifyPassword', () => {
 	});
 
 	it('rejects a hash with the wrong number of fields', async () => {
+		const stored = await hashPassword(PASSWORD, CHEAP);
 		expect(await verifyPassword(PASSWORD, 'scrypt$4096$8$1$salt')).toBe(false);
+		expect(await verifyPassword(PASSWORD, `${stored}$extra`)).toBe(false);
 	});
 
 	it('rejects a hash from an algorithm it does not implement', async () => {
 		const stored = await hashPassword(PASSWORD, CHEAP);
 		expect(await verifyPassword(PASSWORD, stored.replace('scrypt', 'argon2id'))).toBe(false);
+	});
+
+	it('rejects text prefixed to an otherwise valid stored hash', async () => {
+		const stored = await hashPassword(PASSWORD, CHEAP);
+		expect(await verifyPassword(PASSWORD, `prefix${stored}`)).toBe(false);
 	});
 
 	it('rejects a cost low enough to be worth brute-forcing', async () => {
@@ -127,14 +176,50 @@ describe('verifyPassword', () => {
 		expect(await verifyPassword(PASSWORD, stored.replace('$4096$8$', '$4096$eight$'))).toBe(false);
 	});
 
+	it.each([
+		['n', '$4096$8$1$', '$nope$8$1$'],
+		['p', '$4096$8$1$', '$4096$8$nope$'],
+		['numeric prefix', '$4096$8$1$', '$4096suffix$8$1$'],
+		['numeric suffix', '$4096$8$1$', '$prefix4096$8$1$'],
+		['leading zero', '$4096$8$1$', '$04096$8$1$']
+	])('rejects a malformed %s cost field', async (_name, from, to) => {
+		const stored = await hashPassword(PASSWORD, CHEAP);
+		expect(await verifyPassword(PASSWORD, stored.replace(from, to))).toBe(false);
+	});
+
 	it('rejects a stored key of the wrong length without throwing', async () => {
-		// `timingSafeEqual` throws rather than returning false when the two buffers
-		// differ in length, so the length has to be checked before it is called.
+		// Reject this while parsing so malformed database data never reaches the KDF.
 		const stored = await hashPassword(PASSWORD, CHEAP);
 		const shortKey = Buffer.from('too short').toString('base64');
 		expect(
 			await verifyPassword(PASSWORD, `${stored.slice(0, stored.lastIndexOf('$'))}$${shortKey}`)
 		).toBe(false);
+	});
+
+	it('rejects a nonstandard salt length even when its key matches', async () => {
+		const salt = Buffer.alloc(17, 7);
+		const key = scryptSync(PASSWORD, salt, 32, {
+			N: CHEAP.n,
+			r: CHEAP.r,
+			p: CHEAP.p,
+			maxmem: 512 * 1024 * 1024
+		});
+		const stored = `scrypt$4096$8$1$${salt.toString('base64')}$${key.toString('base64')}`;
+		expect(await verifyPassword(PASSWORD, stored)).toBe(false);
+	});
+
+	it('rejects non-canonical salt text even when it decodes to the matching salt', async () => {
+		const salt = Buffer.alloc(16, 7);
+		const key = scryptSync(PASSWORD, salt, 32, {
+			N: CHEAP.n,
+			r: CHEAP.r,
+			p: CHEAP.p,
+			maxmem: 512 * 1024 * 1024
+		});
+		const canonical = salt.toString('base64');
+		const nonCanonical = `${canonical.slice(0, -1)} `;
+		const stored = `scrypt$4096$8$1$${nonCanonical}$${key.toString('base64')}`;
+		expect(await verifyPassword(PASSWORD, stored)).toBe(false);
 	});
 
 	it('rejects a non-power-of-two block size without deriving', async () => {
@@ -153,6 +238,13 @@ describe('verifyPassword', () => {
 		);
 	});
 
+	it('returns false when crypto refuses a policy-shaped stored cost', async () => {
+		const salt = Buffer.alloc(16, 7).toString('base64');
+		const key = Buffer.alloc(32, 7).toString('base64');
+		const stored = `scrypt$${2 ** 17}$1$1$${salt}$${key}`;
+		await expect(verifyPassword(PASSWORD, stored)).resolves.toBe(false);
+	});
+
 	it('rejects non-canonical base64 and wrong salt lengths without throwing', async () => {
 		const stored = await hashPassword(PASSWORD, CHEAP);
 		const [algorithm, n, r, p, salt, key] = stored.split('$');
@@ -165,12 +257,51 @@ describe('verifyPassword', () => {
 				[algorithm, n, r, p, Buffer.from('short').toString('base64'), key].join('$')
 			)
 		).toBe(false);
+		expect(
+			await verifyPassword(PASSWORD, [algorithm, n, r, p, salt, key?.replace(/=$/, '')].join('$'))
+		).toBe(false);
+	});
+
+	it('rejects empty salt and key fields', async () => {
+		const stored = await hashPassword(PASSWORD, CHEAP);
+		const [algorithm, n, r, p, salt, key] = stored.split('$');
+		expect(await verifyPassword(PASSWORD, [algorithm, n, r, p, '', key].join('$'))).toBe(false);
+		expect(await verifyPassword(PASSWORD, [algorithm, n, r, p, salt, ''].join('$'))).toBe(false);
 	});
 
 	it('returns false for oversized stored hashes and passwords rather than deriving', async () => {
 		const stored = await hashPassword(PASSWORD, CHEAP);
 		expect(await verifyPassword(PASSWORD, `${stored}${'x'.repeat(256)}`)).toBe(false);
 		expect(await verifyPassword('x'.repeat(129), stored)).toBe(false);
+	});
+
+	it('rejects an oversized password even when a legacy key matches it', async () => {
+		const password = 'x'.repeat(129);
+		expect(await verifyPassword(password, legacyHash(password))).toBe(false);
+	});
+
+	it('returns false for non-string passwords and stored hashes', async () => {
+		const stored = await hashPassword(PASSWORD, CHEAP);
+		expect(await verifyPassword(undefined as unknown as string, stored)).toBe(false);
+		expect(await verifyPassword(PASSWORD, null as unknown as string)).toBe(false);
+	});
+
+	it('does not coerce a binary database value into a valid stored credential', async () => {
+		const stored = await hashPassword(PASSWORD, CHEAP);
+		const binary = Buffer.from(stored);
+		await expect(verifyPassword(PASSWORD, binary as never)).resolves.toBe(false);
+		expect(passwordVerificationWork(binary as never, CHEAP)).toEqual({
+			verifyStored: false,
+			deriveTarget: true,
+			upgradeStored: false,
+			derivations: 1
+		});
+	});
+
+	it('verifies a password exactly at the bounded KDF input limit', async () => {
+		const password = 'x'.repeat(128);
+		const stored = await hashPassword(password, CHEAP);
+		expect(await verifyPassword(password, stored)).toBe(true);
 	});
 });
 
@@ -180,6 +311,7 @@ describe('passwordHashNeedsUpgrade', () => {
 		expect(passwordHashNeedsUpgrade(stored, CHEAP)).toBe(false);
 		expect(passwordHashNeedsUpgrade(stored, { ...CHEAP, n: 2 ** 13 })).toBe(true);
 		expect(passwordHashNeedsUpgrade(stored, { ...CHEAP, p: 2 })).toBe(true);
+		expect(passwordHashNeedsUpgrade(stored, { ...CHEAP, r: 16 })).toBe(true);
 	});
 
 	it('never upgrades a hash that is stronger or incomparable with the target', async () => {
@@ -187,6 +319,8 @@ describe('passwordHashNeedsUpgrade', () => {
 		const incomparable = await hashPassword(PASSWORD, { ...CHEAP, r: 16 });
 		expect(passwordHashNeedsUpgrade(stronger, CHEAP)).toBe(false);
 		expect(passwordHashNeedsUpgrade(incomparable, { ...CHEAP, n: 2 ** 13 })).toBe(false);
+		const strongerParallelism = await hashPassword(PASSWORD, { ...CHEAP, p: 2 });
+		expect(passwordHashNeedsUpgrade(strongerParallelism, CHEAP)).toBe(false);
 	});
 
 	it('does not call an unreadable hash upgradeable and rejects an unsafe target', () => {
@@ -195,9 +329,60 @@ describe('passwordHashNeedsUpgrade', () => {
 			RangeError
 		);
 	});
+
+	it('rejects unsafe targets before inspecting the stored hash', () => {
+		expect(() => passwordVerificationWork(null, { n: 5000, r: 8, p: 1 })).toThrow(
+			'scrypt cost is outside the supported bounds'
+		);
+	});
+
+	it('accepts the exact aggregate-work ceiling without starting a derivation', () => {
+		expect(passwordVerificationWork(null, { n: 2 ** 13, r: 32, p: 16 })).toEqual({
+			verifyStored: false,
+			deriveTarget: true,
+			upgradeStored: false,
+			derivations: 1
+		});
+	});
 });
 
 describe('passwordVerificationWork', () => {
+	it('accepts current policies with two-digit block-size and parallelism fields', async () => {
+		for (const cost of [
+			{ ...CHEAP, r: 16 },
+			{ ...CHEAP, r: 1, p: 16 }
+		]) {
+			const stored = await hashPassword(PASSWORD, cost);
+			expect(passwordVerificationWork(stored, cost)).toEqual({
+				verifyStored: true,
+				deriveTarget: false,
+				upgradeStored: false,
+				derivations: 1
+			});
+		}
+	});
+
+	it('pads malformed cost and salt fields instead of crashing or skipping target work', async () => {
+		const stored = await hashPassword(PASSWORD, CHEAP);
+		const [algorithm, n, r, p, , key] = stored.split('$');
+		const malformed = [
+			stored.replace(`$${n}$`, '$5000$'),
+			[algorithm, n, r, p, '!'.repeat(24), key].join('$')
+		];
+		for (const candidate of malformed) {
+			expect(passwordVerificationWork(candidate, CHEAP)).toEqual({
+				verifyStored: false,
+				deriveTarget: true,
+				upgradeStored: false,
+				derivations: 1
+			});
+			await expect(verifyPasswordAtPolicy(PASSWORD, candidate, CHEAP)).resolves.toEqual({
+				verified: false,
+				upgradeHash: null
+			});
+		}
+	});
+
 	it('bounds every policy case to at most two derivations', async () => {
 		const oldHash = await hashPassword(PASSWORD, CHEAP);
 		const target = { ...CHEAP, n: 2 ** 13 };

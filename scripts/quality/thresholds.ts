@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import process from 'node:process';
+import { parseMutationPolicy } from './mutation-types';
 
 /**
  * Guards the numbers that decide whether a gate passes. The suppression ratchet
@@ -33,12 +34,15 @@ function pick(source: Record<string, unknown>, key: string): Record<string, numb
 }
 
 const thresholds = await readJson('quality/thresholds.json');
+const mutationPolicy = parseMutationPolicy(await readJson('quality/mutation-policy.json'));
 const budgets = await readJson('quality/bundle-budgets.json');
 const duplication = await readJson('.jscpd.json');
 const suppressions = await readJson('quality/suppression-baseline.json');
 
 const coverage = pick(thresholds, 'coverage');
 const mutation = pick(thresholds, 'mutation');
+const mutationLimitDirection = (name: string): Direction =>
+	name.startsWith('max') ? 'max' : 'min';
 
 const guarded: Guarded[] = [
 	...Object.entries(coverage).map(([name, value]): Guarded => ({
@@ -53,6 +57,16 @@ const guarded: Guarded[] = [
 		direction: 'min',
 		source: 'quality/thresholds.json'
 	})),
+	...Object.entries(mutationPolicy)
+		.filter(([name]) => name !== 'version')
+		.flatMap(([policyName, limits]) =>
+			Object.entries(limits as Record<string, number>).map(([name, value]): Guarded => ({
+				key: `mutationPolicy.${policyName}.${name}`,
+				value,
+				direction: mutationLimitDirection(name),
+				source: 'quality/mutation-policy.json'
+			}))
+		),
 	...Object.entries(budgets).map(([name, value]): Guarded => ({
 		key: `bundle.${name}`,
 		value: value as number,
@@ -93,6 +107,11 @@ const baseline = JSON.parse(await readFile(baselinePath, 'utf8')) as Record<
 >;
 const weakened: string[] = [];
 const missing: string[] = [];
+
+for (const key of Object.keys(baseline)) {
+	if (!Object.hasOwn(current, key))
+		missing.push(`${key} is recorded but missing from current policy.`);
+}
 
 for (const { key, value, direction, source } of guarded) {
 	const recorded = baseline[key];

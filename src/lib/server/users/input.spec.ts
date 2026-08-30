@@ -26,5 +26,14 @@ describe('InputValidationError', () => {
 		const problem = { field: 'deviceLabel', code: 'too-long' } as const;
 		const error = new InputValidationError(problem);
 		expect(error).toMatchObject({ name: 'InputValidationError', problem });
+		expect(error.message).toBe('deviceLabel is too long');
+	});
+
+	it('turns a hyphenated problem code into a readable message', () => {
+		const error = new InputValidationError({
+			field: 'displayName',
+			code: 'unsafe-characters'
+		});
+		expect(error.message).toBe('displayName is unsafe characters');
 	});
 });

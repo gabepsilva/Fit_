@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { newId } from './ids';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -19,6 +19,19 @@ describe('newId', () => {
 
 	it('sets the RFC 9562 variant bits', () => {
 		expect(['8', '9', 'a', 'b']).toContain(newId().charAt(19));
+	});
+
+	it('overwrites random high bits with the RFC 9562 variant', () => {
+		const random = vi.spyOn(crypto, 'getRandomValues').mockImplementation((array) => {
+			new Uint8Array(array.buffer).fill(0xff);
+			return array;
+		});
+		try {
+			expect(newId(0).charAt(14)).toBe('7');
+			expect(newId(0).charAt(19)).toBe('b');
+		} finally {
+			random.mockRestore();
+		}
 	});
 
 	it('encodes the millisecond it was made', () => {

@@ -91,9 +91,9 @@ const MIGRATIONS = [
 
 /** Apply every migration the database has not run yet, and report the version. */
 export function migrate(db: DatabaseSync): number {
-	const row = db.prepare('pragma user_version').get();
-	const stored = row?.['user_version'];
-	const applied = typeof stored === 'number' ? stored : 0;
+	// SQLite guarantees one numeric row for this pragma.
+	const row = db.prepare('pragma user_version').get() as { user_version: number };
+	const applied = row.user_version;
 	if (applied > MIGRATIONS.length) {
 		throw new Error(
 			`database schema version ${applied} is newer than this server supports (${MIGRATIONS.length})`
@@ -118,26 +118,27 @@ export function migrate(db: DatabaseSync): number {
 
 const PRIVATE_DIRECTORY_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
+const MEMORY_DATABASE_PATH = ':memory:';
 
 function prepareDatabaseFile(path: string): void {
 	const directory = dirname(path);
 	const created = mkdirSync(directory, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
-	if (process.platform !== 'win32') {
-		if (created !== undefined) chmodSync(directory, PRIVATE_DIRECTORY_MODE);
-		else if ((statSync(directory).mode & 0o077) !== 0) {
-			throw new Error(`database directory must be private (0700): ${directory}`);
-		}
+	if (
+		process.platform !== 'win32' &&
+		created === undefined &&
+		(statSync(directory).mode & 0o077) !== 0
+	) {
+		throw new Error(`database directory must be private (0700): ${directory}`);
 	}
 	// Pre-existing journals may contain newer credential data than the main file;
 	// secure every known file before SQLite reads migrations or recovery state.
-	secureSQLiteFiles(path);
 	const descriptor = openSync(path, 'a', PRIVATE_FILE_MODE);
 	closeSync(descriptor);
-	chmodSync(path, PRIVATE_FILE_MODE);
 	secureSQLiteFiles(path);
 }
 
 function secureSQLiteFiles(path: string): void {
+	if (path === MEMORY_DATABASE_PATH) return;
 	for (const candidate of [path, `${path}-wal`, `${path}-shm`]) {
 		if (existsSync(candidate)) chmodSync(candidate, PRIVATE_FILE_MODE);
 	}
@@ -150,10 +151,14 @@ function secureSQLiteFiles(path: string): void {
  * regenerated wholesale by the ETL pipeline, so user rows kept in it would be
  * destroyed by the next rebuild.
  */
-export function openDatabase(path: string): DatabaseSync {
-	if (path !== ':memory:') prepareDatabaseFile(path);
-	const db = new DatabaseSync(path);
+export function openDatabase(
+	path: string,
+	create: (databasePath: string) => DatabaseSync = (databasePath) => new DatabaseSync(databasePath)
+): DatabaseSync {
+	if (path !== MEMORY_DATABASE_PATH) prepareDatabaseFile(path);
+	let db: DatabaseSync | undefined;
 	try {
+		db = create(path);
 		// SQLite defaults foreign keys off, and the setting is ignored inside a
 		// transaction — so it has to happen here, before the first migration runs.
 		db.exec('pragma foreign_keys = on');
@@ -161,23 +166,30 @@ export function openDatabase(path: string): DatabaseSync {
 		// Wait rather than fail when another connection holds the write lock.
 		db.exec('pragma busy_timeout = 5000');
 		migrate(db);
-		if (path !== ':memory:') secureSQLiteFiles(path);
+		secureSQLiteFiles(path);
 		return db;
 	} catch (error) {
-		try {
-			db.close();
-		} catch {
-			// Preserve the opening or migration failure that made this connection unsafe.
+		if (db) {
+			try {
+				db.close();
+			} catch {
+				// Preserve the opening or migration failure that made this connection unsafe.
+			}
 		}
-		if (path !== ':memory:') secureSQLiteFiles(path);
+		secureSQLiteFiles(path);
 		throw error;
 	}
 }
 
 let applicationDatabase: DatabaseSync | undefined;
 
+/** Resolve configuration separately so its default is testable without opening the singleton. */
+export function applicationDatabasePath(configured = process.env['FIT_DB_PATH']): string {
+	return configured ?? 'data/runtime/app.sqlite';
+}
+
 /** The process-wide application connection shared by hooks and future endpoints. */
 export function getDatabase(): DatabaseSync {
-	applicationDatabase ??= openDatabase(process.env['FIT_DB_PATH'] ?? 'data/runtime/app.sqlite');
+	applicationDatabase ??= openDatabase(applicationDatabasePath());
 	return applicationDatabase;
 }

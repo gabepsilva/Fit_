@@ -30,6 +30,7 @@ describe('createHandle', () => {
 		const input = handleInput(TOKEN);
 		const response = await createHandle(dependencies)(input);
 		expect(input.event.locals.auth).toBe(auth);
+		expect(input.event.cookies.get).toHaveBeenCalledWith('fit_session');
 		expect(await response.text()).toBe('resolved');
 	});
 

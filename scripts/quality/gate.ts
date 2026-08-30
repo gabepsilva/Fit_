@@ -4,11 +4,11 @@ import path from 'node:path';
 import process from 'node:process';
 import type { GateStep } from './gates';
 import { ciJobs, isCiJobName, isTierName, tiers } from './gates';
+import { gateLogDirectory, gateReportPath } from './gate-paths';
 import { captureStatus } from '../security/shared';
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
 const reportDirectory = path.join(projectRoot, 'reports', 'quality');
-const logDirectory = path.join(reportDirectory, 'logs');
 const failureLogLines = 60;
 
 interface StepResult {
@@ -69,7 +69,7 @@ interface StepRun {
 	output: string;
 }
 
-async function runStep(step: GateStep, stream: boolean): Promise<StepRun> {
+async function runStep(step: GateStep, stream: boolean, logDirectory: string): Promise<StepRun> {
 	const logPath = path.join(logDirectory, `${step.name.replace(/:/g, '-')}.log`);
 	const startedAt = Date.now();
 	const { exitCode, output } = await captureStatus('bun', ['run', step.name], {
@@ -121,6 +121,7 @@ const selected = planned.filter(
 );
 if (selected.length === 0) throw new Error(`No steps matched --only ${options.only.join(',')}.`);
 const label = options.job === null ? options.tier : `${options.tier}-${options.job}`;
+const logDirectory = gateLogDirectory(reportDirectory, label);
 
 await rm(logDirectory, { recursive: true, force: true });
 await mkdir(logDirectory, { recursive: true });
@@ -133,7 +134,7 @@ const failureOutput = new Map<string, string>();
 console.log(`Gate ${label}: ${selected.length} steps, run to completion.\n`);
 
 for (const step of selected) {
-	const { result, output } = await runStep(step, options.stream);
+	const { result, output } = await runStep(step, options.stream, logDirectory);
 	results.push(result);
 	if (!result.ok) failureOutput.set(result.name, output);
 	console.log(
@@ -155,10 +156,7 @@ const report = {
 	steps: results
 };
 
-await writeFile(
-	path.join(reportDirectory, `gate-${label.replace(/:/g, '-')}.json`),
-	`${JSON.stringify(report, null, 2)}\n`
-);
+await writeFile(gateReportPath(reportDirectory, label), `${JSON.stringify(report, null, 2)}\n`);
 
 for (const result of failed) printFailure(result, failureOutput.get(result.name) ?? '');
 

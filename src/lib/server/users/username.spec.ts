@@ -22,6 +22,11 @@ describe('usernameProblem', () => {
 		expect(usernameProblem('jordan')).toBeNull();
 	});
 
+	it('accepts names exactly at both normalized length boundaries', () => {
+		expect(usernameProblem('abc')).toBeNull();
+		expect(usernameProblem('a'.repeat(32))).toBeNull();
+	});
+
 	it('accepts the separators people actually type', () => {
 		expect(usernameProblem('jordan.p_2-b')).toBeNull();
 	});
@@ -39,7 +44,14 @@ describe('usernameProblem', () => {
 	});
 
 	it('rejects raw input beyond the normalization limit', () => {
-		expect(usernameProblem('j'.repeat(129))).toBe('too-long');
+		// Trimming would make this valid, so this specifically proves that the raw
+		// allocation bound runs before normalization rather than being redundant
+		// with the normalized 32-character limit.
+		expect(usernameProblem(`${' '.repeat(126)}abc`)).toBe('too-long');
+	});
+
+	it('allows the raw-input limit when normalization safely shrinks it', () => {
+		expect(usernameProblem(`${' '.repeat(125)}abc`)).toBeNull();
 	});
 
 	it('rejects a separator in the leading position', () => {

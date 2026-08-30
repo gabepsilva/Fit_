@@ -1,0 +1,82 @@
+{
+	"version": 1,
+	"entries": [
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": { "end": { "column": 24, "line": 128 }, "start": { "column": 3, "line": 127 } },
+			"sourceHash": "51ee5df7b71ce0d7f79398293b1f142b9a3a090f8e57e0cfb49ee12bfd1f4ac9",
+			"fingerprint": "9460f92beac95a991ade88ed2d454911600a01a09a7a1ea2e0804ba62721daec",
+			"classification": "host-specific-defense-in-depth",
+			"rationale": "On POSIX, a newly created directory is already restricted by mode 0700; for an existing directory mkdirSync returns undefined, so this composite replacement cannot change the observable permission verdict.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "LogicalOperator",
+			"replacement": "process.platform !== 'win32' || created === undefined",
+			"location": { "end": { "column": 24, "line": 128 }, "start": { "column": 3, "line": 127 } },
+			"sourceHash": "51ee5df7b71ce0d7f79398293b1f142b9a3a090f8e57e0cfb49ee12bfd1f4ac9",
+			"fingerprint": "7b31428a7afb54828051ecc6636c0f15b6b7dad13e2b79bc900af1f4255382ba",
+			"classification": "host-specific-defense-in-depth",
+			"rationale": "On POSIX, the OR differs only for a newly created directory, whose requested 0700 mode already makes the outer permission check false; existing directories take the same branch.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": { "end": { "column": 31, "line": 127 }, "start": { "column": 3, "line": 127 } },
+			"sourceHash": "51ee5df7b71ce0d7f79398293b1f142b9a3a090f8e57e0cfb49ee12bfd1f4ac9",
+			"fingerprint": "c39ae43cd1edf4dba5b410a739a1b3856c03f37100951550ca54d2129cfe2b97",
+			"classification": "host-specific-defense-in-depth",
+			"rationale": "This platform guard is always true on the Linux host where POSIX permission enforcement and this mutation are observable; Windows deliberately does not implement POSIX mode enforcement.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"\"",
+			"location": { "end": { "column": 31, "line": 127 }, "start": { "column": 24, "line": 127 } },
+			"sourceHash": "51ee5df7b71ce0d7f79398293b1f142b9a3a090f8e57e0cfb49ee12bfd1f4ac9",
+			"fingerprint": "c2cea3202d965d0e333827a91744703cdf1504da8817ddd5d3b6749a4fcd2cd7",
+			"classification": "host-specific-defense-in-depth",
+			"rationale": "Changing the Windows platform sentinel to this exact empty string is observationally identical on the Linux security-test host; the classification is host-specific and fingerprinted to this replacement.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": { "end": { "column": 24, "line": 128 }, "start": { "column": 3, "line": 128 } },
+			"sourceHash": "51ee5df7b71ce0d7f79398293b1f142b9a3a090f8e57e0cfb49ee12bfd1f4ac9",
+			"fingerprint": "7dc9a615eb09505935ce33da7c7ccc5d8a7e6e220bdd611209ea98c484837f8c",
+			"classification": "equivalent",
+			"rationale": "mkdirSync returns undefined for an existing directory; a newly created directory receives mode 0700, so forcing this condition true cannot change the outer permission verdict.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": { "end": { "column": 9, "line": 172 }, "start": { "column": 7, "line": 172 } },
+			"sourceHash": "51ee5df7b71ce0d7f79398293b1f142b9a3a090f8e57e0cfb49ee12bfd1f4ac9",
+			"fingerprint": "cd057890a7895fbd1535e46f5412b2a6c00ae0e4c81930f3295e9c605b57d8aa",
+			"classification": "equivalent",
+			"rationale": "When database creation fails before assignment, forcing the db guard true only throws inside the deliberately swallowing close-error try/catch; the original opening error and file-hardening behavior remain identical.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/users/password.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"Stryker was here!\"",
+			"location": { "end": { "column": 60, "line": 154 }, "start": { "column": 58, "line": 154 } },
+			"sourceHash": "1b37c84252c96c8bd8c98c48ea77930a16866d7345460c553afc33980fd090f1",
+			"fingerprint": "12d7ff5caa02c918a8c3b08e05e0aa2ee3dd1bf5aad18765eeb54e0bedfaa444",
+			"classification": "equivalent",
+			"rationale": "For a non-string stored credential, both the empty fallback and this exact replacement fail the anchored fixed-width serialized-hash grammar before any derivation or authentication.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		}
+	]
+}
