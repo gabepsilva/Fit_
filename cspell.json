@@ -101,6 +101,8 @@
 		"Trivy",
 		"unlogged",
 		"unparseable",
+		"unrun",
+		"unstub",
 		"untick",
 		"viewports",
 		"Vitest",

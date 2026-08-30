@@ -358,7 +358,7 @@
 			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
 			"fingerprint": "b65697901e6a066db9d4d4c64b945fe1659f00a154d7b09f860c4bca431ad1be",
 			"classification": "equivalent",
-			"rationale": "The object this builds is only ever handed to `JSON.stringify`, which omits a property whose value is `undefined`. Assigning the undefined entry rather than skipping it serialises to the same request body byte for byte.",
+			"rationale": "The object this builds is only ever handed to `JSON.stringify`, which omits a property whose value is `undefined`. Assigning the undefined entry rather than skipping it serializes to the same request body byte for byte.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		},
 		{

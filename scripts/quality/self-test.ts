@@ -26,6 +26,12 @@ const excluded = [
 	'./test-results',
 	'./playwright-report',
 	'./.stryker-tmp',
+	// The nutrition ETL pipeline: gigabytes of Python environment, data extracts
+	// and the food database, and gitignored rather than absent. Each fixture gets
+	// its own copy of this template, so copying it in exhausts the tmpfs holding
+	// the workspace before a single fixture runs. `stryker.config.mjs` ignores it
+	// for the same reason.
+	'./data',
 	'./.security-cache/images',
 	'./.security-cache/trivy'
 ];
