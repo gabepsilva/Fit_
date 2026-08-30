@@ -25,9 +25,28 @@ await mkdir(path.dirname(reportPath), { recursive: true });
 
 // ESLint accepts one formatter per run. Emit the machine-readable one and
 // render it for humans here, so a single run serves both audiences.
+//
+// Type-aware linting is the slowest static gate because every worker builds its
+// own TypeScript program. `auto` spends that cost only where it pays: ESLint
+// runs ceil(files / 50) workers, capped at half the host's cores, so a developer
+// box parallelises and a 4-vCPU CI runner stays at two. A hardcoded thread count
+// would be tuned for one of those and wrong on the other. Measured here at 218
+// files: off 98.5s/1.4GB, auto 18.7s/4.9GB, 8 threads 15.6s/7.1GB, 28 threads
+// 28.8s/18.0GB -- past the turnover, extra workers cost more than they save.
+// Findings are identical across all four; concurrency changes timing, not the verdict.
 const { exitCode } = await captureStatus(
 	path.join(projectRoot, 'node_modules', '.bin', 'eslint'),
-	['.', '--max-warnings', '0', '--format', 'json', '--output-file', reportPath],
+	[
+		'.',
+		'--max-warnings',
+		'0',
+		'--concurrency',
+		'auto',
+		'--format',
+		'json',
+		'--output-file',
+		reportPath
+	],
 	{ stream: true }
 );
 
