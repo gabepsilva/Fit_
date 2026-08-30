@@ -9,7 +9,8 @@ import type { Auth, Session } from './types';
 const TOKEN_BYTES = 32;
 const LIFETIME_MS = 90 * 24 * 60 * 60 * 1000;
 export const LAST_SEEN_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
-const MAX_DEVICE_LABEL_LENGTH = 100;
+/** Exported so an endpoint can reject a label before it does the work a session follows. */
+export const MAX_DEVICE_LABEL_LENGTH = 100;
 
 /**
  * Sessions are rows, not signed tokens.
