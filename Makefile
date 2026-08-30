@@ -11,6 +11,12 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 GATE := bun scripts/quality/gate.ts
 
+# Capacitor installs through native-run, which looks for the SDK in the
+# environment rather than in android/local.properties the way Gradle does. Read
+# it back from the file that already records it, so the path is stated once and
+# `make android` does not depend on what a particular shell exports.
+ANDROID_SDK := $(shell sed -n 's/^sdk\.dir=//p' android/local.properties 2>/dev/null)
+
 .PHONY: help fast verify deep ci ci-static ci-unit ci-security ci-browser dev android android-build test lint format clean
 
 help: ## Show this list
@@ -49,7 +55,8 @@ dev: ## Run the app with hot reload on http://localhost:5173
 	@bun run dev
 
 android: ## Build the web assets and run the app on a connected device
-	@bun run android:run
+	@test -n '$(ANDROID_SDK)' || { echo 'No sdk.dir in android/local.properties — open the project in Android Studio once, or write it by hand.'; exit 1; }
+	@ANDROID_HOME='$(ANDROID_SDK)' bun run android:run
 
 android-build: ## Build the web assets and sync them into the native project
 	@bun run android:sync

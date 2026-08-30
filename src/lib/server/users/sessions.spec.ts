@@ -3,7 +3,13 @@ import type { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../db';
 import { registerAccount } from './accounts';
-import { createSession, endAllSessions, endSession, resolveSession } from './sessions';
+import {
+	createSession,
+	endAllSessions,
+	endSession,
+	LAST_SEEN_UPDATE_INTERVAL_MS,
+	resolveSession
+} from './sessions';
 import type { Account } from './types';
 
 /** See the note in `password.spec.ts`: the production cost is too slow to test at. */
@@ -26,7 +32,7 @@ beforeEach(async () => {
 		},
 		CHEAP
 	);
-	if (!result.ok) throw new Error(`registration failed: ${result.problem}`);
+	if (!result.ok) throw new Error(`registration failed: ${JSON.stringify(result.problem)}`);
 	account = result.account;
 });
 
@@ -60,6 +66,24 @@ describe('createSession', () => {
 	it('mints a different token every time', () => {
 		const first = createSession(db, account.id, null, NOW).token;
 		expect(createSession(db, account.id, null, NOW).token).not.toBe(first);
+	});
+
+	it('rejects an oversized device label before issuing a session', () => {
+		expect(() => createSession(db, account.id, 'x'.repeat(101), NOW)).toThrow(
+			expect.objectContaining({
+				problem: { field: 'deviceLabel', code: 'too-long' }
+			})
+		);
+		expect(db.prepare('select count(*) as n from session').get()?.['n']).toBe(0);
+	});
+
+	it('rejects a device label containing unsafe directional controls', () => {
+		expect(() => createSession(db, account.id, 'Pixel\u202E8', NOW)).toThrow(
+			expect.objectContaining({
+				problem: { field: 'deviceLabel', code: 'unsafe-characters' }
+			})
+		);
+		expect(db.prepare('select count(*) as n from session').get()?.['n']).toBe(0);
 	});
 });
 
@@ -103,6 +127,17 @@ describe('resolveSession', () => {
 		const later = new Date('2026-09-01T09:00:00.000Z');
 		resolveSession(db, token, later);
 		expect(storedFor(token)?.['last_seen_at']).toBe(later.toISOString());
+	});
+
+	it('throttles last-seen writes and refreshes exactly at the interval boundary', () => {
+		const { token } = createSession(db, account.id, null, NOW);
+		const beforeBoundary = new Date(NOW.getTime() + LAST_SEEN_UPDATE_INTERVAL_MS - 1);
+		resolveSession(db, token, beforeBoundary);
+		expect(storedFor(token)?.['last_seen_at']).toBe(NOW.toISOString());
+
+		const boundary = new Date(NOW.getTime() + LAST_SEEN_UPDATE_INTERVAL_MS);
+		resolveSession(db, token, boundary);
+		expect(storedFor(token)?.['last_seen_at']).toBe(boundary.toISOString());
 	});
 });
 

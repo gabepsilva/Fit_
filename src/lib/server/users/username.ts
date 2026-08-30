@@ -4,6 +4,9 @@ export type UsernameProblem = 'too-short' | 'too-long' | 'unsupported-characters
 const MIN_LENGTH = 3;
 const MAX_LENGTH = 32;
 
+/** Bound untrusted input before Unicode normalization can allocate an expanded string. */
+const MAX_RAW_USERNAME_LENGTH = 128;
+
 /**
  * ASCII letters, digits, and the three separators people actually type. The
  * restriction is deliberate: a name spelled with a Cyrillic о is a
@@ -24,6 +27,7 @@ export function normalizeUsername(username: string): string {
 
 /** `null` when the normalized username is usable, otherwise the reason it is not. */
 export function usernameProblem(username: string): UsernameProblem | null {
+	if (username.length > MAX_RAW_USERNAME_LENGTH) return 'too-long';
 	const normalized = normalizeUsername(username);
 	if (normalized.length < MIN_LENGTH) return 'too-short';
 	if (normalized.length > MAX_LENGTH) return 'too-long';

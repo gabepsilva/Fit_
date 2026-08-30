@@ -1,8 +1,15 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { transaction } from '../db';
 import { newId } from './ids';
-import { hashPassword, OWASP_SCRYPT, passwordProblem, verifyPassword } from './password';
-import type { PasswordProblem } from './password';
+import {
+	hashPassword,
+	MAX_PASSWORD_LENGTH,
+	OWASP_SCRYPT,
+	passwordProblem,
+	verifyPasswordAtPolicy
+} from './password';
+import type { PasswordProblem, ScryptCost } from './password';
+import { storedTextProblem } from './input';
+import type { StoredTextProblem } from './input';
 import { text } from './rows';
 import type { Account, Membership } from './types';
 import { normalizeUsername, usernameProblem } from './username';
@@ -16,8 +23,32 @@ export type Registration = {
 };
 
 export type RegistrationResult =
-	| { ok: true; account: Account }
-	| { ok: false; problem: UsernameProblem | PasswordProblem | 'username-taken' };
+	{ ok: true; account: Account } | { ok: false; problem: RegistrationProblem };
+
+type RegistrationProblem =
+	| { field: 'username'; code: UsernameProblem | 'taken' }
+	| { field: 'password'; code: PasswordProblem }
+	| StoredTextProblem;
+
+export type AuthenticationOptions = {
+	cost?: ScryptCost;
+	now?: Date;
+};
+
+/** Names are stored verbatim, so reject oversize input before trimming or persistence. */
+const MAX_DISPLAY_NAME_LENGTH = 100;
+const MAX_HOUSEHOLD_NAME_LENGTH = 100;
+
+function registrationProblem(input: Registration): RegistrationProblem | null {
+	const username = usernameProblem(input.username);
+	if (username) return { field: 'username', code: username };
+	const password = passwordProblem(input.password);
+	if (password) return { field: 'password', code: password };
+	return (
+		storedTextProblem(input.displayName, 'displayName', MAX_DISPLAY_NAME_LENGTH) ??
+		storedTextProblem(input.householdName, 'householdName', MAX_HOUSEHOLD_NAME_LENGTH)
+	);
+}
 
 /** SQLITE_CONSTRAINT_UNIQUE. Matched on the code, because the message text is not API. */
 const SQLITE_CONSTRAINT_UNIQUE = 2067;
@@ -67,9 +98,9 @@ export async function registerAccount(
 	cost = OWASP_SCRYPT,
 	now = new Date()
 ): Promise<RegistrationResult> {
-	const username = normalizeUsername(input.username);
-	const problem = usernameProblem(username) ?? passwordProblem(input.password);
+	const problem = registrationProblem(input);
 	if (problem) return { ok: false, problem };
+	const username = normalizeUsername(input.username);
 	const passwordHash = await hashPassword(input.password, cost);
 	const displayName = input.displayName.trim() || username;
 	const account: Account = {
@@ -79,12 +110,17 @@ export async function registerAccount(
 		createdAt: now.toISOString()
 	};
 	const householdName = input.householdName.trim() || displayName;
+	db.exec('begin');
 	try {
-		transaction(db, () => insertAccount(db, account, passwordHash, householdName));
+		insertAccount(db, account, passwordHash, householdName);
+		db.exec('commit');
 	} catch (error) {
+		db.exec('rollback');
 		// The unique index on `username` is what decides this, not a prior SELECT:
 		// two sign-ups racing for the same name would both pass the check.
-		if (isUsernameTaken(error)) return { ok: false, problem: 'username-taken' };
+		if (isUsernameTaken(error)) {
+			return { ok: false, problem: { field: 'username', code: 'taken' } };
+		}
 		throw error;
 	}
 	return { ok: true, account };
@@ -101,18 +137,31 @@ export async function authenticate(
 	db: DatabaseSync,
 	username: string,
 	password: string,
-	cost = OWASP_SCRYPT
+	options: AuthenticationOptions = {}
 ): Promise<Account | null> {
+	const cost = options.cost ?? OWASP_SCRYPT;
+	const now = options.now ?? new Date();
+	// Do not normalize arbitrarily large text or hand it to a KDF. A too-short
+	// password is still verified below, so it does not reveal whether an account exists.
+	if (usernameProblem(username) || password.length > MAX_PASSWORD_LENGTH) return null;
+	const normalizedUsername = normalizeUsername(username);
 	const row = db
 		.prepare(
 			'select id, username, display_name, password_hash, created_at from account where username = ?'
 		)
-		.get(normalizeUsername(username));
+		.get(normalizedUsername);
 	if (!row) {
-		await hashPassword(password, cost);
+		await verifyPasswordAtPolicy(password, null, cost);
 		return null;
 	}
-	if (!(await verifyPassword(password, text(row, 'password_hash')))) return null;
+	const storedHash = text(row, 'password_hash');
+	const verification = await verifyPasswordAtPolicy(password, storedHash, cost);
+	if (!verification.verified) return null;
+	if (verification.upgradeHash) {
+		db.prepare(
+			'update account set password_hash = ?, updated_at = ? where id = ? and password_hash = ?'
+		).run(verification.upgradeHash, now.toISOString(), text(row, 'id'), storedHash);
+	}
 	return {
 		id: text(row, 'id'),
 		username: text(row, 'username'),

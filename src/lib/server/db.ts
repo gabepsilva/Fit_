@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -55,10 +55,25 @@ const MIGRATIONS = [
 		-- tables rather than one.
 		account_id   text references account (id) on delete set null,
 		name         text not null,
-		created_at   text not null
+		created_at   text not null,
+		-- A signed-in profile belongs to a membership, not merely to an account
+		-- and an unrelated household that each happen to exist.
+		foreign key (household_id, account_id)
+			references membership (household_id, account_id),
+		unique (household_id, account_id)
 	) strict;
 
 	create index profile_by_household on profile (household_id);
+
+	-- Removing login access does not delete the person or their health history.
+	-- Unlink the profile before the composite membership foreign key is checked.
+	create trigger membership_unlink_profile_before_delete
+	before delete on membership
+	begin
+		update profile
+		set account_id = null
+		where household_id = old.household_id and account_id = old.account_id;
+	end;
 
 	create table session (
 		id           text primary key,
@@ -74,38 +89,58 @@ const MIGRATIONS = [
 	`
 ];
 
-/**
- * Run `work` inside one SQLite transaction. Anything thrown rolls the whole
- * thing back, so a half-registered account cannot survive a failure partway
- * through the four rows it takes to create one.
- */
-export function transaction<T>(db: DatabaseSync, work: () => T): T {
-	db.exec('begin');
-	try {
-		const result = work();
-		db.exec('commit');
-		return result;
-	} catch (error) {
-		db.exec('rollback');
-		throw error;
-	}
-}
-
 /** Apply every migration the database has not run yet, and report the version. */
 export function migrate(db: DatabaseSync): number {
 	const row = db.prepare('pragma user_version').get();
 	const stored = row?.['user_version'];
 	const applied = typeof stored === 'number' ? stored : 0;
+	if (applied > MIGRATIONS.length) {
+		throw new Error(
+			`database schema version ${applied} is newer than this server supports (${MIGRATIONS.length})`
+		);
+	}
 	for (const [index, sql] of MIGRATIONS.entries()) {
 		if (index < applied) continue;
-		transaction(db, () => {
+		db.exec('begin');
+		try {
 			db.exec(sql);
 			// `pragma` accepts no bound parameters. The value is an index into a
 			// literal array in this file, so no caller can reach it.
 			db.exec(`pragma user_version = ${index + 1}`);
-		});
+			db.exec('commit');
+		} catch (error) {
+			db.exec('rollback');
+			throw error;
+		}
 	}
-	return Math.max(applied, MIGRATIONS.length);
+	return MIGRATIONS.length;
+}
+
+const PRIVATE_DIRECTORY_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
+
+function prepareDatabaseFile(path: string): void {
+	const directory = dirname(path);
+	const created = mkdirSync(directory, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
+	if (process.platform !== 'win32') {
+		if (created !== undefined) chmodSync(directory, PRIVATE_DIRECTORY_MODE);
+		else if ((statSync(directory).mode & 0o077) !== 0) {
+			throw new Error(`database directory must be private (0700): ${directory}`);
+		}
+	}
+	// Pre-existing journals may contain newer credential data than the main file;
+	// secure every known file before SQLite reads migrations or recovery state.
+	secureSQLiteFiles(path);
+	const descriptor = openSync(path, 'a', PRIVATE_FILE_MODE);
+	closeSync(descriptor);
+	chmodSync(path, PRIVATE_FILE_MODE);
+	secureSQLiteFiles(path);
+}
+
+function secureSQLiteFiles(path: string): void {
+	for (const candidate of [path, `${path}-wal`, `${path}-shm`]) {
+		if (existsSync(candidate)) chmodSync(candidate, PRIVATE_FILE_MODE);
+	}
 }
 
 /**
@@ -116,14 +151,33 @@ export function migrate(db: DatabaseSync): number {
  * destroyed by the next rebuild.
  */
 export function openDatabase(path: string): DatabaseSync {
-	if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+	if (path !== ':memory:') prepareDatabaseFile(path);
 	const db = new DatabaseSync(path);
-	// SQLite defaults foreign keys off, and the setting is ignored inside a
-	// transaction — so it has to happen here, before the first migration runs.
-	db.exec('pragma foreign_keys = on');
-	db.exec('pragma journal_mode = wal');
-	// Wait rather than fail when another connection holds the write lock.
-	db.exec('pragma busy_timeout = 5000');
-	migrate(db);
-	return db;
+	try {
+		// SQLite defaults foreign keys off, and the setting is ignored inside a
+		// transaction — so it has to happen here, before the first migration runs.
+		db.exec('pragma foreign_keys = on');
+		db.exec('pragma journal_mode = wal');
+		// Wait rather than fail when another connection holds the write lock.
+		db.exec('pragma busy_timeout = 5000');
+		migrate(db);
+		if (path !== ':memory:') secureSQLiteFiles(path);
+		return db;
+	} catch (error) {
+		try {
+			db.close();
+		} catch {
+			// Preserve the opening or migration failure that made this connection unsafe.
+		}
+		if (path !== ':memory:') secureSQLiteFiles(path);
+		throw error;
+	}
+}
+
+let applicationDatabase: DatabaseSync | undefined;
+
+/** The process-wide application connection shared by hooks and future endpoints. */
+export function getDatabase(): DatabaseSync {
+	applicationDatabase ??= openDatabase(process.env['FIT_DB_PATH'] ?? 'data/runtime/app.sqlite');
+	return applicationDatabase;
 }

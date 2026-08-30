@@ -38,6 +38,10 @@ describe('usernameProblem', () => {
 		expect(usernameProblem('j'.repeat(33))).toBe('too-long');
 	});
 
+	it('rejects raw input beyond the normalization limit', () => {
+		expect(usernameProblem('j'.repeat(129))).toBe('too-long');
+	});
+
 	it('rejects a separator in the leading position', () => {
 		expect(usernameProblem('.jordan')).toBe('unsupported-characters');
 	});

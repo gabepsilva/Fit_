@@ -2,11 +2,14 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { membershipsFor } from './accounts';
 import { newId } from './ids';
+import { InputValidationError, storedTextProblem } from './input';
 import { text } from './rows';
 import type { Auth, Session } from './types';
 
 const TOKEN_BYTES = 32;
 const LIFETIME_MS = 90 * 24 * 60 * 60 * 1000;
+export const LAST_SEEN_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
+const MAX_DEVICE_LABEL_LENGTH = 100;
 
 /**
  * Sessions are rows, not signed tokens.
@@ -34,6 +37,11 @@ export function createSession(
 	deviceLabel: string | null = null,
 	now = new Date()
 ): { token: string; session: Session } {
+	const problem =
+		deviceLabel === null
+			? null
+			: storedTextProblem(deviceLabel, 'deviceLabel', MAX_DEVICE_LABEL_LENGTH);
+	if (problem) throw new InputValidationError(problem);
 	const token = randomBytes(TOKEN_BYTES).toString('base64url');
 	const stamp = now.toISOString();
 	const session: Session = {
@@ -53,7 +61,8 @@ export function resolveSession(db: DatabaseSync, token: string, now = new Date()
 	const tokenHash = hashToken(token);
 	const row = db
 		.prepare(
-			`select s.id as session_id, s.expires_at, a.id as account_id, a.username,
+			`select s.id as session_id, s.expires_at, s.last_seen_at,
+			        a.id as account_id, a.username,
 			        a.display_name, a.created_at
 			 from session s
 			 join account a on a.id = s.account_id
@@ -71,7 +80,14 @@ export function resolveSession(db: DatabaseSync, token: string, now = new Date()
 		db.prepare('delete from session where token_hash = ?').run(tokenHash);
 		return null;
 	}
-	db.prepare('update session set last_seen_at = ? where token_hash = ?').run(stamp, tokenHash);
+	// Keep authenticated reads read-only in the common case. The predicate makes
+	// the throttle atomic when several requests resolve the same session together.
+	const refreshBefore = new Date(now.getTime() - LAST_SEEN_UPDATE_INTERVAL_MS).toISOString();
+	if (text(row, 'last_seen_at') <= refreshBefore) {
+		db.prepare(
+			'update session set last_seen_at = ? where token_hash = ? and last_seen_at <= ?'
+		).run(stamp, tokenHash, refreshBefore);
+	}
 	const accountId = text(row, 'account_id');
 	return {
 		account: {

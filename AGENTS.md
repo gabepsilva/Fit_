@@ -13,17 +13,24 @@ iOS shell and no Tauri.
 
 ## Current phase: front end in place, backend started at the users module
 
-The product UI is in: six routes (today, catalog, plan, progress, exercise, profile),
-onboarding, and the logging flow. It is a port of an earlier React prototype, rebuilt in
-Svelte 5. Navigation is a side drawer opened from the top bar, not a bottom bar.
+The product UI is in: the six nutrition destinations (today, catalog, plan, progress,
+exercise, profile), onboarding, the logging flow, and the exercise tab's own eight screens.
+It is a port of two design sources — an earlier React prototype for the nutrition side, and
+a screen-flow prototype for exercise — rebuilt in Svelte 5. Navigation is a side drawer
+opened from the top bar, not a bottom bar.
 
-Exercise is a placeholder on purpose: the destination exists and the route renders a
-"coming soon" page. Calorie tracking is one feature among several that will live beside
-it, so do not treat the empty page as an oversight to fill in unasked.
+Exercise is its own small application under `/exercise`: the rotation of routines and
+today's session, the running session and its summary, the routine sheet and builder with an
+exercise library, a month and year planner, and training progress. A week of the plan names
+one routine, and that routine's frequency decides which days of the week it lands on —
+every screen that assigns a week follows that rule. Nothing on those screens is seeded
+demo data: with no finished workouts, progress and "last time" say so rather than showing
+numbers nobody lifted.
 
 - `src/lib/domain/` is framework-free TypeScript: the food catalog, recipes, the adaptive
-  TDEE model, the on-device text parser, import and export. Tested by the `server` vitest
-  project, in Node.
+  TDEE model, the on-device text parser, import and export, and the training side —
+  `exercise-catalog`, `exercises`, `workout`, `training-plan`, `training-progress`. Tested
+  by the `server` vitest project, in Node.
 - `src/lib/state/tend.svelte.ts` is the single rune-backed store. It persists to
   `localStorage` behind an explicit `hydrate()`, so a server render never touches it.
 - `src/lib/components/` and `src/lib/ui/` are the Svelte components, on Tailwind 4 and

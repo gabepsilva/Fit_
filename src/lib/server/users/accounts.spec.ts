@@ -1,13 +1,26 @@
+import { scryptSync } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../db';
 import { authenticate, membershipsFor, registerAccount } from './accounts';
 import type { Registration } from './accounts';
+import { hashPassword } from './password';
 
 /** See the note in `password.spec.ts`: the production cost is too slow to test at. */
 const CHEAP = { n: 2 ** 12, r: 8, p: 1 };
 
 const PASSWORD = 'correct horse battery staple';
+
+function legacyHash(password: string): string {
+	const salt = Buffer.alloc(16, 7);
+	const key = scryptSync(password, salt, 32, {
+		N: CHEAP.n,
+		r: CHEAP.r,
+		p: CHEAP.p,
+		maxmem: 512 * 1024 * 1024
+	});
+	return `scrypt$${CHEAP.n}$${CHEAP.r}$${CHEAP.p}$${salt.toString('base64')}$${key.toString('base64')}`;
+}
 
 const DEFAULTS: Registration = {
 	username: 'jordan',
@@ -24,7 +37,7 @@ beforeEach(() => {
 
 async function register(overrides: Partial<Registration> = {}) {
 	const result = await registerAccount(db, { ...DEFAULTS, ...overrides }, CHEAP);
-	if (!result.ok) throw new Error(`registration failed: ${result.problem}`);
+	if (!result.ok) throw new Error(`registration failed: ${JSON.stringify(result.problem)}`);
 	return result.account;
 }
 
@@ -87,24 +100,64 @@ describe('registerAccount', () => {
 
 	it('reports an unusable username', async () => {
 		const result = await registerAccount(db, { ...DEFAULTS, username: 'jo' }, CHEAP);
-		expect(result).toEqual({ ok: false, problem: 'too-short' });
+		expect(result).toEqual({
+			ok: false,
+			problem: { field: 'username', code: 'too-short' }
+		});
 	});
 
 	it('reports an unusable password', async () => {
 		const result = await registerAccount(db, { ...DEFAULTS, password: 'short' }, CHEAP);
-		expect(result).toEqual({ ok: false, problem: 'too-short' });
+		expect(result).toEqual({
+			ok: false,
+			problem: { field: 'password', code: 'too-short' }
+		});
+	});
+
+	it('rejects an oversized display name before creating any rows', async () => {
+		const result = await registerAccount(db, { ...DEFAULTS, displayName: 'x'.repeat(101) }, CHEAP);
+		expect(result).toEqual({
+			ok: false,
+			problem: { field: 'displayName', code: 'too-long' }
+		});
+		expect([countOf('account'), countOf('household')]).toEqual([0, 0]);
+	});
+
+	it('rejects an oversized household name before creating any rows', async () => {
+		const result = await registerAccount(
+			db,
+			{ ...DEFAULTS, householdName: 'x'.repeat(101) },
+			CHEAP
+		);
+		expect(result).toEqual({
+			ok: false,
+			problem: { field: 'householdName', code: 'too-long' }
+		});
+		expect([countOf('account'), countOf('household')]).toEqual([0, 0]);
+	});
+
+	it.each([
+		['displayName', { displayName: 'Jordan\u202EliE' }],
+		['householdName', { householdName: 'Flat\n3' }]
+	] as const)('identifies unsafe characters in %s', async (field, overrides) => {
+		const result = await registerAccount(db, { ...DEFAULTS, ...overrides }, CHEAP);
+		expect(result).toEqual({
+			ok: false,
+			problem: { field, code: 'unsafe-characters' }
+		});
+		expect([countOf('account'), countOf('household')]).toEqual([0, 0]);
 	});
 
 	it('reports a username already taken', async () => {
 		await register();
 		const result = await registerAccount(db, DEFAULTS, CHEAP);
-		expect(result).toEqual({ ok: false, problem: 'username-taken' });
+		expect(result).toEqual({ ok: false, problem: { field: 'username', code: 'taken' } });
 	});
 
 	it('treats a differently-cased duplicate as taken', async () => {
 		await register();
 		const result = await registerAccount(db, { ...DEFAULTS, username: 'JORDAN' }, CHEAP);
-		expect(result).toEqual({ ok: false, problem: 'username-taken' });
+		expect(result).toEqual({ ok: false, problem: { field: 'username', code: 'taken' } });
 	});
 
 	it('writes nothing at all when the username is taken', async () => {
@@ -122,22 +175,101 @@ describe('registerAccount', () => {
 describe('authenticate', () => {
 	it('returns the account for the right password', async () => {
 		const account = await register();
-		expect(await authenticate(db, 'jordan', PASSWORD, CHEAP)).toEqual(account);
+		expect(await authenticate(db, 'jordan', PASSWORD, { cost: CHEAP })).toEqual(account);
 	});
 
 	it('accepts the username in any case', async () => {
 		const account = await register();
-		expect(await authenticate(db, 'JORDAN', PASSWORD, CHEAP)).toEqual(account);
+		expect(await authenticate(db, 'JORDAN', PASSWORD, { cost: CHEAP })).toEqual(account);
 	});
 
 	it('refuses the wrong password', async () => {
 		await register();
-		expect(await authenticate(db, 'jordan', 'incorrect horse battery', CHEAP)).toBeNull();
+		expect(await authenticate(db, 'jordan', 'incorrect horse battery', { cost: CHEAP })).toBeNull();
 	});
 
 	it('refuses an unknown username', async () => {
 		await register();
-		expect(await authenticate(db, 'alex', PASSWORD, CHEAP)).toBeNull();
+		expect(await authenticate(db, 'alex', PASSWORD, { cost: CHEAP })).toBeNull();
+	});
+
+	it('rejects raw oversized credentials before normalizing or deriving', async () => {
+		await register();
+		expect(await authenticate(db, 'j'.repeat(129), PASSWORD, { cost: CHEAP })).toBeNull();
+		expect(await authenticate(db, 'jordan', 'x'.repeat(129), { cost: CHEAP })).toBeNull();
+	});
+
+	it('upgrades an older password hash after successful authentication', async () => {
+		const account = await register();
+		const before = db.prepare('select password_hash from account where id = ?').get(account.id)?.[
+			'password_hash'
+		];
+		const upgradedCost = { n: 2 ** 13, r: 8, p: 1 };
+		const upgradedAt = new Date('2026-08-29T12:00:00.000Z');
+
+		expect(
+			await authenticate(db, 'jordan', PASSWORD, { cost: upgradedCost, now: upgradedAt })
+		).toEqual(account);
+		const stored = db
+			.prepare('select password_hash, updated_at from account where id = ?')
+			.get(account.id);
+		expect(stored?.['password_hash']).not.toBe(before);
+		expect(String(stored?.['password_hash']).split('$').slice(1, 4)).toEqual(['8192', '8', '1']);
+		expect(stored?.['updated_at']).toBe(upgradedAt.toISOString());
+	});
+
+	it('does not upgrade a hash when authentication fails', async () => {
+		const account = await register();
+		const before = db.prepare('select password_hash from account where id = ?').get(account.id)?.[
+			'password_hash'
+		];
+		expect(
+			await authenticate(db, 'jordan', 'incorrect horse battery', {
+				cost: { n: 2 ** 13, r: 8, p: 1 }
+			})
+		).toBeNull();
+		expect(
+			db.prepare('select password_hash from account where id = ?').get(account.id)?.[
+				'password_hash'
+			]
+		).toBe(before);
+	});
+
+	it('fails closed on stronger or incomparable stored policies', async () => {
+		const account = await register();
+		const target = { ...CHEAP, n: 2 ** 13 };
+		for (const storedCost of [
+			{ ...target, n: 2 ** 14 },
+			{ ...CHEAP, r: 16 }
+		]) {
+			const storedHash = await hashPassword(PASSWORD, storedCost);
+			db.prepare('update account set password_hash = ? where id = ?').run(storedHash, account.id);
+			expect(await authenticate(db, 'jordan', PASSWORD, { cost: target })).toBeNull();
+			expect(
+				db.prepare('select password_hash from account where id = ?').get(account.id)?.[
+					'password_hash'
+				]
+			).toBe(storedHash);
+		}
+	});
+
+	it('does not replace a verified short legacy password with the timing-padding hash', async () => {
+		const account = await register();
+		const shortPassword = 'short';
+		const storedHash = legacyHash(shortPassword);
+		db.prepare('update account set password_hash = ? where id = ?').run(storedHash, account.id);
+
+		expect(
+			await authenticate(db, 'jordan', shortPassword, { cost: { ...CHEAP, n: 2 ** 13 } })
+		).toEqual(account);
+		expect(
+			db.prepare('select password_hash from account where id = ?').get(account.id)?.[
+				'password_hash'
+			]
+		).toBe(storedHash);
+		expect(
+			await authenticate(db, 'jordan', shortPassword, { cost: { ...CHEAP, n: 2 ** 13 } })
+		).toEqual(account);
 	});
 });
 

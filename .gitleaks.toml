@@ -14,3 +14,21 @@ paths = [
   '''(^|/)reports/''',
   '''(^|/)test-results/'''
 ]
+
+[[allowlists]]
+description = """
+Nutrition pipeline payloads and agent worktrees. These mirror .gitignore: they
+are never committed, so only the working-tree scan ever sees them, and the USDA
+dataset trips generic-api-key on high-entropy ingredient codes. data/scripts and
+data/docs are deliberately NOT listed — they are tracked, and a Python script is
+exactly where a real key would appear.
+"""
+paths = [
+  '''(^|/)data/\.venv/''',
+  '''(^|/)data/raw/''',
+  '''(^|/)data/interim/''',
+  '''(^|/)data/clean/''',
+  '''(^|/)data/db/''',
+  '''(^|/)data/logs/''',
+  '''(^|/)\.claude/worktrees/'''
+]

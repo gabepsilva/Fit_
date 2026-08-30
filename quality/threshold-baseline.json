@@ -8,7 +8,7 @@
 	"mutation.low": 80,
 	"mutation.high": 90,
 	"bundle.clientCssBytes": 51200,
-	"bundle.clientJavaScriptBytes": 327680,
+	"bundle.clientJavaScriptBytes": 409600,
 	"bundle.largestAssetBytes": 76800,
 	"duplication.threshold": 5,
 	"duplication.maxClones": 0,
