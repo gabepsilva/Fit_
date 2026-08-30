@@ -2,7 +2,15 @@ import { defineConfig, devices } from '@playwright/test';
 import { env } from 'node:process';
 
 const isCI = Boolean(env.CI);
-const baseURL = env.E2E_BASE_URL ?? 'http://localhost:4173';
+// The preview port is machine-global, so two checkouts running end-to-end flows at
+// once would otherwise meet on 4173: `reuseExistingServer` means the second
+// Playwright finds the first tree's server, tests the wrong application, and passes.
+// `FIT_PREVIEW_PORT` gives a tree its own port, and `--strictPort` below makes a
+// clash loud -- without it Vite quietly moves to the next free port and leaves
+// `url` pointing at whatever the neighbor is serving.
+const previewPort = env.FIT_PREVIEW_PORT ?? '4173';
+if (!/^\d+$/.test(previewPort)) throw new Error('FIT_PREVIEW_PORT must be numeric.');
+const baseURL = env.E2E_BASE_URL ?? `http://localhost:${previewPort}`;
 const proxy = env.ZAP_PROXY_URL ? { proxy: { server: env.ZAP_PROXY_URL } } : {};
 const previewHost = env.ZAP_PROXY_URL ? '0.0.0.0' : '127.0.0.1';
 // Fit_ is a mobile web app, so the default loop runs a mobile viewport on the
@@ -21,8 +29,8 @@ const projects = [
 
 export default defineConfig({
 	webServer: {
-		command: `bun run build && bun run preview --host ${previewHost}`,
-		url: 'http://127.0.0.1:4173',
+		command: `bun run build && bun run preview --host ${previewHost} --port ${previewPort} --strictPort`,
+		url: `http://127.0.0.1:${previewPort}`,
 		reuseExistingServer: !isCI
 	},
 	testMatch: '**/*.e2e.{ts,js}',
