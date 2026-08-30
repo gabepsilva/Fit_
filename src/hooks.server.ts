@@ -4,9 +4,7 @@ import {
 	resolveRequestAuth,
 	type RequestAuthDependencies
 } from '$lib/server/request-auth';
-
-/** The cookie the web build carries its session token in. */
-export const SESSION_COOKIE = 'fit_session';
+import { SESSION_COOKIE } from '$lib/server/session-cookie';
 
 /**
  * The Android build sends a bearer token; the web build carries the same token

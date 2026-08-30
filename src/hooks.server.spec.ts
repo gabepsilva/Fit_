@@ -1,8 +1,9 @@
 import type { Handle } from '@sveltejs/kit';
 import type { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
-import { createHandle, SESSION_COOKIE } from './hooks.server';
+import { createHandle } from './hooks.server';
 import type { RequestAuthDependencies } from '$lib/server/request-auth';
+import { SESSION_COOKIE } from '$lib/server/session-cookie';
 import type { Auth } from '$lib/server/users/types';
 
 const TOKEN = 't'.repeat(43);
