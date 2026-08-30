@@ -30,6 +30,18 @@ export function sessionTokenFrom(
 	return cookieToken && SESSION_TOKEN.test(cookieToken) ? cookieToken : undefined;
 }
 
+/**
+ * Whether the request carries a bearer token rather than an ambient cookie.
+ *
+ * The distinction is what the origin policy turns on: a credential the client
+ * had to attach deliberately cannot be replayed by a page on another site the
+ * way a cookie the browser attaches for it can.
+ */
+export function hasBearerCredential(request: Request): boolean {
+	const authorization = request.headers.get('authorization');
+	return authorization !== null && BEARER.test(authorization);
+}
+
 /** Resolve request authentication without opening the database for anonymous input. */
 export function resolveRequestAuth(
 	request: Request,

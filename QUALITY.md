@@ -188,6 +188,41 @@ add more maintenance and noise than useful protection.
   aspiration. This is the second raise for the same reason, which is the signal that the
   metric is wrong rather than the number: budgeting the first-load path separately from
   lazily-loaded routes, and weighing transferred bytes, is now overdue.
+- **The JavaScript budget was raised to 414 KiB when sign-in landed, after the redirect
+  guard was removed rather than paid for (recorded 2026-08-30).** The 400 KiB budget was
+  measured against an application with no authentication interface. Adding `/signin`,
+  `/signup`, the account block in the drawer, and the browser's side of the endpoints first
+  took the build from 406,261 to 426,873 raw JavaScript bytes, and the budget was raised to
+  420 KiB to match. Of that 20 KiB, 5,432 bytes were not the feature at all: they are
+  SvelteKit's server-data pathway, which the client loads the moment a `+page.server.ts`
+  exists anywhere in the app, and the repository's first two existed only to run a 303
+  sending an already-signed-in visitor away from a form. Nothing was behind that guard —
+  no destination is gated — and it never fired in the Capacitor build at all, so it was
+  removed and the build measured again: 421,326 bytes. Hence 414 KiB rather than 420. What
+  is left above the 400 KiB baseline is 15,065 bytes and is the feature: 6,468 bytes of
+  route chunk for the two forms, loaded only when a form is opened, and the rest the auth
+  client, the wording table, the session store and the account menu, which the drawer puts
+  in the root layout chunk. No package was added and no icon import changed. As with the
+  previous two raises the budget sits just above the measured build rather than at an
+  aspiration — 2,610 bytes of headroom, tighter than either of them — so it still fails on
+  a careless dependency, and the raw figure still overstates what a phone pays: the same
+  build is 154 KiB gzipped and 137 KiB brotli. This is the third raise for the same reason
+  and it does not change the conclusion recorded against the second, but it is the first
+  one where the first move was to trim: 5,432 bytes came off by asking what the cost was
+  buying. Budgeting the first-load path separately from lazily-loaded routes, and weighing
+  transferred bytes, remains the fix.
+- **A server `load` runs on one of the two targets, so behavior cannot live in one
+  (recorded 2026-08-30).** `+layout.ts` sets `ssr = false`, so a `+page.server.ts` reaches
+  the browser only through a `__data.json` request. The web build answers it. The Capacitor
+  build is `adapter-static` with an SPA fallback, so the same request answers the fallback
+  HTML, the client logs a JSON parse error, and `data` arrives empty — verified by building
+  that target and loading it. Nothing catches this: it type-checks, it passes
+  `bun run check`, and the end-to-end suite runs against the web build, which is the half
+  that works. So a server `load` is web-only here until somebody decides whether the
+  Android build has a server to talk to, and anything both targets need belongs in a
+  universal load or in the component. The endpoints under `src/routes/api/` are unaffected:
+  the Android build calls them over the network with a bearer token, which is what
+  `hooks.server.ts` resolves alongside the cookie.
 - **Mutation testing measures behavior, not seed data (recorded 2026-08-28).** The
   mutation glob was `src/lib/**/*.ts`, which swept in roughly 1,800 lines of catalog and
   fixture data and held the score at 53.84 percent against a break threshold of 80. Almost
@@ -215,6 +250,28 @@ add more maintenance and noise than useful protection.
   rather than a plausible one. The narrower answer, if Stryker ever supports it cleanly, is
   to exclude mutant types per file instead of whole files, so a genuine off-by-one in
   fixture arithmetic would still be caught.
+- **The sign-in throttle counts against a declared address, not a guessed one (recorded
+  2026-08-29).** The throttle's `address` scope exists to catch one client spraying a
+  common password across many usernames, and it can only do that if the address it keys on
+  is the client's. Behind a reverse proxy, `getClientAddress()` returns the innermost
+  proxy, every caller lands in one bucket, and the scope stops catching spraying and starts
+  locking a whole deployment out fifty failures at a time. `src/lib/server/client-address.ts`
+  makes the deployment say which situation it is in through `FIT_CLIENT_ADDRESS`: `socket`
+  (the default, and true of `vite dev` and of every environment this repository currently
+  has), `forwarded`, or `none`. Declaring `forwarded` without `adapter-node`'s own
+  `ADDRESS_HEADER` throws, so "we are behind a proxy" cannot be said without saying how to
+  read past it — and no code here parses a forwarding header itself, because the adapter
+  already reads `X-Forwarded-For` from the right against `XFF_DEPTH` rather than believing
+  the leftmost value an attacker can prepend. One judgement call is recorded with its cost:
+  a request arriving with a forwarding header at a server configured for a direct
+  connection is a proxy nobody declared, so its address is dropped rather than counted. A
+  client on a directly exposed server can therefore excuse itself from the address scope by
+  sending an `X-Forwarded-For` of its own. It buys nothing against a single account — the
+  `username` scope is keyed on the submitted name and counts every attempt regardless — and
+  the trade is a spraying attacker opting out of a best-effort counter against a
+  misconfigured deployment locking out all of its own users. The second is likelier and
+  worse. Revisit when a hosting target exists: a deployment that knows its proxy's address
+  can verify the peer instead of trusting the declaration.
 - **ZAP scans the wrong server (recorded 2026-08-27).** ZAP proxies `vite preview`, but
   the project ships `adapter-node`, and the two serve different headers, so every
   "Cross-Domain Misconfiguration" alert is an artifact of the scanned server. The real

@@ -1,7 +1,12 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 import { getDatabase } from './db';
-import { requestAuthDependencies, resolveRequestAuth, sessionTokenFrom } from './request-auth';
+import {
+	hasBearerCredential,
+	requestAuthDependencies,
+	resolveRequestAuth,
+	sessionTokenFrom
+} from './request-auth';
 import type { RequestAuthDependencies } from './request-auth';
 import { resolveSession } from './users/sessions';
 import type { Auth } from './users/types';
@@ -54,6 +59,27 @@ describe('sessionTokenFrom', () => {
 	it('rejects text prefixed to an otherwise valid Bearer credential', () => {
 		expect(sessionTokenFrom(request(`xBearer ${BEARER_TOKEN}`), COOKIE_TOKEN)).toBeUndefined();
 	});
+});
+
+describe('hasBearerCredential', () => {
+	it('recognizes a well-formed bearer token', () => {
+		expect(hasBearerCredential(request(`Bearer ${BEARER_TOKEN}`))).toBe(true);
+	});
+
+	it('recognizes the case-insensitive scheme the same way the parser does', () => {
+		expect(hasBearerCredential(request(`bearer ${BEARER_TOKEN}`))).toBe(true);
+	});
+
+	it('reports no credential when the request carries only a cookie', () => {
+		expect(hasBearerCredential(request())).toBe(false);
+	});
+
+	it.each(['Basic credentials', 'Bearer', 'Bearer short', `Bearer ${BEARER_TOKEN} extra`])(
+		'refuses to call a malformed header a credential: %s',
+		(header) => {
+			expect(hasBearerCredential(request(header))).toBe(false);
+		}
+	);
 });
 
 describe('resolveRequestAuth', () => {
