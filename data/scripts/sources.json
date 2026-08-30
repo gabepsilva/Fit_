@@ -1,0 +1,173 @@
+{
+  "note": "Bulk nutrition sources. Every entry is openly licensed and redistributable; the license field is carried through to every row derived from it.",
+  "files": [
+    {
+      "key": "usda_fdc_full",
+      "source": "USDA FoodData Central, full CSV release 2026-04-30",
+      "license": "public-domain",
+      "url": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_csv_2026-04-30.zip",
+      "dest": "usda_fdc/FoodData_Central_csv_2026-04-30.zip"
+    },
+    {
+      "key": "usda_fdc_survey",
+      "source": "USDA FNDDS / Survey foods, CSV release 2024-10-31",
+      "license": "public-domain",
+      "url": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_survey_food_csv_2024-10-31.zip",
+      "dest": "usda_fdc/FoodData_Central_survey_food_csv_2024-10-31.zip"
+    },
+    {
+      "key": "usda_fdc_support",
+      "source": "USDA FoodData Central supporting/lookup tables 2022-04-28",
+      "license": "public-domain",
+      "url": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_Supporting_Data_csv_2022-04-28.zip",
+      "dest": "usda_fdc/FoodData_Central_Supporting_Data_csv_2022-04-28.zip"
+    },
+    {
+      "key": "off_products_csv",
+      "source": "Open Food Facts full product export (tab-separated)",
+      "license": "ODbL-1.0",
+      "url": "https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz",
+      "dest": "openfoodfacts/en.openfoodfacts.org.products.csv.gz"
+    },
+    {
+      "key": "cnf_all",
+      "source": "Health Canada, Canadian Nutrient File 2026",
+      "license": "OGL-Canada-2.0",
+      "url": "https://open.canada.ca/data/dataset/1b6139bd-ed7e-4043-bc28-ff00e10f3109/resource/019f2a90-e3a9-489d-b6e1-f74f4ba1d006/download/cnf_fcen_all-files-data_2026.zip",
+      "dest": "canada_cnf/cnf_fcen_all-files-data_2026.zip"
+    },
+    {
+      "key": "cnf_food_guide_class",
+      "source": "Canada's Food Guide 2019 food classification, joins to CNF Food_Code",
+      "license": "OGL-Canada-2.0",
+      "url": "https://health.canada.ca/apps/open-data/cnf-fcen/CNF-FC%C3%89N%20%26%20Class.csv",
+      "dest": "canada_cnf/cnf_food_guide_classification.csv"
+    },
+    {
+      "key": "br_taco",
+      "source": "TACO 4a edicao, NEPA/UNICAMP Brazilian food composition table",
+      "license": "public-free-attribution",
+      "url": "https://nepa.unicamp.br/wp-content/uploads/sites/27/2023/10/Taco-4a-Edicao.xlsx",
+      "dest": "brazil/taco_4a_edicao.xlsx"
+    },
+    {
+      "key": "br_ibge_composition",
+      "source": "IBGE POF 2008-2009, nutrient composition of foods consumed in Brazil",
+      "license": "OGL-BR-IBGE-public",
+      "url": "https://ftp.ibge.gov.br/Orcamentos_Familiares/Pesquisa_de_Orcamentos_Familiares_2008_2009/Tabelas_de_Composicao_Nutricional_dos_Alimentos_Consumidos_no_Brasil/tabelacompleta.zip",
+      "dest": "brazil/ibge_pof_composicao.zip"
+    },
+    {
+      "key": "br_ibge_measures",
+      "source": "IBGE POF 2008-2009, household measures for foods consumed in Brazil",
+      "license": "OGL-BR-IBGE-public",
+      "url": "https://ftp.ibge.gov.br/Orcamentos_Familiares/Pesquisa_de_Orcamentos_Familiares_2008_2009/Tabela_de_Medidas_Referidas_para_os_Alimentos_Consumidos_no_Brasil/tabelamedidas_bd.zip",
+      "dest": "brazil/ibge_pof_medidas.zip"
+    },
+    {
+      "key": "eu_uk_cofid",
+      "source": "McCance & Widdowson's Composition of Foods Integrated Dataset (CoFID) 2021, Public Health England",
+      "license": "OGL-UK-3.0",
+      "url": "https://assets.publishing.service.gov.uk/media/60538b91e90e07527df82ae4/McCance_Widdowsons_Composition_of_Foods_Integrated_Dataset_2021..xlsx",
+      "dest": "europe/uk_cofid_2021.xlsx"
+    },
+    {
+      "key": "eu_fr_ciqual",
+      "source": "Ciqual 2025 French food composition table, ANSES",
+      "license": "Etalab-2.0",
+      "url": "https://entrepot.recherche.data.gouv.fr/api/access/datafile/666245",
+      "dest": "europe/fr_ciqual_2025.xls"
+    },
+    {
+      "key": "eu_no_matvaretabellen",
+      "source": "Matvaretabellen 2026, Norwegian Food Safety Authority",
+      "license": "NLOD-2.0",
+      "url": "https://www.matvaretabellen.no/api/en/foods.json",
+      "dest": "europe/no_matvaretabellen.json"
+    },
+    {
+      "key": "eu_ch_naehrwertdaten",
+      "source": "Schweizer Naehrwertdatenbank, Swiss FSVO",
+      "license": "free-attribution",
+      "url": "https://naehrwertdaten.ch/wp-content/uploads/2026/07/Schweizer_Nahrwertdatenbank.xlsx",
+      "dest": "europe/ch_naehrwertdatenbank.xlsx"
+    },
+    {
+      "key": "asia_tw_tfnd",
+      "source": "Taiwan FDA Nutrition Information Database (Chinese/Taiwanese generic foods)",
+      "license": "OGDL-Taiwan-1.0",
+      "url": "https://data.fda.gov.tw/data/opendata/export/20/csv",
+      "dest": "asia/tw_tfnd.zip"
+    },
+    {
+      "key": "asia_smiling_thailand",
+      "source": "FAO SMILING project food composition table, Thailand",
+      "license": "FAO-open",
+      "url": "https://www.fao.org/fileadmin/templates/food_composition/documents/FCT_SMILING_PROJECT_ASIA/D3_5a_SMILING_FCT_Thailand_150513_protected.xlsx",
+      "dest": "asia/smiling_fct_thailand.xlsx"
+    },
+    {
+      "key": "fao_ufish",
+      "source": "FAO/INFOODS uFiSh 1.0, global fish and shellfish composition",
+      "license": "FAO-open",
+      "url": "https://www.fao.org/fileadmin/templates/food_composition/documents/uFiSh1.0.xlsx",
+      "dest": "fao/ufish_1.0.xlsx"
+    },
+    {
+      "key": "fao_upulses",
+      "source": "FAO/INFOODS uPulses 1.0, global pulses composition",
+      "license": "FAO-open",
+      "url": "https://www.fao.org/fileadmin/templates/food_composition/documents/uPulses1.0.xlsx",
+      "dest": "fao/upulses_1.0.xlsx"
+    },
+    {
+      "key": "fao_anfood",
+      "source": "FAO/INFOODS AnFooD 2.0, analytical food composition from peer-reviewed literature",
+      "license": "FAO-open",
+      "url": "https://www.fao.org/fileadmin/templates/food_composition/documents/AnFooD2.0.xlsx",
+      "dest": "fao/anfood_2.0.xlsx"
+    },
+    {
+      "key": "fao_biofoodcomp",
+      "source": "FAO/INFOODS BioFoodComp 4.0, biodiversity and wild/underutilised foods",
+      "license": "FAO-open",
+      "url": "https://www.fao.org/fileadmin/templates/food_composition/documents/BioFoodComp4.0.xlsx",
+      "dest": "fao/biofoodcomp_4.0.xlsx"
+    },
+    {
+      "key": "fao_wafct",
+      "source": "FAO/INFOODS West African Food Composition Table 2019",
+      "license": "FAO-open",
+      "url": "https://www.fao.org/fileadmin/user_upload/faoweb/2020/WAFCT_2019.xlsx",
+      "dest": "fao/wafct_2019.xlsx"
+    },
+    {
+      "key": "fao_density",
+      "source": "FAO/INFOODS Density Database v2.0, food density and specific gravity factors",
+      "license": "FAO-open",
+      "url": "https://www.fao.org/fileadmin/templates/food_composition/documents/density_DB_v2_0_final-1__1_.xlsx",
+      "dest": "fao/density_db_v2.xlsx"
+    },
+    {
+      "key": "menu_menustat_nyc",
+      "source": "MenuStat (Historical), NYC DOHMH - chain restaurant menu nutrition 2008-2018",
+      "license": "NYC-open-data-public",
+      "url": "https://data.cityofnewyork.us/api/views/qgc5-ecnb/rows.csv?accessType=DOWNLOAD",
+      "dest": "restaurants/menustat_nyc_all_years.csv"
+    },
+    {
+      "key": "menu_menustat_cc0",
+      "source": "MenuStat 2018 annual file, Harvard Dataverse mirror (explicit CC0)",
+      "license": "CC0-1.0",
+      "url": "https://dataverse.harvard.edu/api/access/datafile/6191167",
+      "dest": "restaurants/menustat_2018_dataverse.tab"
+    },
+    {
+      "key": "tax_off_categories",
+      "source": "Open Food Facts category taxonomy (hierarchical, multilingual synonyms)",
+      "license": "ODbL-1.0",
+      "url": "https://world.openfoodfacts.org/data/taxonomies/categories.json",
+      "dest": "taxonomy/off_categories.json"
+    }
+  ]
+}
