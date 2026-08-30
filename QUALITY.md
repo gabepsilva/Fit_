@@ -151,6 +151,28 @@ add more maintenance and noise than useful protection.
   rather than a plausible one. The narrower answer, if Stryker ever supports it cleanly, is
   to exclude mutant types per file instead of whole files, so a genuine off-by-one in
   fixture arithmetic would still be caught.
+- **The sign-in throttle counts against a declared address, not a guessed one (recorded
+  2026-08-29).** The throttle's `address` scope exists to catch one client spraying a
+  common password across many usernames, and it can only do that if the address it keys on
+  is the client's. Behind a reverse proxy, `getClientAddress()` returns the innermost
+  proxy, every caller lands in one bucket, and the scope stops catching spraying and starts
+  locking a whole deployment out fifty failures at a time. `src/lib/server/client-address.ts`
+  makes the deployment say which situation it is in through `FIT_CLIENT_ADDRESS`: `socket`
+  (the default, and true of `vite dev` and of every environment this repository currently
+  has), `forwarded`, or `none`. Declaring `forwarded` without `adapter-node`'s own
+  `ADDRESS_HEADER` throws, so "we are behind a proxy" cannot be said without saying how to
+  read past it — and no code here parses a forwarding header itself, because the adapter
+  already reads `X-Forwarded-For` from the right against `XFF_DEPTH` rather than believing
+  the leftmost value an attacker can prepend. One judgement call is recorded with its cost:
+  a request arriving with a forwarding header at a server configured for a direct
+  connection is a proxy nobody declared, so its address is dropped rather than counted. A
+  client on a directly exposed server can therefore excuse itself from the address scope by
+  sending an `X-Forwarded-For` of its own. It buys nothing against a single account — the
+  `username` scope is keyed on the submitted name and counts every attempt regardless — and
+  the trade is a spraying attacker opting out of a best-effort counter against a
+  misconfigured deployment locking out all of its own users. The second is likelier and
+  worse. Revisit when a hosting target exists: a deployment that knows its proxy's address
+  can verify the peer instead of trusting the declaration.
 - **ZAP scans the wrong server (recorded 2026-08-27).** ZAP proxies `vite preview`, but
   the project ships `adapter-node`, and the two serve different headers, so every
   "Cross-Domain Misconfiguration" alert is an artifact of the scanned server. The real
