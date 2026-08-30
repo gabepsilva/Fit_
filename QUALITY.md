@@ -124,6 +124,27 @@ add more maintenance and noise than useful protection.
   aspiration. This is the second raise for the same reason, which is the signal that the
   metric is wrong rather than the number: budgeting the first-load path separately from
   lazily-loaded routes, and weighing transferred bytes, is now overdue.
+- **The JavaScript budget was raised to 420 KiB when sign-in landed (recorded
+  2026-08-30).** The 400 KiB budget was measured against an application with no
+  authentication interface and no server `load` anywhere in it. Adding `/signin`, `/signup`,
+  the account block in the drawer, and the browser's side of the endpoints took the build
+  from 406,261 to 426,873 raw JavaScript bytes. The 20 KiB is the feature: no package was
+  added and no icon import changed. Two parts of it were measured separately, because one
+  of them is a cost the repository had never paid. The two route chunks are 6,578 bytes
+  between them and load only when a form is opened. A further 5,432 bytes is SvelteKit's
+  server-data pathway, pulled into the client the moment the first `+page.server.ts`
+  existed — until this change the app had none, so nothing needed the code that fetches and
+  parses `__data.json`. That cost buys the only authoritative session check a browser can
+  have, since an `HttpOnly` cookie cannot be read by script, and it is not somewhere to
+  economize. The remainder is the auth client, the wording table, the session store and the
+  account menu, which the drawer puts in the root layout chunk. As with the previous two
+  raises the budget sits just above the measured build rather than at an aspiration, so it
+  still fails on a careless dependency, and the raw figure still overstates what a phone
+  pays: the same build is 156 KiB gzipped and 138 KiB brotli. This is the third raise for
+  the same reason, and it does not change the conclusion recorded against the second — the
+  metric is wrong rather than the number. Budgeting the first-load path separately from
+  lazily-loaded routes, and weighing transferred bytes, is the fix, and it is now the
+  overdue one rather than the next one.
 - **Mutation testing measures behavior, not seed data (recorded 2026-08-28).** The
   mutation glob was `src/lib/**/*.ts`, which swept in roughly 1,800 lines of catalog and
   fixture data and held the score at 53.84 percent against a break threshold of 80. Almost
