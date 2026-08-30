@@ -260,6 +260,166 @@
 			"classification": "equivalent",
 			"rationale": "Dropping the null check falls through to new Date(null), the epoch, so the subtraction is always negative for any clock after 1970 and Math.max(0, ...) clamps it to the same zero the guard returns.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "false",
+			"location": {
+				"end": {
+					"column": 30,
+					"line": 99
+				},
+				"start": {
+					"column": 6,
+					"line": 99
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "ee4834afdbc6ad4f2a5bcbf2e9e6ff1e814a3cfd4ef64b33cb985be89d84da7b",
+			"classification": "equivalent",
+			"rationale": "The `typeof body !== ‘object’` half only short-circuits a body that is a JSON string, number or boolean; each of those reads `.error` as undefined, so the very next guard returns the same `invalid-body`. Both halves reach one verdict and no response body can separate them.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 33,
+					"line": 103
+				},
+				"start": {
+					"column": 9,
+					"line": 103
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "8b747215f1424edf6bb65734ad865229ec231151b529dac30e0682597f23c87d",
+			"classification": "equivalent",
+			"rationale": "`CODES` is a set of strings, so `CODES.has(code)` is already false for every non-string value; the `typeof` guard narrows the type for the compiler and cannot change which branch runs.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ArrowFunction",
+			"replacement": "() => undefined",
+			"location": {
+				"end": {
+					"column": 62,
+					"line": 127
+				},
+				"start": {
+					"column": 52,
+					"line": 127
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "3fbe835cca7a171a64d959897b94cb8a026587356ca7fb176e3326289a2f9dc2",
+			"classification": "equivalent",
+			"rationale": "The catch supplies the value `codeOf` and `textOf` then read. `undefined` fails `typeof body !== ‘object’` where `null` fails `body === null`, both returning `invalid-body`, and `?.error` is undefined for either. No caller can tell the two apart.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ArrowFunction",
+			"replacement": "() => undefined",
+			"location": {
+				"end": {
+					"column": 63,
+					"line": 166
+				},
+				"start": {
+					"column": 53,
+					"line": 166
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "aed9ec3ab144d650892874ddbdd9788364e6783082db6b577758799a9ff6caf7",
+			"classification": "equivalent",
+			"rationale": "Same catch, in `sessionFrom`: the very next line rejects `undefined` on `typeof value !== ‘object’` and `null` on `value === null`, and both produce the identical `unreachable` failure.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 26,
+					"line": 175
+				},
+				"start": {
+					"column": 7,
+					"line": 175
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "b65697901e6a066db9d4d4c64b945fe1659f00a154d7b09f860c4bca431ad1be",
+			"classification": "equivalent",
+			"rationale": "The object this builds is only ever handed to `JSON.stringify`, which omits a property whose value is `undefined`. Assigning the undefined entry rather than skipping it serialises to the same request body byte for byte.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/wording.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"Stryker was here!\"",
+			"location": {
+				"end": {
+					"column": 44,
+					"line": 48
+				},
+				"start": {
+					"column": 42,
+					"line": 48
+				}
+			},
+			"sourceHash": "afcbd50bbfb3c051de2e076be78f99ae59e60b1c2d1aa2e5ba9b0f44634f5587",
+			"fingerprint": "99f9e0931a766e7d0947ffe482d8b235ed443dcc3863d570ad746412733f7b05",
+			"classification": "equivalent",
+			"rationale": "The fallback is a lookup key for a reason that was not sent. No field record in `FIELD_WORDING` holds an empty key, so `‘’` and any other absent key alike miss the table and fall through to the same `UNRECOGNIZED_FIELD` sentence.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/wording.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"Stryker was here!\"",
+			"location": {
+				"end": {
+					"column": 42,
+					"line": 89
+				},
+				"start": {
+					"column": 40,
+					"line": 89
+				}
+			},
+			"sourceHash": "afcbd50bbfb3c051de2e076be78f99ae59e60b1c2d1aa2e5ba9b0f44634f5587",
+			"fingerprint": "7de3799e5d1a4beb62613e5cf202441b1a63686bd357e00a2a5c4bdcebd6939f",
+			"classification": "equivalent",
+			"rationale": "The fallback is a field name for a failure that named none. `FIELD_WORDING` has no empty-string field, so `‘’` and any other unlisted name both miss the table and produce the same `UNRECOGNIZED_FIELD` sentence.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/state/session.svelte.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "false",
+			"location": {
+				"end": {
+					"column": 11,
+					"line": 101
+				},
+				"start": {
+					"column": 7,
+					"line": 101
+				}
+			},
+			"sourceHash": "3eee06a4418f16c1f54783867035c7f32c5a9da28732cc71d46bb661edd3afd3",
+			"fingerprint": "78db7ddf2d2a3577f9d7e2cbb48d916cca709777fcad148124a574e973ff5d3b",
+			"classification": "equivalent",
+			"rationale": "The guard is a short circuit, not a decision. Without it an absent record reaches `JSON.parse`, where `null`, `undefined` and `‘’` either parse to a value `isSession` rejects or throw into the catch beside it — every path returns the same `null`, and nothing is written.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		}
 	]
 }
