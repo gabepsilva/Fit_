@@ -86,6 +86,22 @@ const MIGRATIONS = [
 	) strict;
 
 	create index session_by_account on session (account_id);
+	`,
+	`
+	-- Failed sign-in attempts, counted per scope. Rows here are written for
+	-- unauthenticated input, so they hold no attacker-supplied text and never
+	-- reference the account table: the count exists whether or not the username
+	-- does, which is what keeps a lockout from answering "does this person exist".
+	create table sign_in_throttle (
+		scope          text not null check (scope in ('username', 'address')),
+		key_hash       text not null,
+		failures       integer not null,
+		window_ends_at text not null,
+		locked_until   text,
+		primary key (scope, key_hash)
+	) strict;
+
+	create index sign_in_throttle_expiry on sign_in_throttle (window_ends_at);
 	`
 ];
 

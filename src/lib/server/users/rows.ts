@@ -15,3 +15,18 @@ export function text(row: Record<string, SQLOutputValue>, column: string): strin
 	}
 	return value;
 }
+
+/**
+ * Read an `integer not null` column off a result row.
+ *
+ * Same refusal to guess as `text`: a count that has become null or text is a
+ * schema fault, and turning it into `NaN` would quietly disable whatever
+ * threshold it was being compared against.
+ */
+export function integer(row: Record<string, SQLOutputValue>, column: string): number {
+	const value = row[column];
+	if (typeof value !== 'number') {
+		throw new TypeError(`expected an integer in column "${column}"`);
+	}
+	return value;
+}

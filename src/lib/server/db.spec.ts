@@ -39,6 +39,22 @@ describe('migrate', () => {
 		);
 	});
 
+	it('creates the sign-in throttle the authentication layer counts in', () => {
+		const db = new DatabaseSync(':memory:');
+		migrate(db);
+		expect(tableNames(db)).toContain('sign_in_throttle');
+	});
+
+	it('brings an older database forward without re-running what it has', () => {
+		const db = new DatabaseSync(':memory:');
+		db.exec('pragma user_version = 1');
+		// Version 1 is the users schema; only the migrations after it may run, and
+		// re-applying one would fail on `create table`.
+		expect(() => migrate(db)).not.toThrow();
+		expect(tableNames(db)).toContain('sign_in_throttle');
+		expect(tableNames(db)).not.toContain('account');
+	});
+
 	it('records the applied version in the database itself', () => {
 		const db = new DatabaseSync(':memory:');
 		expect(migrate(db)).toBe(userVersion(db));
