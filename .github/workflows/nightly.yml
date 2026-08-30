@@ -51,10 +51,19 @@ jobs:
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
 
+      # Only the images and the rule pack. Trivy's vulnerability database is
+      # deliberately left out: it is ~1.3 GB, its metadata sets NextUpdate 24
+      # hours after each rebuild, and this job runs every 24 hours -- so a
+      # restored copy is stale about half the time and Trivy downloads it again
+      # anyway. Against the repository's 10 GB cache budget an entry that size
+      # evicts the Bun and Playwright caches that every pull-request job
+      # restores, to save a download that mostly does not happen.
       - name: Restore scanner image and rule cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: .security-cache
+          path: |
+            .security-cache/images
+            .security-cache/semgrep
           key: security-cache-${{ runner.os }}-${{ hashFiles('scripts/security/config.ts') }}
           restore-keys: security-cache-${{ runner.os }}-
 

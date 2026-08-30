@@ -84,7 +84,8 @@
 				<ToggleButton
 					pressed={option === name}
 					onclick={() => (picked = option)}
-					class="bg-secondary text-foreground/70 min-h-9 rounded-full px-3.5 text-xs"
+					resting="bg-secondary text-foreground/70"
+					class="min-h-9 rounded-full px-3.5 text-xs"
 				>
 					{option}
 				</ToggleButton>

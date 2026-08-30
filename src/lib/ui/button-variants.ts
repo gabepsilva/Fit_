@@ -1,5 +1,5 @@
 export type ButtonVariant = 'default' | 'secondary' | 'ghost' | 'outline' | 'quiet';
-export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon';
+export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'icon-round';
 
 export const BUTTON_BASE =
 	'inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition-[transform,background-color,opacity,box-shadow,color] duration-150 ease-out active:not-disabled:scale-[0.96] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background';
@@ -16,5 +16,6 @@ export const BUTTON_SIZES: Record<ButtonSize, string> = {
 	default: 'h-11 px-4 rounded-xl text-sm',
 	sm: 'h-9 px-3 rounded-lg text-sm',
 	lg: 'h-12 px-5 rounded-2xl text-base',
-	icon: 'size-11 rounded-xl'
+	icon: 'size-11 rounded-xl',
+	'icon-round': 'size-11 rounded-full'
 };

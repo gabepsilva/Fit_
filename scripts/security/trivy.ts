@@ -49,6 +49,12 @@ await run('docker', [
 	'fs',
 	'--cache-dir=/cache',
 	'--scanners=vuln,misconfig',
+	// Trivy's default misconfiguration set is Kubernetes, Helm, Terraform,
+	// CloudFormation, Azure ARM and Ansible -- none of which this repository can
+	// ever contain. Narrow it to the one surface that could plausibly appear, so a
+	// clean misconfiguration result means something was checked rather than that
+	// nothing matched. Widen this the day a new kind of infrastructure file lands.
+	'--misconfig-scanners=dockerfile',
 	'--include-dev-deps',
 	'--severity=UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL',
 	'--format=json',

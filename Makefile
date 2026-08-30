@@ -17,7 +17,7 @@ GATE := bun scripts/quality/gate.ts
 # `make android` does not depend on what a particular shell exports.
 ANDROID_SDK := $(shell sed -n 's/^sdk\.dir=//p' android/local.properties 2>/dev/null)
 
-.PHONY: help fast verify deep audit ci ci-static ci-unit ci-security ci-browser ci-mutation-security ci-mutation-node ci-mutation-client ci-mutation-full dev android android-build test lint format clean
+.PHONY: help fast verify deep audit ci ci-static ci-unit ci-security ci-browser ci-mutation-security ci-mutation-node ci-mutation-client ci-mutation-full dev android android-build test lint format clean clean-cache
 
 help: ## Show this list
 	@echo 'Fit_ gates. Same checks as CI; the difference is what runs in parallel.'
@@ -88,3 +88,9 @@ format: ## Rewrite formatting in place
 clean: ## Remove build output, reports, and leftover sandboxes
 	@rm -rf build build-capacitor coverage reports/quality/logs .stryker-tmp
 	@echo 'Removed build output, reports, and sandboxes.'
+
+# Separate from `clean`, because refilling it means pulling five scanner
+# images and Trivy's database again. Trivy's copy alone is over a gigabyte.
+clean-cache: ## Also remove the cached scanner images and vulnerability database
+	@rm -rf .security-cache
+	@echo 'Removed the scanner image and database cache.'

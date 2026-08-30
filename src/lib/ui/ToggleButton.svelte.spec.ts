@@ -26,14 +26,18 @@ describe('ToggleButton', () => {
 
 	it('keeps the resting look while unselected', async () => {
 		await render(ToggleButtonHarness, {
-			props: { label: 'Photo', pressed: false, class: 'bg-card text-muted-foreground' }
+			props: { label: 'Photo', pressed: false, resting: 'bg-card text-muted-foreground' }
 		});
 		await expect.element(page.getByRole('button')).toHaveClass(/bg-card/);
 	});
 
-	it('lets the selected tone win over the resting background', async () => {
+	// The resting palette has to leave the element, not merely lose to the tone in
+	// the stylesheet. Nothing resolves conflicting utilities any more, so a
+	// resting background left in place would be decided by Tailwind's own class
+	// order rather than by which state the button is in.
+	it('replaces the resting palette with the selected tone', async () => {
 		await render(ToggleButtonHarness, {
-			props: { label: 'Photo', pressed: true, class: 'bg-card text-muted-foreground' }
+			props: { label: 'Photo', pressed: true, resting: 'bg-card text-muted-foreground' }
 		});
 		const button = page.getByRole('button');
 		await expect.element(button).toHaveClass(/bg-primary/);
@@ -42,12 +46,14 @@ describe('ToggleButton', () => {
 
 	it('offers an inverted tone for the darker pickers', async () => {
 		await render(ToggleButtonHarness, {
-			props: { label: 'Lunch', pressed: true, tone: 'inverse', class: 'bg-secondary' }
+			props: { label: 'Lunch', pressed: true, tone: 'inverse', resting: 'bg-secondary' }
 		});
-		await expect.element(page.getByRole('button')).toHaveClass(/bg-foreground/);
+		const button = page.getByRole('button');
+		await expect.element(button).toHaveClass(/bg-foreground/);
+		await expect.element(button).not.toHaveClass(/bg-secondary/);
 	});
 
-	it('keeps sizing classes the tone does not conflict with', async () => {
+	it('keeps the shape both states share, whichever one is showing', async () => {
 		await render(ToggleButtonHarness, {
 			props: { label: 'Photo', pressed: true, class: 'h-9 rounded-full text-xs' }
 		});

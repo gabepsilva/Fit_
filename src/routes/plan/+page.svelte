@@ -74,7 +74,8 @@
 			<ToggleButton
 				pressed={tab === t}
 				onclick={() => (tab = t)}
-				class="text-muted-foreground h-10 flex-1 rounded-xl text-sm capitalize"
+				resting="text-muted-foreground"
+				class="h-10 flex-1 rounded-xl text-sm capitalize"
 			>
 				{t}
 			</ToggleButton>

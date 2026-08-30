@@ -138,7 +138,8 @@
 						<ToggleButton
 							pressed={goal === g.id}
 							onclick={() => pickGoal(g.id)}
-							class="bg-card rounded-2xl px-3 py-3 text-left"
+							resting="bg-card"
+							class="rounded-2xl px-3 py-3 text-left"
 						>
 							<span class="block font-medium">{g.label}</span>
 							<span class="block text-xs {goal === g.id ? 'opacity-80' : 'text-muted-foreground'}">
@@ -180,7 +181,8 @@
 							pressed={sex === s}
 							tone="inverse"
 							onclick={() => (sex = s)}
-							class="bg-card h-10 flex-1 rounded-xl capitalize"
+							resting="bg-card"
+							class="h-10 flex-1 rounded-xl capitalize"
 						>
 							{s}
 						</ToggleButton>
@@ -196,7 +198,8 @@
 							pressed={activity === a.id}
 							tone="inverse"
 							onclick={() => (activity = a.id)}
-							class="bg-card h-11 rounded-xl text-sm"
+							resting="bg-card"
+							class="h-11 rounded-xl text-sm"
 						>
 							{a.label}
 						</ToggleButton>
@@ -212,7 +215,8 @@
 						<ToggleButton
 							pressed={on}
 							onclick={() => toggleRestriction(r.id)}
-							class="bg-card h-9 rounded-full px-3 text-sm"
+							resting="bg-card"
+							class="h-9 rounded-full px-3 text-sm"
 						>
 							{r.label}
 						</ToggleButton>

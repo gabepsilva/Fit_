@@ -50,10 +50,15 @@ jobs:
       - name: Restore scanner image and rule cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          # Trivy's database and Semgrep's hash-verified rule pack live here, not
-          # in ~/.cache. The scanner images are saved here too: a `docker pull`
-          # per run costs more than restoring them.
-          path: .security-cache
+          # Semgrep's hash-verified rule pack lives here, not in ~/.cache, and the
+          # pinned scanner images are saved here too: a `docker pull` per run
+          # costs more than restoring them. Scoped to exactly those two, because
+          # they are all these jobs populate -- Trivy's database is a gigabyte
+          # and belongs to the nightly scan, which deliberately does not cache
+          # it either. See nightly.yml.
+          path: |
+            .security-cache/images
+            .security-cache/semgrep
           key: security-cache-${{ runner.os }}-${{ hashFiles('scripts/security/config.ts') }}
           restore-keys: security-cache-${{ runner.os }}-
 
@@ -361,10 +366,15 @@ jobs:
       - name: Restore scanner image and rule cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          # Trivy's database and Semgrep's hash-verified rule pack live here, not
-          # in ~/.cache. The scanner images are saved here too: a `docker pull`
-          # per run costs more than restoring them.
-          path: .security-cache
+          # Semgrep's hash-verified rule pack lives here, not in ~/.cache, and the
+          # pinned scanner images are saved here too: a `docker pull` per run
+          # costs more than restoring them. Scoped to exactly those two, because
+          # they are all these jobs populate -- Trivy's database is a gigabyte
+          # and belongs to the nightly scan, which deliberately does not cache
+          # it either. See nightly.yml.
+          path: |
+            .security-cache/images
+            .security-cache/semgrep
           key: security-cache-${{ runner.os }}-${{ hashFiles('scripts/security/config.ts') }}
           restore-keys: security-cache-${{ runner.os }}-
 
@@ -422,7 +432,11 @@ jobs:
       - name: Restore scanner image and rule cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: .security-cache
+          # Scoped to what this job populates: the pinned scanner images and
+          # Semgrep's rule pack. Trivy's database is not here -- see nightly.yml.
+          path: |
+            .security-cache/images
+            .security-cache/semgrep
           key: security-cache-${{ runner.os }}-${{ hashFiles('scripts/security/config.ts') }}
           restore-keys: security-cache-${{ runner.os }}-
 

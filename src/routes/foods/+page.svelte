@@ -34,7 +34,8 @@
 			<ToggleButton
 				pressed={source === f}
 				onclick={() => (source = f)}
-				class="bg-card text-muted-foreground h-9 shrink-0 rounded-full px-3 text-xs font-medium"
+				resting="bg-card text-muted-foreground"
+				class="h-9 shrink-0 rounded-full px-3 text-xs font-medium"
 			>
 				{f === 'all' ? 'All' : PROVENANCE_LABEL[f].title}
 			</ToggleButton>
