@@ -48,6 +48,7 @@ reports
 # the pipeline is a Python subproject, and .prettierignore, cspell.json and
 # .markdownlint-cli2.jsonc deliberately exclude all of data/ from this
 # repository's linters.
+/data**
 /data/.venv
 /data/raw
 /data/interim
