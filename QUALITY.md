@@ -99,6 +99,20 @@ add more maintenance and noise than useful protection.
   Do not reintroduce a merge resolver: compose so that one utility per group is ever
   emitted, and let `cn.svelte.spec.ts` -- which asserts `cn('p-2', 'p-4')` keeps both
   -- fail anyone who forgets. The budget came down with it, 400 KiB to 373 KiB.
+- **The scanner cache is scoped per artifact, and Trivy's database is not in it
+  (recorded 2026-08-30).** Every workflow keyed one `.security-cache` entry on the
+  same hash. `ci.yml` claimed it first with only images and Semgrep rules inside, and
+  `actions/cache` does not re-save on an exact key hit, so the nightly job could
+  never write its database back and re-downloaded roughly 1.3 GB on every run. The
+  cache is now scoped to `images` and `semgrep`, which is all the pull-request jobs
+  populate. The database stays uncached on purpose: its `NextUpdate` is 24 hours and
+  the schedule is 24 hours, so a restored copy is stale about half the time and gets
+  downloaded again regardless, and a 1.3 GB entry against a 10 GB repository budget
+  evicts the Bun and Playwright caches that every pull-request job restores.
+  Trivy's misconfiguration scan is narrowed to `dockerfile` for the same reason its
+  findings were empty: Kubernetes, Helm, Terraform, CloudFormation, Azure ARM and
+  Ansible cannot appear in this tree. Widen it when a new kind of file lands.
+
 - **The JavaScript budget was raised to 320 KiB when the product UI landed (recorded
   2026-08-28).** The previous 150 KiB budget was set against a repository that carried
   only the SvelteKit demo routes, so it measured an empty application. Porting the front
