@@ -146,13 +146,13 @@ escape here when you do.
   `Bin 9044 -> 12724 bytes` and no added-line ranges, so the mutation scope recorded
   `observableChangedTotal: 0` and the strict changed-line verdict had nothing to enforce on
   a security file it was scoped to. The separator is now the escape `\u0000`, which is the
-  same byte to the hash and text to Git. Two equivalent survivors in that file predate this
-  and are visible in the security lane's report: `typeof lockedUntil === 'string' ? ... : null`
+  same byte to the hash and text to Git. That brought the whole file under the strict bar and
+  exposed two surviving mutants that predate the fix: `typeof lockedUntil === 'string' ? ... : null`
   mutated to `true` reads the same nullable text column, and `state.lockedUntil === null`
   mutated to `false` falls through to `new Date(null)`, an epoch timestamp that
-  `Math.max(0, ...)` clamps to the same zero. Neither is reachable through the public API;
-  they are not in the ledger because that is the changed-line exception, and these lines are
-  not changed. Keep control characters out of source: write them as escapes.
+  `Math.max(0, ...)` clamps to the same zero. Neither is reachable through the public API; both
+  were reviewed, classified equivalent and recorded in `quality/mutation-equivalents.json` with
+  their rationales. Keep control characters out of source: write them as escapes.
 - **The JavaScript bundle budget sits just above the measured build, never at a round
   aspiration (recorded 2026-08-30, third raise, then a fall).** It has been raised three
   times — 150 to 320 to 400 to 414 KiB — and brought down once, to 388 KiB, when
