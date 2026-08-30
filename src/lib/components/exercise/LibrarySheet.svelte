@@ -69,7 +69,8 @@
 			<ToggleButton
 				pressed={group === filter.group}
 				onclick={() => (group = filter.group)}
-				class="border-border text-muted-foreground h-8 rounded-full border px-3 text-xs"
+				resting="text-muted-foreground"
+				class="border-border h-8 rounded-full border px-3 text-xs"
 			>
 				{filter.label}
 			</ToggleButton>

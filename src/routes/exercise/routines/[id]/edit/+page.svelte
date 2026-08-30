@@ -62,7 +62,8 @@
 					<ToggleButton
 						pressed={routine.freq === freq}
 						onclick={() => tend.updateRoutine(id, { freq })}
-						class="border-border text-muted-foreground h-11 flex-1 rounded-2xl border font-medium"
+						resting="text-muted-foreground"
+						class="border-border h-11 flex-1 rounded-2xl border font-medium"
 					>
 						{freq}×
 					</ToggleButton>

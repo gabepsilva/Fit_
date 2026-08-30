@@ -104,7 +104,7 @@
 			<LinkButton variant="outline" size="lg" class="w-full" href={resolve('/exercise/progress')}>
 				See training progress
 			</LinkButton>
-			<LinkButton size="lg" class="h-13 w-full" href={resolve('/exercise')}>Done</LinkButton>
+			<LinkButton size="lg" class="w-full" href={resolve('/exercise')}>Done</LinkButton>
 		</div>
 	</div>
 {:else}

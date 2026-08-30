@@ -98,7 +98,7 @@
 
 		<div class="bg-background sticky bottom-0 flex flex-col gap-2 pt-2 pb-3">
 			<RestTimer startedAt={restStartedAt} seconds={tend.state.restSeconds} />
-			<Button size="lg" class="w-full rounded-2xl" onclick={next}>{nextLabel}</Button>
+			<Button size="lg" class="w-full" onclick={next}>{nextLabel}</Button>
 		</div>
 	</div>
 {:else}

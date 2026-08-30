@@ -51,7 +51,8 @@
 		pressed={set.done}
 		aria-label="Set {number} done"
 		onclick={ontoggle}
-		class="border-border text-muted-foreground flex size-9 items-center justify-center rounded-xl border"
+		resting="text-muted-foreground"
+		class="border-border flex size-9 items-center justify-center rounded-xl border"
 	>
 		<Check class="size-4" />
 	</ToggleButton>

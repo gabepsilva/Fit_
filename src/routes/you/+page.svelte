@@ -83,7 +83,8 @@
 					<ToggleButton
 						pressed={p.id === profile.id}
 						onclick={() => tend.setActive(p.id)}
-						class="bg-secondary h-10 rounded-full px-4 text-sm"
+						resting="bg-secondary"
+						class="h-10 rounded-full px-4 text-sm"
 					>
 						{p.name}
 					</ToggleButton>
@@ -138,7 +139,7 @@
 					<Label for="dose-notes" class="mt-2 block">Notes, side effects</Label>
 					<Textarea
 						id="dose-notes"
-						class="mt-1"
+						class="mt-1 min-h-24"
 						rows={2}
 						bind:value={notes}
 						placeholder="Nausea, constipation, quiet appetite…"
@@ -213,7 +214,7 @@
 				Paste a diary CSV. Rows land on their own dates as custom lines you can correct.
 			</p>
 			<Textarea
-				class="mt-3"
+				class="mt-3 min-h-24"
 				rows={4}
 				bind:value={mfp}
 				aria-label="MyFitnessPal CSV"

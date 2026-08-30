@@ -86,6 +86,19 @@ add more maintenance and noise than useful protection.
 
 ## Recorded decisions and known gaps
 
+- **`cn` does not resolve class conflicts, and that is what pays for the bundle
+  (recorded 2026-08-30).** `tailwind-merge` cost 26,726 bytes of client JavaScript --
+  6.6 percent of the whole budget -- to decide which of two conflicting Tailwind
+  utilities won. Instrumenting `cn` and driving it with the component suite found
+  fifteen call sites that actually depended on it, eleven of them in one component:
+  `ToggleButton`, whose callers passed the resting palette in `class` and let the
+  pressed tone be layered over it. `ToggleButton` now takes `resting` and picks one
+  palette or the other, so the two states are exclusive by construction; the
+  remaining four became a real `icon-round` button size, a Textarea min-height moved
+  to its call sites, and two redundant overrides deleted. `cn` is now `clsx` alone.
+  Do not reintroduce a merge resolver: compose so that one utility per group is ever
+  emitted, and let `cn.svelte.spec.ts` -- which asserts `cn('p-2', 'p-4')` keeps both
+  -- fail anyone who forgets. The budget came down with it, 400 KiB to 373 KiB.
 - **The JavaScript budget was raised to 320 KiB when the product UI landed (recorded
   2026-08-28).** The previous 150 KiB budget was set against a repository that carried
   only the SvelteKit demo routes, so it measured an empty application. Porting the front

@@ -39,7 +39,7 @@
 		<Button variant="ghost" size="icon" onclick={onphoto} aria-label="Log from a photo">
 			<Camera class="size-6" />
 		</Button>
-		<Button size="icon" class="shadow-border rounded-full" onclick={onlog} aria-label="Log food">
+		<Button size="icon-round" class="shadow-border" onclick={onlog} aria-label="Log food">
 			<Plus class="size-5" />
 		</Button>
 	</div>

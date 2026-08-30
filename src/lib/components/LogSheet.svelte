@@ -165,7 +165,8 @@
 			<ToggleButton
 				pressed={logUi.tab === t.id}
 				onclick={() => (logUi.tab = t.id)}
-				class="bg-secondary text-muted-foreground flex h-11 flex-1 flex-col items-center justify-center rounded-xl text-xs font-medium"
+				resting="bg-secondary text-muted-foreground"
+				class="flex h-11 flex-1 flex-col items-center justify-center rounded-xl text-xs font-medium"
 			>
 				<Icon class="size-4" />
 				{t.label}
@@ -180,7 +181,8 @@
 					pressed={meal === m}
 					tone="inverse"
 					onclick={() => (meal = m)}
-					class="bg-secondary text-muted-foreground h-8 flex-1 rounded-full text-xs capitalize"
+					resting="bg-secondary text-muted-foreground"
+					class="h-8 flex-1 rounded-full text-xs capitalize"
 				>
 					{m}
 				</ToggleButton>
@@ -191,6 +193,7 @@
 			<div class="flex flex-col gap-3">
 				<Textarea
 					bind:value={text}
+					class="min-h-24"
 					placeholder="two eggs, toast, black coffee"
 					rows={3}
 					aria-label="What you ate"
