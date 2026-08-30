@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
+import { MUTATE_PATTERNS } from './quality/mutate-patterns.mjs';
 
 const { mutation } = JSON.parse(
 	readFileSync(new URL('./quality/thresholds.json', import.meta.url), 'utf8')
@@ -9,7 +10,9 @@ const scopeFile = process.env.FIT_MUTATION_SCOPE;
 const scopedMutate =
 	scopeFile === undefined
 		? null
-		: JSON.parse(readFileSync(scopeFile, 'utf8')).files.map(({ path }) => path);
+		: /** @type {{ files: { path: string }[] }} */ (
+				JSON.parse(readFileSync(scopeFile, 'utf8'))
+			).files.map(({ path }) => path);
 
 /**
  * Every Stryker worker starts its own vitest, and vitest sizes its pool to the
@@ -64,32 +67,7 @@ function concurrency() {
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {
 	coverageAnalysis: 'perTest',
-	// This gate enforces "reusable logic reaches the mutation score", so the glob
-	// has to select logic and leave out seed data. A mutant inside a fixture is not
-	// a defect the tests should catch: killing it would mean asserting the fixture's
-	// exact contents, which pins wording and sample numbers that are free to change.
-	// Everything that reads the data — indexes, scaling, macros, the parser, the
-	// adaptive TDEE model — is still mutated.
-	mutate: scopedMutate ?? [
-		'src/lib/**/*.ts',
-		'!src/**/*.{test,spec,e2e}.ts',
-		// Seed food rows and the two literal label lookup tables. Mutants here are
-		// food names, aliases and label strings.
-		'!src/lib/domain/food-catalog.ts',
-		// Seed exercise rows, form cues and starter routines. Mutants here are
-		// movement names, cue wording and template loads — data, not logic. What
-		// reads it (the library index, the group filter, the template copy) is
-		// still mutated in exercises.ts.
-		'!src/lib/domain/exercise-catalog.ts',
-		// Seed recipe rows. Mutants here are recipe names, notes and portions.
-		'!src/lib/domain/recipe-book.ts',
-		// Demo-journal fixture builder. Its meal templates are data, and the jitter
-		// and weight-trend arithmetic exists only to make sample history look
-		// lived-in; demo-seed.spec.ts asserts the properties that matter (gaps in the
-		// log, varied sources, enough history for adaptive TDEE) without freezing the
-		// numbers, and nothing else should.
-		'!src/lib/domain/demo-seed.ts'
-	],
+	mutate: scopedMutate ?? MUTATE_PATTERNS,
 	ignorePatterns: [
 		// Vite's dependency-optimizer cache. Copying it into the sandbox lets two
 		// concurrent test runners re-optimize into the same directory and race on the

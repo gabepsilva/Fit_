@@ -45,6 +45,17 @@ function parseArguments(argv: string[]): Arguments {
 	};
 }
 
+/**
+ * `cleanTempDir: 'always'` only runs when Stryker exits normally, and a
+ * mutation run is long enough that interrupting one is routine. Each abandoned
+ * sandbox is a full copy of the checkout, so they accumulate tens of gigabytes
+ * inside the tree — where every tool that walks it then has to be told to skip
+ * them. The next run owns the directory anyway, so it clears it on the way in.
+ */
+async function clearStrykerSandboxes(root: string): Promise<void> {
+	await rm(path.join(root, '.stryker-tmp'), { recursive: true, force: true });
+}
+
 export async function resetMutationResultArtifacts(directory: string): Promise<void> {
 	await mkdir(directory, { recursive: true });
 	await Promise.all(
@@ -63,6 +74,7 @@ export async function runMutation(options: Arguments): Promise<number> {
 	const metadataPath = path.join(directory, 'cache.json');
 	const policyPath = path.join(projectRoot, 'quality', 'mutation-policy.json');
 	const ledgerPath = path.join(projectRoot, 'quality', 'mutation-equivalents.json');
+	await clearStrykerSandboxes(projectRoot);
 	await resetMutationResultArtifacts(directory);
 	parseMutationPolicy(JSON.parse(await readFile(policyPath, 'utf8')) as unknown);
 	const ledgerFailures = mutationReviewLedgerFailures(

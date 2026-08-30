@@ -38,6 +38,11 @@ const staticSteps: GateStep[] = [
 	},
 	{ name: 'check:thresholds', purpose: 'Threshold guard', concurrent: true },
 	{ name: 'check:mutation-reviews', purpose: 'Exact mutation-review ledger', concurrent: true },
+	{
+		name: 'check:mutation-oracle',
+		purpose: 'Mutated client files stay measurable',
+		concurrent: true
+	},
 	{ name: 'check:ci-contract', purpose: 'Local and hosted CI job parity', concurrent: true },
 	{ name: 'knip', purpose: 'Unused files, exports, dependencies', concurrent: true },
 	{

@@ -2,23 +2,23 @@ import { execFileSync } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
+import { isExcludedFromMutation } from './mutation-globs';
 import type { LineRange, MutationLane, MutationScope, MutationScopeFile } from './mutation-types';
 
 const TEST_FILE = /\.(?:test|spec|e2e)\.[jt]s$/;
 const SERVER_ROUTE = /^\+(?:server|page\.server|layout\.server)\.ts$/;
-const FULL_DATA_EXCLUSIONS = new Set([
-	'src/lib/domain/demo-seed.ts',
-	'src/lib/domain/exercise-catalog.ts',
-	'src/lib/domain/food-catalog.ts',
-	'src/lib/domain/recipe-book.ts'
-]);
 const CROSS_CUTTING = [
 	'bun.lock',
 	'package.json',
 	'stryker.config.mjs',
 	'tsconfig.json',
 	'vite.config.ts',
-	'quality/mutation-policy.json'
+	'quality/mutation-policy.json',
+	// The mutate globs and the jsdom/browser spec split moved out of the two
+	// config files above; editing either still redraws what a lane measures, so
+	// they stay cross-cutting.
+	'quality/mutate-patterns.mjs',
+	'quality/dom-free-client-specs.mjs'
 ];
 
 interface ChangedPath {
@@ -31,7 +31,8 @@ function normalize(root: string, file: string): string {
 	return path.relative(root, file).split(path.sep).join('/');
 }
 
-async function walk(directory: string): Promise<string[]> {
+/** Exported for `mutation-oracle.ts`, which walks the same tree. */
+export async function walk(directory: string): Promise<string[]> {
 	let entries;
 	try {
 		entries = await readdir(directory, { withFileTypes: true });
@@ -48,7 +49,12 @@ async function walk(directory: string): Promise<string[]> {
 	return files.flat();
 }
 
-function isProductionTypeScript(file: string): boolean {
+/**
+ * Exported for `mutation-oracle.ts`: a second copy of this predicate would let
+ * the mutation scope and the check that guards it disagree about what counts
+ * as production code.
+ */
+export function isProductionTypeScript(file: string): boolean {
 	return file.endsWith('.ts') && !file.endsWith('.d.ts') && !TEST_FILE.test(file);
 }
 
@@ -219,6 +225,20 @@ function changedLineRanges(projectRoot: string, base: string, file: string): Lin
 	return ranges;
 }
 
+/**
+ * Which vitest project owns a source file. Exported because
+ * `mutation-oracle.ts` has to ask the same question, and a second copy of this
+ * rule would let the mutation scope and the check that guards it disagree.
+ */
+export function isServerSource(file: string): boolean {
+	return (
+		file.startsWith('src/lib/domain/') ||
+		file.startsWith('src/lib/server/') ||
+		file.endsWith('.server.ts') ||
+		SERVER_ROUTE.test(path.posix.basename(file))
+	);
+}
+
 async function fullSources(
 	projectRoot: string,
 	project: 'server' | 'client' | 'all'
@@ -226,14 +246,9 @@ async function fullSources(
 	const files = (await walk(path.join(projectRoot, 'src')))
 		.filter(isProductionTypeScript)
 		.map((file) => normalize(projectRoot, file))
-		.filter((file) => !FULL_DATA_EXCLUSIONS.has(file));
-	const isServer = (file: string): boolean =>
-		file.startsWith('src/lib/domain/') ||
-		file.startsWith('src/lib/server/') ||
-		file.endsWith('.server.ts') ||
-		SERVER_ROUTE.test(path.posix.basename(file));
-	if (project === 'server') return files.filter(isServer).sort();
-	if (project === 'client') return files.filter((file) => !isServer(file)).sort();
+		.filter((file) => !isExcludedFromMutation(file));
+	if (project === 'server') return files.filter(isServerSource).sort();
+	if (project === 'client') return files.filter((file) => !isServerSource(file)).sort();
 	return files.sort();
 }
 
@@ -351,7 +366,7 @@ export async function buildMutationScope(
 							isProductionTypeScript(file) &&
 							belongsToProject(file, changedProject) &&
 							!securityFiles.includes(file) &&
-							!FULL_DATA_EXCLUSIONS.has(file)
+							!isExcludedFromMutation(file)
 					)
 					.map(({ path: file }) => file)
 			: (await fullSources(projectRoot, changedProject)).filter(

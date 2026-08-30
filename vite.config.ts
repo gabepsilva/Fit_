@@ -1,39 +1,11 @@
 import { defineConfig } from 'vitest/config';
 import thresholds from './quality/thresholds.json' with { type: 'json' };
+import { DOM_FREE_CLIENT_SPECS } from './quality/dom-free-client-specs.mjs';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-node';
 import adapterStatic from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
-
-/**
- * The `.svelte.` infix means "this is a client file", not "this needs a DOM",
- * so it used to send every client spec into a headless Chromium. Startup and
- * the Vite transform for that browser land in Stryker's `timeOverheadMS`,
- * which is sampled once in the sequential dry run and then applied as a flat
- * constant to every mutant run — so under N-way contention the specs with the
- * *smallest* net time have the thinnest margin, and a pure string table times
- * out where heavy logic does not.
- *
- * The specs listed here never render or mount a component and never reach for
- * `page`/`locator`/`getBy*`, so a browser buys them nothing. This array is the
- * single source of truth for the split: the browser project excludes exactly
- * what this one includes. A spec that is not listed stays in the browser
- * project — slow but correct — so a new file can never land in jsdom by
- * accident.
- */
-export const DOM_FREE_CLIENT_SPECS = [
-	'src/lib/auth/api.svelte.spec.ts',
-	'src/lib/auth/wording.svelte.spec.ts',
-	'src/lib/components/exercise/plan-options.svelte.spec.ts',
-	'src/lib/components/exercise/routine-tone.svelte.spec.ts',
-	'src/lib/state/log-ui.svelte.spec.ts',
-	'src/lib/state/session.svelte.spec.ts',
-	'src/lib/state/tend.svelte.spec.ts',
-	'src/lib/ui/cn.svelte.spec.ts',
-	'src/lib/ui/dictation.svelte.spec.ts',
-	'src/lib/ui/download.svelte.spec.ts'
-];
 
 /**
  * Order matters, and the DOM-free project deliberately comes first.
@@ -88,17 +60,44 @@ const testProjects = [
 ];
 
 /**
- * The changed-client mutation lane mutates client sources, and those sources
- * are now covered by two vitest projects. Selecting only `client` here would
- * leave every test in `client-node` unrun, turning killed mutants into silent
- * survivors — so `client` selects both.
+ * Mutation testing needs thousands of cheap isolated runs; the browser project
+ * gives expensive stateful ones, so the two do not belong in the same loop. The
+ * DOM-free project is the mutation oracle and the browser project is left out.
+ *
+ * `groupOrder` above already established why: a mutant in a shared module is
+ * covered by both projects, and once the fast spec fails to kill it the run
+ * falls through to a Chromium boot. That boot does not fit the budget Stryker
+ * derives from a per-test net time of milliseconds, so the mutant was recorded
+ * as a Timeout — which Stryker credits as a kill while proving nothing. Ordering
+ * the projects made the mutants the unit specs *do* catch die quickly; only
+ * dropping the browser project fixes the ones they miss.
+ *
+ * The cost of this is real and deliberate: a mutant that only a browser spec
+ * would have killed is now reported as Survived. That is the score this suite
+ * always had, previously masked by timeouts counting as kills. It follows that
+ * anything inside `mutate` in `stryker.config.mjs` needs a spec in
+ * `DOM_FREE_CLIENT_SPECS`, or an explicit exclusion there saying why not.
+ * `scripts/quality/mutation-oracle.ts` enforces that.
+ *
+ * `all` is spelled out for the same reason. It used to be absent, so the lookup
+ * returned `undefined` and the full lane fell through to every project — which
+ * put the browser back in the mutant loop for `test:mutation:full` and the
+ * nightly gate, exactly the case the paragraphs above rule out.
  */
 const MUTATION_PROJECTS: Record<string, readonly string[]> = {
 	server: ['server'],
-	client: ['client', 'client-node']
+	client: ['client-node'],
+	all: ['server', 'client-node']
 };
 
 const mutationProject = process.env.FIT_MUTATION_PROJECT;
+// An unrecognized name used to fall back to "run every project", which is how a
+// missing `all` key silently reinstated the browser. A mutation lane that cannot
+// say which projects it means is a bug, so it fails instead of guessing.
+if (mutationProject !== undefined && MUTATION_PROJECTS[mutationProject] === undefined)
+	throw new Error(
+		`FIT_MUTATION_PROJECT="${mutationProject}" is not one of ${Object.keys(MUTATION_PROJECTS).join(', ')}.`
+	);
 const selectedNames =
 	mutationProject === undefined ? undefined : MUTATION_PROJECTS[mutationProject];
 const selectedTestProjects =

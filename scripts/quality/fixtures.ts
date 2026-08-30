@@ -142,6 +142,17 @@ export const fixtures: GateFixture[] = [
 			)
 	},
 	{
+		name: 'unmeasurable-mutated-file',
+		gate: 'check:mutation-oracle',
+		failureIncludes: 'no spec in DOM_FREE_CLIENT_SPECS reaches it',
+		description:
+			'A client module dropped out of the jsdom project, which would leave it mutated but measured by nothing.',
+		apply: (root) =>
+			edit(root, 'quality/dom-free-client-specs.mjs', (content) =>
+				content.replace("\t'src/lib/ui/cn.svelte.spec.ts',\n", '')
+			)
+	},
+	{
 		name: 'broad-mutation-review',
 		gate: 'check:mutation-reviews',
 		failureIncludes: 'invalid reviewed-mutant entry',
