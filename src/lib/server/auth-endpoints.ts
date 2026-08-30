@@ -2,13 +2,15 @@ import { json } from '@sveltejs/kit';
 import type { Cookies } from '@sveltejs/kit';
 import type { DatabaseSync } from 'node:sqlite';
 import { apiError, readTextBody } from './api';
+import { clientAddressFor } from './client-address';
 import { setSessionCookie } from './session-cookie';
 import type { SessionCookieWriter } from './session-cookie';
-import { membershipsFor, registerAccount } from './users/accounts';
+import { authenticate, membershipsFor, registerAccount } from './users/accounts';
 import { storedTextProblem } from './users/input';
 import { OWASP_SCRYPT } from './users/password';
 import type { ScryptCost } from './users/password';
 import { createSession, MAX_DEVICE_LABEL_LENGTH } from './users/sessions';
+import { checkSignIn, clearSignInFailures, recordFailedSignIn } from './users/throttle';
 import type { Account } from './users/types';
 
 /**
@@ -149,4 +151,57 @@ export async function register(
 	);
 	if (!result.ok) return registrationError(result.problem);
 	return establishSession(db, event, result.account, { deviceLabel, status: 201 });
+}
+
+/**
+ * `Retry-After` is whole seconds and never zero: a client told to wait must
+ * have something to wait for, and rounding up keeps it from returning early
+ * only to be refused again.
+ */
+function tooManyAttempts(retryAfterMs: number): Response {
+	const seconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
+	return apiError('too-many-attempts', {}, { 'retry-after': String(seconds) });
+}
+
+/**
+ * Sign in, in the order the throttle requires.
+ *
+ * `checkSignIn` runs before `authenticate` so a locked attempt costs a hash
+ * lookup instead of 350 ms of scrypt — which is what stops the endpoint from
+ * being a way to spend the server's CPU. The failure is counted before the
+ * answer is written, and cleared only once the password has actually been
+ * proved.
+ *
+ * Every failure answers `invalid-credentials` and nothing else. An unknown
+ * username, a wrong password and a malformed one are the same status, the same
+ * body and — because `authenticate` verifies against a decoy hash when no
+ * account matches — near enough the same duration. The username is the only
+ * identifier this system has, so a caller who could tell those apart would have
+ * halved the problem before guessing anything.
+ *
+ * A lockout is not an oracle either: the throttle keys on the username as it
+ * was submitted, existing or not, so being told to wait says only what the
+ * caller has already done.
+ */
+export async function signIn(
+	db: DatabaseSync,
+	event: AuthEvent,
+	cost: ScryptCost = OWASP_SCRYPT
+): Promise<Response> {
+	const submission = await readSubmission(event.request);
+	if (!submission.ok) return submission.response;
+	const { fields, deviceLabel } = submission.submission;
+	const attempt = {
+		username: fields['username'] ?? '',
+		clientAddress: clientAddressFor(event.request, event.getClientAddress)
+	};
+	const decision = checkSignIn(db, attempt);
+	if (!decision.allowed) return tooManyAttempts(decision.retryAfterMs);
+	const account = await authenticate(db, attempt.username, fields['password'] ?? '', { cost });
+	if (account === null) {
+		recordFailedSignIn(db, attempt);
+		return apiError('invalid-credentials');
+	}
+	clearSignInFailures(db, attempt.username);
+	return establishSession(db, event, account, { deviceLabel, status: 200 });
 }
