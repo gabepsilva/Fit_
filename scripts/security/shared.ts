@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { mkdir, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -69,20 +70,54 @@ export interface CaptureResult {
  * Runs a command to completion, collecting stdout and stderr instead of failing
  * on a non-zero exit. Callers decide what a non-zero status means.
  */
+/**
+ * Signal the child's whole process group. A gate step is a `bun run` wrapper
+ * around the real tool, so killing the wrapper alone orphans the tool: an
+ * abandoned ESLint keeps eight workers busy and still writes its report over
+ * the next run's. `detached` above put the pair in their own group.
+ */
+function killTree(child: ChildProcess): void {
+	if (child.pid === undefined) return;
+	try {
+		process.kill(process.platform === 'win32' ? child.pid : -child.pid, 'SIGTERM');
+	} catch {
+		// Already exited; there is no group left to signal.
+	}
+}
+
 export async function captureStatus(
 	command: string,
 	args: string[],
-	options: { stream?: boolean; env?: NodeJS.ProcessEnv; cwd?: string } = {}
+	options: {
+		stream?: boolean;
+		env?: NodeJS.ProcessEnv;
+		cwd?: string;
+		/** Aborting kills the child; the returned promise then rejects. */
+		signal?: AbortSignal;
+	} = {}
 ): Promise<CaptureResult> {
 	const combined: string[] = [];
 	const out: string[] = [];
 	const err: string[] = [];
+	const cancellable = options.signal !== undefined;
 	const exitCode = await new Promise<number>((resolve, reject) => {
 		const child = spawn(command, args, {
 			cwd: options.cwd ?? projectRoot,
 			env: options.env ?? process.env,
-			stdio: ['ignore', 'pipe', 'pipe']
+			stdio: ['ignore', 'pipe', 'pipe'],
+			// Own process group, so cancelling can signal the whole tree. Only when
+			// a caller asks for it: nothing else here needs detaching.
+			detached: cancellable
 		});
+		let cancelled = false;
+		const cancel = (): void => {
+			cancelled = true;
+			killTree(child);
+		};
+		if (options.signal !== undefined) {
+			if (options.signal.aborted) cancel();
+			else options.signal.addEventListener('abort', cancel, { once: true });
+		}
 		for (const [stream, sink] of [
 			[child.stdout, out],
 			[child.stderr, err]
@@ -95,7 +130,10 @@ export async function captureStatus(
 			});
 		}
 		child.on('error', reject);
-		child.on('close', (code) => resolve(code ?? 1));
+		child.on('close', (code) => {
+			if (cancelled) reject(new Error(`${command} ${args.join(' ')} was cancelled.`));
+			else resolve(code ?? 1);
+		});
 	});
 
 	return { exitCode, output: combined.join(''), stdout: out.join(''), stderr: err.join('') };

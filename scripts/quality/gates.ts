@@ -5,6 +5,12 @@ export interface GateStep {
 	purpose: string;
 	/** Machine-readable artifacts this step writes, relative to the project root. */
 	artifacts?: string[];
+	/**
+	 * Safe to run beside the other concurrent steps: holds no exclusive resource,
+	 * reads no artifact another step in the same tier writes, and binds no port.
+	 * Opt-in, so a new step is sequential until someone has checked that it is not.
+	 */
+	concurrent?: boolean;
 	/** Requires a running Docker daemon. */
 	docker?: boolean;
 	/** Launches a real browser. */
@@ -13,25 +19,32 @@ export interface GateStep {
 
 /** Ring 2/3: no Docker, no browser. Safe for a pre-commit or per-edit loop. */
 const staticSteps: GateStep[] = [
-	{ name: 'format:check', purpose: 'Prettier formatting' },
-	{ name: 'lint', purpose: 'Type-aware ESLint', artifacts: ['reports/quality/eslint.json'] },
-	{ name: 'lint:docs', purpose: 'Markdown lint' },
-	{ name: 'spellcheck', purpose: 'Spelling' },
-	{ name: 'check', purpose: 'Svelte and TypeScript types' },
-	{ name: 'check:scripts', purpose: 'Script types' },
+	{ name: 'format:check', purpose: 'Prettier formatting', concurrent: true },
+	{
+		name: 'lint',
+		purpose: 'Type-aware ESLint',
+		artifacts: ['reports/quality/eslint.json'],
+		concurrent: true
+	},
+	{ name: 'lint:docs', purpose: 'Markdown lint', concurrent: true },
+	{ name: 'spellcheck', purpose: 'Spelling', concurrent: true },
+	{ name: 'check', purpose: 'Svelte and TypeScript types', concurrent: true },
+	{ name: 'check:scripts', purpose: 'Script types', concurrent: true },
 	{
 		name: 'check:suppressions',
 		purpose: 'Suppression ratchet',
-		artifacts: ['reports/quality/suppressions.json']
+		artifacts: ['reports/quality/suppressions.json'],
+		concurrent: true
 	},
-	{ name: 'check:thresholds', purpose: 'Threshold guard' },
-	{ name: 'check:mutation-reviews', purpose: 'Exact mutation-review ledger' },
-	{ name: 'check:ci-contract', purpose: 'Local and hosted CI job parity' },
-	{ name: 'knip', purpose: 'Unused files, exports, dependencies' },
+	{ name: 'check:thresholds', purpose: 'Threshold guard', concurrent: true },
+	{ name: 'check:mutation-reviews', purpose: 'Exact mutation-review ledger', concurrent: true },
+	{ name: 'check:ci-contract', purpose: 'Local and hosted CI job parity', concurrent: true },
+	{ name: 'knip', purpose: 'Unused files, exports, dependencies', concurrent: true },
 	{
 		name: 'duplicates',
 		purpose: 'Copy-paste detection',
-		artifacts: ['reports/quality/duplication/jscpd-report.json']
+		artifacts: ['reports/quality/duplication/jscpd-report.json'],
+		concurrent: true
 	}
 ];
 
@@ -191,7 +204,8 @@ export const tiers = {
 		{
 			name: 'test:unit:server',
 			purpose: 'Server unit tests',
-			artifacts: ['reports/quality/vitest-server.json']
+			artifacts: ['reports/quality/vitest-server.json'],
+			concurrent: true
 		}
 	],
 	/** Ring 3/4. The pre-push gate. */

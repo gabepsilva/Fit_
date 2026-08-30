@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import type { GateFixture } from './fixtures';
 import { fixtures } from './fixtures';
+import { pooled } from './pool';
 import { captureStatus } from '../security/shared';
 
 /**
@@ -84,26 +85,6 @@ const fixtureEnv: NodeJS.ProcessEnv = {
 	MUTATION_BASE: 'HEAD',
 	STRYKER_CONCURRENCY: '2'
 };
-
-/** Run `work` over `items`, `limit` at a time, keeping the input order. */
-async function pooled<T, R>(
-	items: T[],
-	limit: number,
-	work: (item: T) => Promise<R>
-): Promise<R[]> {
-	const results = new Array<R>(items.length);
-	let next = 0;
-	const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-		while (next < items.length) {
-			const index = next++;
-			const item = items[index];
-			if (item === undefined) return;
-			results[index] = await work(item);
-		}
-	});
-	await Promise.all(workers);
-	return results;
-}
 
 /** Fixtures mutate their workspace, so a workspace must never be the real tree. */
 function assertDisposable(workspace: string): void {
