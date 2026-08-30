@@ -35,7 +35,31 @@ export const DOM_FREE_CLIENT_SPECS = [
 	'src/lib/ui/download.svelte.spec.ts'
 ];
 
+/**
+ * Order matters, and the DOM-free project deliberately comes first.
+ *
+ * Stryker's vitest runner sets `bail: 1`, so a mutant run stops at the first
+ * failing test. Under `coverageAnalysis: 'perTest'` a mutant in a shared module
+ * — `auth/api.ts`, `state/session.svelte.ts` — is covered both by its own fast
+ * unit spec and by the page and component specs that mount it in Chromium.
+ * With the browser project first, the browser had to boot and transform before
+ * anything could fail, and the run blew Stryker's budget: the mutant was
+ * recorded as a Timeout, which Stryker credits as a kill while proving nothing.
+ * Running the jsdom project first lets the unit spec fail in milliseconds, and
+ * the same mutant is recorded as Killed by the assertion that actually caught it.
+ */
 const testProjects = [
+	{
+		extends: './vite.config.ts',
+		test: {
+			name: 'client-node',
+			environment: 'jsdom',
+			setupFiles: ['./vitest-setup-client-node.ts'],
+			...(process.env.FIT_MUTATION_RUN ? { pool: 'threads' as const } : {}),
+			include: DOM_FREE_CLIENT_SPECS,
+			exclude: ['src/lib/server/**']
+		}
+	},
 	{
 		extends: './vite.config.ts',
 		test: {
@@ -47,17 +71,6 @@ const testProjects = [
 			},
 			include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
 			exclude: ['src/lib/server/**', ...DOM_FREE_CLIENT_SPECS]
-		}
-	},
-	{
-		extends: './vite.config.ts',
-		test: {
-			name: 'client-node',
-			environment: 'jsdom',
-			setupFiles: ['./vitest-setup-client-node.ts'],
-			...(process.env.FIT_MUTATION_RUN ? { pool: 'threads' as const } : {}),
-			include: DOM_FREE_CLIENT_SPECS,
-			exclude: ['src/lib/server/**']
 		}
 	},
 	{
