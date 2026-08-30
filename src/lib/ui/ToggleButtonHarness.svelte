@@ -7,15 +7,17 @@
 		label,
 		pressed,
 		tone,
+		resting,
 		class: className,
 		onclick
 	}: {
 		label: string;
 		pressed: boolean;
 		tone?: 'primary' | 'inverse' | undefined;
+		resting?: string | undefined;
 		class?: string | undefined;
 		onclick?: (() => void) | undefined;
 	} = $props();
 </script>
 
-<ToggleButton {pressed} {tone} class={className} {onclick}>{label}</ToggleButton>
+<ToggleButton {pressed} {tone} {resting} class={className} {onclick}>{label}</ToggleButton>

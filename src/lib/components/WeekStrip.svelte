@@ -16,7 +16,8 @@
 		<ToggleButton
 			pressed={isSelected}
 			onclick={() => (selected = iso)}
-			class="bg-card text-foreground flex h-16 flex-1 flex-col items-center justify-center gap-1 rounded-2xl transition-colors duration-150"
+			resting="bg-card text-foreground"
+			class="flex h-16 flex-1 flex-col items-center justify-center gap-1 rounded-2xl transition-colors duration-150"
 		>
 			<span class={cn('text-xs', isSelected ? 'opacity-80' : 'text-muted-foreground')}>
 				{iso === today ? 'Today' : weekdayShort(iso)}

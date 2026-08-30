@@ -86,6 +86,33 @@ add more maintenance and noise than useful protection.
 
 ## Recorded decisions and known gaps
 
+- **`cn` does not resolve class conflicts, and that is what pays for the bundle
+  (recorded 2026-08-30).** `tailwind-merge` cost 26,726 bytes of client JavaScript --
+  6.6 percent of the whole budget -- to decide which of two conflicting Tailwind
+  utilities won. Instrumenting `cn` and driving it with the component suite found
+  fifteen call sites that actually depended on it, eleven of them in one component:
+  `ToggleButton`, whose callers passed the resting palette in `class` and let the
+  pressed tone be layered over it. `ToggleButton` now takes `resting` and picks one
+  palette or the other, so the two states are exclusive by construction; the
+  remaining four became a real `icon-round` button size, a Textarea min-height moved
+  to its call sites, and two redundant overrides deleted. `cn` is now `clsx` alone.
+  Do not reintroduce a merge resolver: compose so that one utility per group is ever
+  emitted, and let `cn.svelte.spec.ts` -- which asserts `cn('p-2', 'p-4')` keeps both
+  -- fail anyone who forgets. The budget came down with it, 400 KiB to 373 KiB.
+- **The scanner cache is scoped per artifact, and Trivy's database is not in it
+  (recorded 2026-08-30).** Every workflow keyed one `.security-cache` entry on the
+  same hash. `ci.yml` claimed it first with only images and Semgrep rules inside, and
+  `actions/cache` does not re-save on an exact key hit, so the nightly job could
+  never write its database back and re-downloaded roughly 1.3 GB on every run. The
+  cache is now scoped to `images` and `semgrep`, which is all the pull-request jobs
+  populate. The database stays uncached on purpose: its `NextUpdate` is 24 hours and
+  the schedule is 24 hours, so a restored copy is stale about half the time and gets
+  downloaded again regardless, and a 1.3 GB entry against a 10 GB repository budget
+  evicts the Bun and Playwright caches that every pull-request job restores.
+  Trivy's misconfiguration scan is narrowed to `dockerfile` for the same reason its
+  findings were empty: Kubernetes, Helm, Terraform, CloudFormation, Azure ARM and
+  Ansible cannot appear in this tree. Widen it when a new kind of file lands.
+
 - **The JavaScript budget was raised to 320 KiB when the product UI landed (recorded
   2026-08-28).** The previous 150 KiB budget was set against a repository that carried
   only the SvelteKit demo routes, so it measured an empty application. Porting the front
