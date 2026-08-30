@@ -154,6 +154,25 @@ describe('signIn', () => {
 		expect(result).toMatchObject({ ok: false, failure: { code: 'invalid-body' } });
 	});
 
+	it('reads a failure body whose error is null as a malformed one, rather than throwing', async () => {
+		// `typeof null` is 'object', so the null check beside it is the only thing
+		// standing between a JSON `null` and a TypeError thrown out of a caller
+		// that had merely asked why its request was refused.
+		stub(jsonResponse({ error: null }, { status: 400 }));
+		await expect(signIn(CREDENTIALS)).resolves.toMatchObject({
+			ok: false,
+			failure: { code: 'invalid-body' }
+		});
+	});
+
+	it('refuses an empty code, which names no failure', async () => {
+		// The recognized codes are matched by exact string, and '' is not one of
+		// them: an empty code is a malformed body, not a code to hand onwards.
+		stub(jsonResponse({ error: { code: '' } }, { status: 400 }));
+		const result = await signIn(CREDENTIALS);
+		expect(result).toMatchObject({ failure: { code: 'invalid-body' } });
+	});
+
 	it('ignores a field and reason that are not text, rather than showing a number', async () => {
 		stub(jsonResponse({ error: { code: 'invalid-input', field: 7, reason: 9 } }, { status: 400 }));
 		const result = await signIn(CREDENTIALS);
