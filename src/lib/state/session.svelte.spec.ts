@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SignedInSession } from '$lib/auth/api';
 import { session, SESSION_STORAGE_KEY } from './session.svelte';
 
@@ -24,6 +24,28 @@ beforeEach(() => {
 	session.current = null;
 	session.hydrated = false;
 });
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
+/**
+ * `fetch` is stubbed rather than pointed at a running server: what `refresh`
+ * owns is which answers it believes, and a real endpoint would test the
+ * endpoint instead. See `$lib/auth/api`'s own spec for the request shape.
+ */
+function stubFetch(response: Response | Error): void {
+	vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+		response instanceof Error ? Promise.reject(response) : Promise.resolve(response)
+	);
+}
+
+function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
+	return new Response(JSON.stringify(body), {
+		...init,
+		headers: { 'content-type': 'application/json' }
+	});
+}
 
 describe('session', () => {
 	it('starts knowing nothing', () => {
@@ -117,5 +139,37 @@ describe('session', () => {
 		session.begin(signedInSession(inDays(90)));
 		session.forget();
 		expect(localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
+	});
+
+	it('takes the session the server reports over the one it remembered', async () => {
+		session.begin(signedInSession(inDays(90)));
+		const renewed = signedInSession(inDays(30));
+		stubFetch(jsonResponse(renewed));
+		await expect(session.refresh()).resolves.toBe(true);
+		expect(session.current).toEqual(renewed);
+	});
+
+	it('stores what the server reported, so the next reload starts from it', async () => {
+		stubFetch(jsonResponse(signedInSession(inDays(30))));
+		await session.refresh();
+		expect(localStorage.getItem(SESSION_STORAGE_KEY)).toContain('robin');
+	});
+
+	it('signs the device out when the server says there is no session', async () => {
+		session.begin(signedInSession(inDays(90)));
+		stubFetch(jsonResponse({ error: { code: 'unauthenticated' } }, { status: 401 }));
+		await expect(session.refresh()).resolves.toBe(false);
+		expect(session.signedIn).toBe(false);
+		expect(localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
+	});
+
+	it('keeps the record when the request never arrived, rather than guessing', async () => {
+		// Offline is not signed out. Dropping the record here would sign someone
+		// out of a working session every time they went through a tunnel.
+		session.begin(signedInSession(inDays(90)));
+		stubFetch(new TypeError('Failed to fetch'));
+		await expect(session.refresh()).resolves.toBe(false);
+		expect(session.signedIn).toBe(true);
+		expect(localStorage.getItem(SESSION_STORAGE_KEY)).toContain('robin');
 	});
 });

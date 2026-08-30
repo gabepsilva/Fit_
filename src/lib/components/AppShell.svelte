@@ -23,6 +23,11 @@
 		// The session record is restored beside the journal and for the same
 		// reason: both read `localStorage`, which only exists on the client.
 		session.hydrate();
+		// What was restored is only what signing in answered, months ago perhaps,
+		// and the session behind it may have been revoked from another device
+		// since. The server is asked once, and only when there is something to
+		// reconcile: a device that was never signed in has nothing to ask about.
+		if (session.signedIn) void session.refresh();
 	});
 
 	// Arriving somewhere new closes the drawer. Hooking navigation rather than the

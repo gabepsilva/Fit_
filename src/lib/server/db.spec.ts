@@ -54,6 +54,70 @@ describe('migrate', () => {
 		expect(tableNames(db)).toContain('sign_in_throttle');
 	});
 
+	it('counts registration attempts in the throttle table beside sign-in failures', () => {
+		const db = new DatabaseSync(':memory:');
+		migrate(db);
+		expect(() => {
+			db.exec(
+				`insert into sign_in_throttle (scope, key_hash, failures, window_ends_at)
+				 values ('registration', 'deadbeef', 1, '2026-09-01T00:00:00.000Z')`
+			);
+		}).not.toThrow();
+	});
+
+	it('still refuses a scope nothing counts in', () => {
+		// The check constraint is the only thing keeping a typo in a scope name
+		// from quietly becoming a counter nobody ever reads.
+		const db = new DatabaseSync(':memory:');
+		migrate(db);
+		expect(() => {
+			db.exec(
+				`insert into sign_in_throttle (scope, key_hash, failures, window_ends_at)
+				 values ('reg', 'deadbeef', 1, '2026-09-01T00:00:00.000Z')`
+			);
+		}).toThrow();
+	});
+
+	it('carries the counts across the table it rebuilt them in', () => {
+		// Rebuilding the throttle table to widen its check constraint must not
+		// drop what it holds: that would hand every locked-out caller a reset.
+		const db = new DatabaseSync(':memory:');
+		db.exec(
+			`create table sign_in_throttle (
+				scope          text not null check (scope in ('username', 'address')),
+				key_hash       text not null,
+				failures       integer not null,
+				window_ends_at text not null,
+				locked_until   text,
+				primary key (scope, key_hash)
+			) strict;
+			create index sign_in_throttle_expiry on sign_in_throttle (window_ends_at);
+			insert into sign_in_throttle (scope, key_hash, failures, window_ends_at, locked_until)
+			values ('username', 'deadbeef', 6, '2026-09-01T00:00:00.000Z', '2026-09-01T00:01:00.000Z');
+			pragma user_version = 2`
+		);
+		migrate(db);
+		expect(db.prepare('select * from sign_in_throttle').all()).toEqual([
+			{
+				scope: 'username',
+				key_hash: 'deadbeef',
+				failures: 6,
+				window_ends_at: '2026-09-01T00:00:00.000Z',
+				locked_until: '2026-09-01T00:01:00.000Z'
+			}
+		]);
+	});
+
+	it('leaves the expiry index in place after that rebuild', () => {
+		const db = new DatabaseSync(':memory:');
+		migrate(db);
+		const indexes = db
+			.prepare("select name from sqlite_master where type = 'index'")
+			.all()
+			.map((row) => row['name']);
+		expect(indexes).toContain('sign_in_throttle_expiry');
+	});
+
 	it('brings an older database forward without re-running what it has', () => {
 		const db = new DatabaseSync(':memory:');
 		db.exec('pragma user_version = 1');

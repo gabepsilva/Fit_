@@ -8,15 +8,15 @@
 			"location": {
 				"end": {
 					"column": 24,
-					"line": 144
+					"line": 169
 				},
 				"start": {
 					"column": 3,
-					"line": 143
+					"line": 168
 				}
 			},
-			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
-			"fingerprint": "131a457badc4358385bcb4d86d10f1861b34c6d3c04fb5385459126928948274",
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "e076c0d7b9775cba8686d01e59a154de79f87dcf5315154a429ee6b4c7e6eb19",
 			"classification": "host-specific-defense-in-depth",
 			"rationale": "On POSIX, a newly created directory is already restricted by mode 0700; for an existing directory mkdirSync returns undefined, so this composite replacement cannot change the observable permission verdict.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -28,15 +28,15 @@
 			"location": {
 				"end": {
 					"column": 24,
-					"line": 144
+					"line": 169
 				},
 				"start": {
 					"column": 3,
-					"line": 143
+					"line": 168
 				}
 			},
-			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
-			"fingerprint": "f6041c342498a6a53f1b9667b31313293f942a9864758c4c1cdd86eec4a34f55",
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "ce818da9233766930782abc3ba10ce0f46449e1ee2c450dbe48f68dcbbfdf8cb",
 			"classification": "host-specific-defense-in-depth",
 			"rationale": "On POSIX, the OR differs only for a newly created directory, whose requested 0700 mode already makes the outer permission check false; existing directories take the same branch.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -48,15 +48,15 @@
 			"location": {
 				"end": {
 					"column": 31,
-					"line": 143
+					"line": 168
 				},
 				"start": {
 					"column": 3,
-					"line": 143
+					"line": 168
 				}
 			},
-			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
-			"fingerprint": "9cab0ef83e62ba744e3985a8af4e1756f25d37d88113fa0c87ca9e53753bf3d4",
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "590c278b6a351308d11ab9302bf18c6d010a73e94a89fb71ec38eeb2e942f666",
 			"classification": "host-specific-defense-in-depth",
 			"rationale": "This platform guard is always true on the Linux host where POSIX permission enforcement and this mutation are observable; Windows deliberately does not implement POSIX mode enforcement.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -68,15 +68,15 @@
 			"location": {
 				"end": {
 					"column": 31,
-					"line": 143
+					"line": 168
 				},
 				"start": {
 					"column": 24,
-					"line": 143
+					"line": 168
 				}
 			},
-			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
-			"fingerprint": "a0b51943929e22348bee58089e2f6ee9c7c79f83e7bfe0f2ad2edc321e4af33d",
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "af198e6127c13f421f928d64a8246a70a93646a340a57cf42bdd501bfdd9d2c7",
 			"classification": "host-specific-defense-in-depth",
 			"rationale": "Changing the Windows platform sentinel to this exact empty string is observationally identical on the Linux security-test host; the classification is host-specific and fingerprinted to this replacement.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -88,15 +88,15 @@
 			"location": {
 				"end": {
 					"column": 24,
-					"line": 144
+					"line": 169
 				},
 				"start": {
 					"column": 3,
-					"line": 144
+					"line": 169
 				}
 			},
-			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
-			"fingerprint": "43185a276172019c04cfcf4cbd4aad3a4ab856edf17aaa48432efc0c6fdcefd6",
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "3089651fd3bb6114f49cd03f561c3cd84d0a3d8b3904cd3be9a6fc0d72cfcd9e",
 			"classification": "equivalent",
 			"rationale": "mkdirSync returns undefined for an existing directory; a newly created directory receives mode 0700, so forcing this condition true cannot change the outer permission verdict.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -108,15 +108,15 @@
 			"location": {
 				"end": {
 					"column": 9,
-					"line": 188
+					"line": 213
 				},
 				"start": {
 					"column": 7,
-					"line": 188
+					"line": 213
 				}
 			},
-			"sourceHash": "ba157bfac135e8ed71fa25d171a83ad13cbcfbfbe26a6d6e44b9ce911f379dc8",
-			"fingerprint": "1e9c99e077bdb1840038531b598b69b58ef476dd567be80f9a1add2555581648",
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "be080ee00cdfbec038f38b7a9e7d91b1cae9fbbb60268054671fe3a0bd53a878",
 			"classification": "equivalent",
 			"rationale": "When database creation fails before assignment, forcing the db guard true only throws inside the deliberately swallowing close-error try/catch; the original opening error and file-hardening behavior remain identical.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -208,17 +208,57 @@
 			"location": {
 				"end": {
 					"column": 83,
-					"line": 206
+					"line": 223
 				},
 				"start": {
 					"column": 81,
-					"line": 206
+					"line": 223
 				}
 			},
-			"sourceHash": "e6b05c38f3b7eae34ceccbd793d5a2624753c92ff20ccf59011085f95928db10",
-			"fingerprint": "911fb4236dfda7c9e08de230c46b587fd0a672b288d44dc479045bd892ceb0eb",
+			"sourceHash": "0a8e8561f808fd867cab0632480b78104f297f24265e1fa67f079dce6622ed8b",
+			"fingerprint": "ce6a57028313f2670872db833eebe77c82207f7d18f40cf3f8c40694551eee8c",
 			"classification": "equivalent",
 			"rationale": "The fallback for an absent password field is only ever verified against a stored hash and never persisted, so any literal that is not somebody's password yields the same invalid-credentials answer; the upgrade candidate a longer literal would derive is discarded because verification failed.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/users/throttle.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 47,
+					"line": 155
+				},
+				"start": {
+					"column": 16,
+					"line": 155
+				}
+			},
+			"sourceHash": "58216abb15dab242695f38952daf572d940aba2c20e43e8be348ea36c9712f6b",
+			"fingerprint": "3f167aadf6cab43719b03d4d3dd069dda5be8b97c6d4d841e959153d144ae683",
+			"classification": "equivalent",
+			"rationale": "The mutated ternary reads locked_until from a STRICT text column, so the value is a string or null; the guard's false branch and the column's own null are the same value, and the typeof test only narrows an unknown row value for the type checker.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/users/throttle.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "false",
+			"location": {
+				"end": {
+					"column": 50,
+					"line": 194
+				},
+				"start": {
+					"column": 24,
+					"line": 194
+				}
+			},
+			"sourceHash": "58216abb15dab242695f38952daf572d940aba2c20e43e8be348ea36c9712f6b",
+			"fingerprint": "4d46fd6b7348af16d17cd0b03e15f0d168e204d975fedab44fcb9b3ac82a99b6",
+			"classification": "equivalent",
+			"rationale": "Dropping the null check falls through to new Date(null), the epoch, so the subtraction is always negative for any clock after 1970 and Math.max(0, ...) clamps it to the same zero the guard returns.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		}
 	]

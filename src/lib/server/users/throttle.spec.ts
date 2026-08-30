@@ -4,10 +4,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../db';
 import {
 	ADDRESS_POLICY,
+	checkRegistration,
 	checkSignIn,
 	clearSignInFailures,
 	pruneSignInThrottle,
 	recordFailedSignIn,
+	recordRegistration,
+	REGISTRATION_POLICY,
 	USERNAME_POLICY
 } from './throttle';
 import type { SignInAttempt, ThrottleDecision, ThrottleScope } from './throttle';
@@ -340,6 +343,7 @@ describe('pruneSignInThrottle', () => {
 	it('never outlives its own lock, so a sweep cannot free a locked scope early', () => {
 		expect(USERNAME_POLICY.maxLockMs).toBeLessThanOrEqual(USERNAME_POLICY.windowMs);
 		expect(ADDRESS_POLICY.maxLockMs).toBeLessThanOrEqual(ADDRESS_POLICY.windowMs);
+		expect(REGISTRATION_POLICY.maxLockMs).toBeLessThanOrEqual(REGISTRATION_POLICY.windowMs);
 	});
 
 	it('runs as part of recording a failure, so the table does not grow unbounded', () => {
@@ -351,5 +355,175 @@ describe('pruneSignInThrottle', () => {
 		);
 		// Only the second attempt's two rows survive: the first pair expired.
 		expect(rowCount()).toBe(2);
+	});
+});
+
+const HOUSEHOLD_ADDRESS = '203.0.113.7';
+
+/** Register `times` in a row from one address, and report the last decision. */
+function signUp(address: string | null, times: number, now = NOW): ThrottleDecision {
+	let decision: ThrottleDecision = { allowed: true };
+	for (let attempt = 0; attempt < times; attempt += 1) {
+		decision = recordRegistration(db, address, now);
+	}
+	return decision;
+}
+
+describe('checkRegistration', () => {
+	it('allows an address that has never registered anything', () => {
+		expect(checkRegistration(db, HOUSEHOLD_ADDRESS, NOW)).toEqual({ allowed: true });
+	});
+
+	it('still allows the last sign-up before the limit', () => {
+		// A household really does create several accounts in one sitting, and the
+		// allowance exists so that it can.
+		signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit - 1);
+		expect(checkRegistration(db, HOUSEHOLD_ADDRESS, NOW)).toEqual({ allowed: true });
+	});
+
+	it('locks the address once the limit is reached', () => {
+		signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit);
+		expect(checkRegistration(db, HOUSEHOLD_ADDRESS, NOW)).toEqual({
+			allowed: false,
+			scope: 'registration',
+			retryAfterMs: REGISTRATION_POLICY.baseLockMs
+		});
+	});
+
+	it('allows the address again once the lock has run out', () => {
+		signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit);
+		expect(checkRegistration(db, HOUSEHOLD_ADDRESS, at(REGISTRATION_POLICY.baseLockMs))).toEqual({
+			allowed: true
+		});
+	});
+
+	it('still refuses a moment before the lock ends', () => {
+		signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit);
+		expect(
+			checkRegistration(db, HOUSEHOLD_ADDRESS, at(REGISTRATION_POLICY.baseLockMs - 1))
+		).toMatchObject({ allowed: false, retryAfterMs: 1 });
+	});
+
+	it('does not lock a different address', () => {
+		signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit);
+		expect(checkRegistration(db, '198.51.100.4', NOW)).toEqual({ allowed: true });
+	});
+
+	it('allows every attempt when the deployment cannot determine an address', () => {
+		// There is no username scope to fall back to: counting against a name
+		// nobody owns yet would let one caller hold it out of ever being taken.
+		expect(signUp(null, REGISTRATION_POLICY.limit + 1)).toEqual({ allowed: true });
+		expect(checkRegistration(db, null, NOW)).toEqual({ allowed: true });
+		expect(rowCount()).toBe(0);
+	});
+
+	it('reads an empty address as no address rather than as one every caller shares', () => {
+		expect(signUp('', REGISTRATION_POLICY.limit + 1)).toEqual({ allowed: true });
+		expect(rowCount()).toBe(0);
+	});
+
+	it('counts an oversized address in the bucket the address it truncates to owns', () => {
+		const long = `198.51.100.4${'0'.repeat(10_000)}`;
+		signUp(long, REGISTRATION_POLICY.limit);
+		expect(checkRegistration(db, long.slice(0, 128), NOW)).toMatchObject({
+			allowed: false,
+			scope: 'registration'
+		});
+	});
+
+	it('is not spent by failed sign-ins from the same address', () => {
+		// The two scopes answer different attacks and are sized apart: a household
+		// that mistyped its password must still be able to add a profile.
+		for (let index = 0; index < ADDRESS_POLICY.limit; index += 1) {
+			recordFailedSignIn(
+				db,
+				{ username: `victim-${index}`, clientAddress: HOUSEHOLD_ADDRESS },
+				NOW
+			);
+		}
+		expect(checkRegistration(db, HOUSEHOLD_ADDRESS, NOW)).toEqual({ allowed: true });
+	});
+
+	it('does not spend the sign-in allowance either', () => {
+		signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit);
+		expect(checkSignIn(db, { username: 'jordan', clientAddress: HOUSEHOLD_ADDRESS }, NOW)).toEqual({
+			allowed: true
+		});
+	});
+
+	it('dates the attempt from the real clock when none is given', () => {
+		for (let index = 0; index < REGISTRATION_POLICY.limit; index += 1) {
+			recordRegistration(db, HOUSEHOLD_ADDRESS);
+		}
+		expect(checkRegistration(db, HOUSEHOLD_ADDRESS)).toMatchObject({ allowed: false });
+	});
+});
+
+describe('recordRegistration', () => {
+	it('reports the lock it has just imposed', () => {
+		expect(signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit)).toEqual({
+			allowed: false,
+			scope: 'registration',
+			retryAfterMs: REGISTRATION_POLICY.baseLockMs
+		});
+	});
+
+	it('doubles the wait for each attempt past the limit', () => {
+		signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit);
+		expect(signUp(HOUSEHOLD_ADDRESS, 1)).toMatchObject({ retryAfterMs: 2 * MINUTE_MS });
+		expect(signUp(HOUSEHOLD_ADDRESS, 1)).toMatchObject({ retryAfterMs: 4 * MINUTE_MS });
+	});
+
+	it('caps the wait rather than doubling it without bound', () => {
+		expect(signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit + 20)).toMatchObject({
+			retryAfterMs: REGISTRATION_POLICY.maxLockMs
+		});
+	});
+
+	it('records no lock while the address is still inside its allowance', () => {
+		signUp(HOUSEHOLD_ADDRESS, 1);
+		const rows = db.prepare('select locked_until from sign_in_throttle').all();
+		expect(rows.map((row) => row['locked_until'])).toEqual([null]);
+	});
+
+	it('puts its own scope inside the hash, so it cannot share a bucket', () => {
+		// The address scope counts failed sign-ins from this same address. If the
+		// scope dropped out of the digest, one endpoint would spend the other's
+		// allowance and both policies would mean nothing.
+		signUp(HOUSEHOLD_ADDRESS, 1);
+		const digest = (value: string): string => createHash('sha256').update(value).digest('hex');
+		const rows = db.prepare('select scope, key_hash from sign_in_throttle').all();
+		expect(rows.map((row) => [row['scope'], row['key_hash']])).toEqual([
+			['registration', digest(`registration\u0000${HOUSEHOLD_ADDRESS}`)]
+		]);
+	});
+
+	it('stores no address text, only its hash', () => {
+		signUp(HOUSEHOLD_ADDRESS, 1);
+		const stored = JSON.stringify(db.prepare('select * from sign_in_throttle').all());
+		expect(stored).not.toContain(HOUSEHOLD_ADDRESS);
+	});
+
+	it('forgets attempts that never became a lock once the window closes', () => {
+		signUp(HOUSEHOLD_ADDRESS, REGISTRATION_POLICY.limit - 1);
+		signUp(HOUSEHOLD_ADDRESS, 1, at(REGISTRATION_POLICY.windowMs + 1));
+		expect(checkRegistration(db, HOUSEHOLD_ADDRESS, at(REGISTRATION_POLICY.windowMs + 1))).toEqual({
+			allowed: true
+		});
+	});
+
+	it('keeps counting inside the window, so slow sign-ups still lock', () => {
+		for (let index = 0; index < REGISTRATION_POLICY.limit; index += 1) {
+			recordRegistration(db, HOUSEHOLD_ADDRESS, at(index * 5 * MINUTE_MS));
+		}
+		expect(checkRegistration(db, HOUSEHOLD_ADDRESS, at(45 * MINUTE_MS))).toMatchObject({
+			allowed: false
+		});
+	});
+
+	it('sweeps the expired rows it writes beside, so the table does not grow unbounded', () => {
+		signUp('198.51.100.4', 1);
+		signUp(HOUSEHOLD_ADDRESS, 1, at(REGISTRATION_POLICY.windowMs + 1));
+		expect(rowCount()).toBe(1);
 	});
 });

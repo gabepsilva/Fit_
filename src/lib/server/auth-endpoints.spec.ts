@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+	currentSession,
 	register,
 	SESSION_DELIVERY_HEADER,
 	signIn,
@@ -11,6 +12,7 @@ import type { AuthEvent } from './auth-endpoints';
 import { openDatabase } from './db';
 import { SESSION_COOKIE } from './session-cookie';
 import { resolveSession } from './users/sessions';
+import { REGISTRATION_POLICY } from './users/throttle';
 
 /** See the note in `password.spec.ts`: the production cost is too slow to test at. */
 const CHEAP = { n: 2 ** 12, r: 8, p: 1 };
@@ -265,7 +267,95 @@ describe('register', () => {
 		await register(db, eventFor().event, CHEAP);
 		expect(db.prepare('select count(*) as n from account').get()?.['n']).toBe(0);
 	});
+
+	it('lets one household sign several people up in one sitting', async () => {
+		// The allowance exists to be spent: a partner and a grown child each need
+		// an account of their own, and they share the front door's address.
+		for (let index = 0; index < 5; index += 1) {
+			const { event } = eventFor({ body: { ...REGISTRATION, username: `member-${index}` } });
+			expect((await register(db, event, CHEAP)).status).toBe(201);
+		}
+	});
+
+	it('throttles the address once it has spent its allowance', async () => {
+		await signUpUntilLocked();
+		const response = await register(db, eventFor({ body: REGISTRATION }).event, CHEAP);
+		expect(response.status).toBe(429);
+		expect(await bodyOf(response)).toEqual({ error: { code: 'too-many-attempts' } });
+		expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0);
+	});
+
+	it('says how long to wait in whole seconds, the way sign-in does', async () => {
+		await signUpUntilLocked();
+		const response = await register(db, eventFor({ body: REGISTRATION }).event, CHEAP);
+		const seconds = Number(response.headers.get('retry-after'));
+		expect(seconds).toBeGreaterThan(50);
+		expect(seconds).toBeLessThanOrEqual(60);
+	});
+
+	it('creates no account for an attempt it has refused to consider', async () => {
+		await signUpUntilLocked();
+		const before = db.prepare('select count(*) as n from account').get()?.['n'];
+		const { event, written } = eventFor({ body: { ...REGISTRATION, username: 'latecomer' } });
+		await register(db, event, CHEAP);
+		expect(db.prepare('select count(*) as n from account').get()?.['n']).toBe(before);
+		expect(written).toHaveLength(0);
+	});
+
+	it('counts a name that was already taken against the allowance too', async () => {
+		// This is the enumeration case: `username-taken` is the one answer here
+		// that names who exists, so asking has to cost what registering costs.
+		for (let index = 0; index < REGISTRATION_POLICY.limit; index += 1) {
+			const response = await register(db, eventFor({ body: REGISTRATION }).event, CHEAP);
+			expect(response.status).toBe(index === 0 ? 201 : 409);
+		}
+		expect((await register(db, eventFor({ body: REGISTRATION }).event, CHEAP)).status).toBe(429);
+	});
+
+	it('counts the attempt before it derives, not after it succeeds', async () => {
+		await register(db, eventFor({ body: REGISTRATION }).event, CHEAP);
+		expect(
+			db.prepare("select failures from sign_in_throttle where scope = 'registration'").get()?.[
+				'failures'
+			]
+		).toBe(1);
+	});
+
+	it('leaves signing in alone while registration is held', async () => {
+		// The two scopes answer different attacks, so spending one must not shut
+		// the door on people who already have accounts behind it.
+		await signUpUntilLocked();
+		const response = await signIn(db, signInEvent({ username: 'spender-0' }).event, CHEAP);
+		expect(response.status).toBe(200);
+	});
+
+	it('skips the address scope when a proxy nobody declared rewrote the connection', async () => {
+		const { event } = eventFor({
+			body: REGISTRATION,
+			headers: { 'x-forwarded-for': '203.0.113.9' }
+		});
+		await register(db, event, CHEAP);
+		expect(db.prepare('select count(*) as n from sign_in_throttle').get()?.['n']).toBe(0);
+	});
+
+	it('counts nothing when the body was refused before an address was read', async () => {
+		await register(db, eventFor().event, CHEAP);
+		expect(db.prepare('select count(*) as n from sign_in_throttle').get()?.['n']).toBe(0);
+	});
 });
+
+/**
+ * The scopes the sign-in throttle wrote, in order.
+ *
+ * Registering counts a row of its own in this table, and every case below
+ * registers first, so the sign-in cases read past it rather than counting it.
+ */
+function signInScopes(): unknown[] {
+	return db
+		.prepare("select scope from sign_in_throttle where scope <> 'registration' order by scope")
+		.all()
+		.map((row) => row['scope']);
+}
 
 /** Register once, then drive sign-in against the account it left behind. */
 async function registered(): Promise<void> {
@@ -284,6 +374,14 @@ function signInEvent(credentials: Credentials = {}, options: EventOptions = {}):
 			...credentials
 		}
 	});
+}
+
+/** Spend the whole registration allowance from one address, which then locks. */
+async function signUpUntilLocked(): Promise<void> {
+	for (let index = 0; index < REGISTRATION_POLICY.limit; index += 1) {
+		const { event } = eventFor({ body: { ...REGISTRATION, username: `spender-${index}` } });
+		await register(db, event, CHEAP);
+	}
 }
 
 /** Fail enough times to trip the username scope, which locks on the sixth. */
@@ -363,7 +461,7 @@ describe('signIn', () => {
 
 	it('counts a failure against the account rather than forgetting it', async () => {
 		await signIn(db, signInEvent({ password: 'not the password' }).event, CHEAP);
-		expect(db.prepare('select count(*) as n from sign_in_throttle').get()?.['n']).toBe(2);
+		expect(signInScopes()).toEqual(['address', 'username']);
 	});
 
 	it('refuses a locked attempt with 429 and says how long to wait', async () => {
@@ -401,8 +499,7 @@ describe('signIn', () => {
 	it('forgets the account failures once the password is proved', async () => {
 		await signIn(db, signInEvent({ password: 'not the password' }).event, CHEAP);
 		await signIn(db, signInEvent().event, CHEAP);
-		const scopes = db.prepare('select scope from sign_in_throttle').all();
-		expect(scopes.map((row) => row['scope'])).toEqual(['address']);
+		expect(signInScopes()).toEqual(['address']);
 	});
 
 	it('keeps the address count, which one valid account must not reset', async () => {
@@ -421,8 +518,7 @@ describe('signIn', () => {
 			{ headers: { 'x-forwarded-for': '203.0.113.9' } }
 		);
 		await signIn(db, event, CHEAP);
-		const scopes = db.prepare('select scope from sign_in_throttle').all();
-		expect(scopes.map((row) => row['scope'])).toEqual(['username']);
+		expect(signInScopes()).toEqual(['username']);
 	});
 
 	it('records the device label the client named', async () => {
@@ -475,7 +571,7 @@ describe('signIn', () => {
 		expect(await bodyOf(response)).toEqual({
 			error: { code: 'invalid-input', field: 'deviceLabel', reason: 'too-long' }
 		});
-		expect(db.prepare('select count(*) as n from sign_in_throttle').get()?.['n']).toBe(0);
+		expect(signInScopes()).toHaveLength(0);
 	});
 });
 
@@ -609,5 +705,95 @@ describe('signOutEverywhere', () => {
 		other.event.locals.auth = resolveSession(db, token);
 		signOutEverywhere(db, other.event);
 		expect(db.prepare('select count(*) as n from session').get()?.['n']).toBe(0);
+	});
+});
+
+describe('currentSession', () => {
+	beforeEach(registered);
+
+	/** Sign in, then build the read the request hook would have resolved. */
+	async function readingEvent(): Promise<Harness> {
+		const token = await signedInToken();
+		const harness = eventFor({ path: '/api/sessions/current' });
+		harness.event.locals.auth = resolveSession(db, token);
+		return harness;
+	}
+
+	it('answers the account, the households it may read, and the expiry', async () => {
+		const { event } = await readingEvent();
+		const response = currentSession(event);
+		expect(response.status).toBe(200);
+		const body = await bodyOf(response);
+		expect(body['account']).toMatchObject({ username: 'jordan', displayName: 'Jordan' });
+		expect(body['households']).toMatchObject([{ name: 'Flat 3', role: 'owner' }]);
+		expect(body['expiresAt']).toStrictEqual(expect.any(String));
+	});
+
+	it('reports the expiry of the session the caller actually presented', async () => {
+		const token = await signedInToken();
+		const { event } = eventFor({ path: '/api/sessions/current' });
+		const auth = resolveSession(db, token);
+		event.locals.auth = auth;
+		expect((await bodyOf(currentSession(event)))['expiresAt']).toBe(auth?.session.expiresAt);
+	});
+
+	it('answers those three fields and nothing else', async () => {
+		// A read endpoint that hands back more than the caller already owns is the
+		// leak, not the credential it was asked about.
+		const { event } = await readingEvent();
+		expect(Object.keys(await bodyOf(currentSession(event))).sort()).toEqual([
+			'account',
+			'expiresAt',
+			'households'
+		]);
+	});
+
+	it('carries no token material, and no session row to replay', async () => {
+		const token = await signedInToken();
+		const { event } = eventFor({ path: '/api/sessions/current' });
+		const auth = resolveSession(db, token);
+		event.locals.auth = auth;
+		const text = await currentSession(event).text();
+		expect(text).not.toContain(token);
+		expect(text).not.toContain(String(auth?.session.id));
+		expect(text).not.toContain('token');
+	});
+
+	it('names no profile, and no other member of the household', async () => {
+		const text = await currentSession((await readingEvent()).event).text();
+		const profiles = db.prepare('select id from profile').all();
+		expect(profiles).not.toHaveLength(0);
+		for (const profile of profiles) expect(text).not.toContain(String(profile['id']));
+	});
+
+	it('shows one account nothing of another', async () => {
+		await register(db, eventFor({ body: { ...REGISTRATION, username: 'sam' } }).event, CHEAP);
+		const text = await currentSession((await readingEvent()).event).text();
+		expect(text).not.toContain('sam');
+		expect(text).not.toContain(
+			String(db.prepare("select id from account where username = 'sam'").get()?.['id'])
+		);
+	});
+
+	it('sets no cookie and starts no session of its own', async () => {
+		const { event, written } = await readingEvent();
+		const before = db.prepare('select count(*) as n from session').get()?.['n'];
+		currentSession(event);
+		expect(written).toHaveLength(0);
+		expect(db.prepare('select count(*) as n from session').get()?.['n']).toBe(before);
+	});
+
+	it('refuses a request that carries no session', async () => {
+		const { event } = eventFor({ path: '/api/sessions/current' });
+		const response = currentSession(event);
+		expect(response.status).toBe(401);
+		expect(await bodyOf(response)).toEqual({ error: { code: 'unauthenticated' } });
+	});
+
+	it('cannot be aimed at another account by the request body', async () => {
+		const other = eventFor({ path: '/api/sessions/current', body: { accountId: 'someone-else' } });
+		other.event.locals.auth = (await readingEvent()).event.locals.auth;
+		const body = await bodyOf(currentSession(other.event));
+		expect(body['account']).toMatchObject({ username: 'jordan' });
 	});
 });

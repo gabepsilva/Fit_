@@ -1,3 +1,4 @@
+import { currentSession } from '$lib/auth/api';
 import type { SessionAccount, SessionHousehold, SignedInSession } from '$lib/auth/api';
 
 /** Where the browser keeps what the server last told it about its session. */
@@ -57,6 +58,30 @@ class SessionStore {
 		// An expired record is dropped rather than carried: it would show a name
 		// in the drawer for a session the server forgot months ago.
 		if (this.current !== null && !this.signedIn) this.forget();
+	}
+
+	/**
+	 * Ask the server what this device's session actually is, and believe it.
+	 *
+	 * The record this store holds is what signing in answered, which can be
+	 * months old: the session may have been revoked from another device, or its
+	 * account signed out everywhere. `GET /api/sessions/current` is the only way
+	 * a browser can find that out, because the credential is a cookie no script
+	 * may read.
+	 *
+	 * Only a definitive answer signs this device out. A refused request means
+	 * there is no session; a request that never arrived — offline, a WebView with
+	 * no host — means nothing at all, and dropping the record for it would sign
+	 * people out of a working session every time they went through a tunnel.
+	 */
+	async refresh(): Promise<boolean> {
+		const result = await currentSession();
+		if (result.ok) {
+			this.begin(result.value);
+			return true;
+		}
+		if (result.failure.code !== 'unreachable') this.forget();
+		return false;
 	}
 
 	/** Record the session an endpoint just handed back. */

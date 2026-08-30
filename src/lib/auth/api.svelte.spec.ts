@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { register, retryAfterSeconds, signIn, signOut, signOutEverywhere } from './api';
+import {
+	currentSession,
+	register,
+	retryAfterSeconds,
+	signIn,
+	signOut,
+	signOutEverywhere
+} from './api';
 
 type Call = {
 	path: string;
@@ -196,6 +203,58 @@ describe('signOutEverywhere', () => {
 		stub(jsonResponse({ error: { code: 'unauthenticated' } }, { status: 401 }));
 		const result = await signOutEverywhere();
 		expect(result).toMatchObject({ failure: { code: 'unauthenticated' } });
+	});
+});
+
+describe('currentSession', () => {
+	it('reads the current session rather than changing anything', async () => {
+		const calls = stub(jsonResponse(SESSION));
+		await currentSession();
+		expect(calls[0]).toMatchObject({ path: '/api/sessions/current', method: 'GET' });
+	});
+
+	it('sends no body, so no content type is declared', async () => {
+		const calls = stub(jsonResponse(SESSION));
+		await currentSession();
+		expect(calls[0]?.body).toBeNull();
+		expect(calls[0]?.contentType).toBeUndefined();
+	});
+
+	it('hands back the session the server answered with', async () => {
+		stub(jsonResponse(SESSION));
+		await expect(currentSession()).resolves.toEqual({ ok: true, value: SESSION });
+	});
+
+	it('reports a refused read as signed out, which is a definitive answer', async () => {
+		stub(jsonResponse({ error: { code: 'unauthenticated' } }, { status: 401 }));
+		const result = await currentSession();
+		expect(result).toMatchObject({ ok: false, failure: { code: 'unauthenticated' } });
+	});
+
+	it('reads a refusal with no body at all as a malformed one, rather than throwing', async () => {
+		// Not every 401 comes from this application: a proxy in front of it can
+		// answer one with nothing in it, and the caller still needs a failure.
+		stub(new Response(null, { status: 401 }));
+		await expect(currentSession()).resolves.toEqual({
+			ok: false,
+			failure: {
+				code: 'invalid-body',
+				field: undefined,
+				reason: undefined,
+				retryAfterSeconds: undefined
+			}
+		});
+	});
+
+	it('reports a request that never arrived as unreachable, which is not', async () => {
+		stub(new TypeError('Failed to fetch'));
+		const result = await currentSession();
+		expect(result).toMatchObject({ ok: false, failure: { code: 'unreachable' } });
+	});
+
+	it('reports a body that is not a session as unreachable rather than as a session', async () => {
+		stub(new Response('null', { status: 200, headers: { 'content-type': 'application/json' } }));
+		expect(await currentSession()).toMatchObject({ ok: false, failure: { code: 'unreachable' } });
 	});
 });
 

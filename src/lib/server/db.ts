@@ -102,6 +102,31 @@ const MIGRATIONS = [
 	) strict;
 
 	create index sign_in_throttle_expiry on sign_in_throttle (window_ends_at);
+	`,
+	`
+	-- Registration is throttled in the same table, in a scope of its own, so the
+	-- one place that answers "this username exists" is not also the cheapest way
+	-- to ask. SQLite cannot widen a check constraint in place, so the table is
+	-- rebuilt around it; the rows are carried over rather than dropped, because
+	-- discarding them would hand every locked-out caller a reset on deploy.
+	create table sign_in_throttle_next (
+		scope          text not null check (scope in ('username', 'address', 'registration')),
+		key_hash       text not null,
+		failures       integer not null,
+		window_ends_at text not null,
+		locked_until   text,
+		primary key (scope, key_hash)
+	) strict;
+
+	insert into sign_in_throttle_next (scope, key_hash, failures, window_ends_at, locked_until)
+	select scope, key_hash, failures, window_ends_at, locked_until from sign_in_throttle;
+
+	drop table sign_in_throttle;
+
+	alter table sign_in_throttle_next rename to sign_in_throttle;
+
+	-- The index went with the table it was on.
+	create index sign_in_throttle_expiry on sign_in_throttle (window_ends_at);
 	`
 ];
 

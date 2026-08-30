@@ -104,7 +104,10 @@ function codeOf(body: unknown): AuthErrorCode {
 }
 
 function textOf(body: unknown, key: 'field' | 'reason'): string | undefined {
-	const error = (body as { error?: Record<string, unknown> }).error;
+	// `codeOf` has already read a body that may be `null` -- an empty answer, or
+	// one that was not JSON -- and this runs on it regardless. Reaching into it
+	// unguarded threw a TypeError out of a caller that had asked for a failure.
+	const error = (body as { error?: Record<string, unknown> } | null)?.error;
 	const value = error?.[key];
 	return typeof value === 'string' ? value : undefined;
 }
@@ -133,7 +136,7 @@ async function failureOf(response: Response): Promise<AuthFailure> {
 
 const UNREACHABLE: AuthFailure = { code: 'unreachable' };
 
-type Sent = { path: string; method: 'POST' | 'DELETE'; body?: Record<string, string> };
+type Sent = { path: string; method: 'GET' | 'POST' | 'DELETE'; body?: Record<string, string> };
 
 /**
  * The one request these four calls make. `credentials` is left at the default,
@@ -191,6 +194,19 @@ export async function signIn(input: Credentials): Promise<AuthResult<SignedInSes
 		method: 'POST',
 		body: fields({ ...input })
 	});
+	return response === null ? { ok: false, failure: UNREACHABLE } : sessionFrom(response);
+}
+
+/**
+ * What the server says this device's session is, or why it says nothing.
+ *
+ * The credential is the cookie the browser cannot read, so this is the only way
+ * a reload learns whether the session it remembers still exists. A 401 is a
+ * definitive answer — signed out — where a dropped request is `unreachable` and
+ * means the caller learned nothing; the store keeps those apart deliberately.
+ */
+export async function currentSession(): Promise<AuthResult<SignedInSession>> {
+	const response = await send({ path: resolve('/api/sessions/current'), method: 'GET' });
 	return response === null ? { ok: false, failure: UNREACHABLE } : sessionFrom(response);
 }
 

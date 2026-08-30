@@ -16,7 +16,13 @@ import {
 	endSession,
 	MAX_DEVICE_LABEL_LENGTH
 } from './users/sessions';
-import { checkSignIn, clearSignInFailures, recordFailedSignIn } from './users/throttle';
+import {
+	checkRegistration,
+	checkSignIn,
+	clearSignInFailures,
+	recordFailedSignIn,
+	recordRegistration
+} from './users/throttle';
 import type { Account } from './users/types';
 
 /**
@@ -130,12 +136,29 @@ function registrationError(problem: { field: string; code: string }): Response {
 }
 
 /**
+ * `Retry-After` is whole seconds and never zero: a client told to wait must
+ * have something to wait for, and rounding up keeps it from returning early
+ * only to be refused again.
+ */
+function tooManyAttempts(retryAfterMs: number): Response {
+	const seconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
+	return apiError('too-many-attempts', {}, { 'retry-after': String(seconds) });
+}
+
+/**
  * Create an account, the household it owns and its own profile, then sign it
  * in. The four rows go in one transaction inside `registerAccount`; this only
  * decides what the caller is told about it.
  *
  * `cost` is injected the way `registerAccount` takes one, because a spec that
  * hashed at the production cost would spend a third of a second per case.
+ *
+ * Throttled on the address before anything is derived, in the order sign-in
+ * uses. Without that, this endpoint is both a way to spend the server's CPU 350
+ * ms at a time and a free oracle for `username-taken`, which is the one answer
+ * here that names who exists. The attempt is counted whether or not an account
+ * comes of it, so probing a name costs the prober exactly what registering one
+ * does.
  */
 export async function register(
 	db: DatabaseSync,
@@ -145,6 +168,10 @@ export async function register(
 	const submission = await readSubmission(event.request);
 	if (!submission.ok) return submission.response;
 	const { fields, deviceLabel } = submission.submission;
+	const clientAddress = clientAddressFor(event.request, event.getClientAddress);
+	const decision = checkRegistration(db, clientAddress);
+	if (!decision.allowed) return tooManyAttempts(decision.retryAfterMs);
+	recordRegistration(db, clientAddress);
 	const result = await registerAccount(
 		db,
 		{
@@ -157,16 +184,6 @@ export async function register(
 	);
 	if (!result.ok) return registrationError(result.problem);
 	return establishSession(db, event, result.account, { deviceLabel, status: 201 });
-}
-
-/**
- * `Retry-After` is whole seconds and never zero: a client told to wait must
- * have something to wait for, and rounding up keeps it from returning early
- * only to be refused again.
- */
-function tooManyAttempts(retryAfterMs: number): Response {
-	const seconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
-	return apiError('too-many-attempts', {}, { 'retry-after': String(seconds) });
 }
 
 /**
@@ -210,6 +227,36 @@ export async function signIn(
 	}
 	clearSignInFailures(db, attempt.username);
 	return establishSession(db, event, account, { deviceLabel, status: 200 });
+}
+
+/**
+ * What the caller's own session is, for the client holding it.
+ *
+ * The browser cannot read its own `HttpOnly` cookie — that is the point of the
+ * flag — so it has no way to tell whether the session behind it survived being
+ * revoked from another device, and `session.svelte.ts` can only cache what
+ * signing in handed back. This is how that cache is reconciled, so the answer
+ * is the same shape sign-in gives minus the token: the account, the households
+ * whose rows it may read, and the expiry.
+ *
+ * Every field comes from `locals.auth`, which the request hook resolved from
+ * the credential this caller itself presented, so there is nothing here it did
+ * not already have. No other profile, no household member, no session row and
+ * no token material: a read endpoint that answered with more than the caller
+ * owns would be the leak, not the credential it was asked about.
+ *
+ * It takes no database. Resolving the session already read one, once, in
+ * `hooks.server.ts`, and reading it again here would only be a second chance to
+ * disagree with the authority every other endpoint trusts.
+ */
+export function currentSession(event: AuthEvent): Response {
+	const auth = event.locals.auth;
+	if (auth === null) return apiError('unauthenticated');
+	return json({
+		account: auth.account,
+		households: auth.households,
+		expiresAt: auth.session.expiresAt
+	});
 }
 
 /** Nothing is left to say once a session is gone, and no body means none to leak. */
