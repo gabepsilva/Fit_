@@ -113,6 +113,21 @@ escape here when you do.
 
 ## Recorded gaps and non-obvious choices
 
+- **A mutation Timeout can be a slow kill, and vitest project order decides which
+  (recorded 2026-08-30).** Stryker's vitest runner sets `bail: 1`, so a mutant run ends at
+  the first failing test. Under `coverageAnalysis: 'perTest'` a mutant in a shared client
+  module is covered twice over: by its own fast unit spec, and by every page and component
+  spec that mounts it in Chromium. With the browser project declared first, the browser had
+  to boot and transform before any assertion could fail, and eleven mutants across
+  `auth/api.ts` and `state/session.svelte.ts` exceeded Stryker's budget and were recorded as
+  Timeouts -- which Stryker credits as kills while proving nothing, and which the strict
+  verdict refuses at `maxTimeouts: 0`. Every one of them was killed in milliseconds by a
+  jsdom spec that simply never got to run. `vite.config.ts` now declares `client-node`
+  before `client` and the same eleven are recorded as Killed, by name, by the assertion
+  that caught them. Keep the DOM-free project first, and read a Timeout as a question about
+  which test fails first rather than as a score to widen the budget for: raising
+  `timeoutMS` would have moved the number the reassuring way and left the measurement broken.
+
 - **`cn` does not resolve class conflicts, and that is what pays for the bundle
   (recorded 2026-08-30).** `tailwind-merge` cost 26,655 bytes of client JavaScript --
   6.3 percent of the whole budget -- to decide which of two conflicting Tailwind
