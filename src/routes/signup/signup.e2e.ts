@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
+import { clearRegistrationThrottle } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -52,6 +53,8 @@ async function submitAccount(page: Page, username: string, password = PASSWORD) 
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Create account' }).click();
 }
+
+test.beforeEach(clearRegistrationThrottle);
 
 test.describe('creating an account', () => {
 	test.beforeEach(async ({ page }) => {
