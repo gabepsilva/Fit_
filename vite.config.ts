@@ -6,6 +6,35 @@ import adapterStatic from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 
+/**
+ * The `.svelte.` infix means "this is a client file", not "this needs a DOM",
+ * so it used to send every client spec into a headless Chromium. Startup and
+ * the Vite transform for that browser land in Stryker's `timeOverheadMS`,
+ * which is sampled once in the sequential dry run and then applied as a flat
+ * constant to every mutant run — so under N-way contention the specs with the
+ * *smallest* net time have the thinnest margin, and a pure string table times
+ * out where heavy logic does not.
+ *
+ * The specs listed here never render or mount a component and never reach for
+ * `page`/`locator`/`getBy*`, so a browser buys them nothing. This array is the
+ * single source of truth for the split: the browser project excludes exactly
+ * what this one includes. A spec that is not listed stays in the browser
+ * project — slow but correct — so a new file can never land in jsdom by
+ * accident.
+ */
+export const DOM_FREE_CLIENT_SPECS = [
+	'src/lib/auth/api.svelte.spec.ts',
+	'src/lib/auth/wording.svelte.spec.ts',
+	'src/lib/components/exercise/plan-options.svelte.spec.ts',
+	'src/lib/components/exercise/routine-tone.svelte.spec.ts',
+	'src/lib/state/log-ui.svelte.spec.ts',
+	'src/lib/state/session.svelte.spec.ts',
+	'src/lib/state/tend.svelte.spec.ts',
+	'src/lib/ui/cn.svelte.spec.ts',
+	'src/lib/ui/dictation.svelte.spec.ts',
+	'src/lib/ui/download.svelte.spec.ts'
+];
+
 const testProjects = [
 	{
 		extends: './vite.config.ts',
@@ -17,6 +46,17 @@ const testProjects = [
 				instances: [{ browser: 'chromium' as const, headless: true }]
 			},
 			include: ['src/**/*.svelte.{test,spec}.{js,ts}'],
+			exclude: ['src/lib/server/**', ...DOM_FREE_CLIENT_SPECS]
+		}
+	},
+	{
+		extends: './vite.config.ts',
+		test: {
+			name: 'client-node',
+			environment: 'jsdom',
+			setupFiles: ['./vitest-setup-client-node.ts'],
+			...(process.env.FIT_MUTATION_RUN ? { pool: 'threads' as const } : {}),
+			include: DOM_FREE_CLIENT_SPECS,
 			exclude: ['src/lib/server/**']
 		}
 	},
@@ -32,11 +72,24 @@ const testProjects = [
 	}
 ];
 
+/**
+ * The changed-client mutation lane mutates client sources, and those sources
+ * are now covered by two vitest projects. Selecting only `client` here would
+ * leave every test in `client-node` unrun, turning killed mutants into silent
+ * survivors — so `client` selects both.
+ */
+const MUTATION_PROJECTS: Record<string, readonly string[]> = {
+	server: ['server'],
+	client: ['client', 'client-node']
+};
+
 const mutationProject = process.env.FIT_MUTATION_PROJECT;
+const selectedNames =
+	mutationProject === undefined ? undefined : MUTATION_PROJECTS[mutationProject];
 const selectedTestProjects =
-	mutationProject === 'server' || mutationProject === 'client'
-		? testProjects.filter(({ test }) => test.name === mutationProject)
-		: testProjects;
+	selectedNames === undefined
+		? testProjects
+		: testProjects.filter(({ test }) => selectedNames.includes(test.name));
 
 export default defineConfig({
 	plugins: [
