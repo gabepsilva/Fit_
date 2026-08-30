@@ -1,9 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import type { SignedInSession } from '$lib/auth/api';
+import { session } from '$lib/state/session.svelte';
 import SideNav from './SideNav.svelte';
 
 const DESTINATIONS = ['Today', 'Progress', 'Exercise', 'Plan', 'You'];
+
+const SESSION: SignedInSession = {
+	account: { id: 'a-1', username: 'robin', displayName: 'Robin', createdAt: '2026-08-01' },
+	households: [{ householdId: 'h-1', name: 'Home', role: 'owner' }],
+	expiresAt: new Date(Date.now() + 86_400_000).toISOString()
+};
+
+beforeEach(() => {
+	localStorage.clear();
+	session.current = null;
+	session.hydrated = false;
+});
 
 describe('SideNav', () => {
 	it('stays out of the way while closed', async () => {
@@ -67,6 +81,19 @@ describe('SideNav', () => {
 		await render(SideNav, { props });
 		await page.getByRole('button', { name: 'Close menu' }).click();
 		expect(props.open).toBe(false);
+	});
+
+	it('carries the account block, which is where signing out lives', async () => {
+		await render(SideNav, { props: { open: true, pathname: '/' } });
+		await expect.element(page.getByRole('link', { name: 'Sign in' })).toBeInTheDocument();
+	});
+
+	it('offers the sign-out to someone who is signed in', async () => {
+		session.begin(SESSION);
+		await render(SideNav, { props: { open: true, pathname: '/' } });
+		await expect
+			.element(page.getByRole('button', { name: 'Sign out', exact: true }))
+			.toBeInTheDocument();
 	});
 
 	it('closes on Escape', async () => {

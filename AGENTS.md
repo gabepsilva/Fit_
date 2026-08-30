@@ -41,11 +41,18 @@ numbers nobody lifted.
   accounts, sessions, passwords and household membership. `src/hooks.server.ts` resolves
   the session once per request onto `locals.auth`.
 
-**The server does not do anything yet.** The users module is wired to `hooks.server.ts`
-and to nothing else: no routes, no endpoints, no sync. The app still keeps every gram and
-every workout in `localStorage`, and the store's methods remain the call sites that will
-one day talk to the server. Do not describe the app as syncing or as having accounts a
-person can use, and do not extend the backend beyond what has been asked for.
+**The server signs people in, and does nothing else yet.** `src/routes/api/` carries
+registration, sign-in and the two sign-outs, and `/signin` and `/signup` are the forms
+that call them. Nothing else is wired: no sync, and no feature is behind a login. The app
+still keeps every gram and every workout in `localStorage`, and the store's methods remain
+the call sites that will one day talk to the server. So an account can be created and used
+to sign in, but it carries no data — do not describe the app as syncing or as having
+accounts that hold a journal, and do not extend the backend beyond what has been asked
+for.
+
+Authentication is additive on purpose. Signing in adds an account to a journal that
+already works without one, and signing out leaves that journal exactly where it was.
+Putting a destination behind a login is a product decision nobody has made.
 
 Three concepts stay separate, and collapsing them is the mistake to avoid: an **account**
 signs in, a **household** is the tenancy boundary every row is filtered by, and a
