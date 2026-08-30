@@ -353,7 +353,10 @@ export const fixtures: GateFixture[] = [
 		exclusive: true,
 		failureIncludes: 'changed-line score',
 		description: 'A surviving mutant in a changed client module must fail change-scoped mutation.',
-		baselinePaths: ['src/lib/ui/fixture.svelte.test.ts'],
+		// The spec and its registration are support: they are what a developer
+		// adding this module would have written first. Only `fixture.ts` — the
+		// module whose mutant survives — is left outside the baseline.
+		baselinePaths: ['src/lib/ui/fixture.svelte.test.ts', 'quality/dom-free-client-specs.mjs'],
 		apply: async (root) => {
 			await write(
 				root,
@@ -364,6 +367,15 @@ export const fixtures: GateFixture[] = [
 				root,
 				'src/lib/ui/fixture.svelte.test.ts',
 				"import { expect, it } from 'vitest';\nimport { classify } from './fixture';\n\nit('exports the classifier', () => {\n\texpect(typeof classify).toBe('function');\n});\n"
+			);
+			// Mutation runs no longer include the browser project, so an unregistered
+			// `.svelte.` spec would leave this module measured by nothing and Stryker
+			// would exit on "No tests were found" rather than on the surviving mutant.
+			await edit(root, 'quality/dom-free-client-specs.mjs', (content) =>
+				content.replace(
+					"\t'src/lib/ui/download.svelte.spec.ts'\n",
+					"\t'src/lib/ui/download.svelte.spec.ts',\n\t'src/lib/ui/fixture.svelte.test.ts'\n"
+				)
 			);
 		}
 	},
