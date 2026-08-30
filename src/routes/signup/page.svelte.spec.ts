@@ -44,7 +44,7 @@ const CREATED: SignedInSession = {
 };
 
 async function open() {
-	await render(SignUpPage, { data: { serverChecked: true }, params: {}, form: null });
+	await render(SignUpPage);
 }
 
 async function fillIn(name: string, display: string, secret: string) {
@@ -193,10 +193,12 @@ describe('sign-up page', () => {
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Couldn’t reach the server');
 	});
 
-	it('forgets a record the server has just disproved by letting this page render', async () => {
+	/** Registration is reachable whatever this device believes about its session. */
+	it('shows the form even when this device still holds a session record', async () => {
 		session.begin(CREATED);
 		await open();
-		await vi.waitFor(() => expect(session.signedIn).toBe(false));
+		await expect.element(page.getByLabelText('Username')).toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Create account' })).toBeInTheDocument();
 	});
 
 	it('offers the way to the sign-in form', async () => {

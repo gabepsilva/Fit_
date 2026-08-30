@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -10,9 +9,6 @@
 	import AuthNotice from '$lib/components/auth/AuthNotice.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import type { PageProps } from './$types';
-
-	let { data }: PageProps = $props();
 
 	let username = $state('');
 	let displayName = $state('');
@@ -21,16 +17,6 @@
 	let deviceLabel = $state('');
 	let busy = $state(false);
 	let problem = $state<FormProblem | null>(null);
-
-	/**
-	 * The server let this page render, so `locals.auth` was null and nothing is
-	 * signed in here — whatever the cached record says. It is only disproved when
-	 * a server actually looked, which is what `serverChecked` reports and the
-	 * static build cannot.
-	 */
-	onMount(() => {
-		if (data.serverChecked) session.forget();
-	});
 
 	const notice = $derived(problem !== null && problem.field === null ? problem.message : null);
 

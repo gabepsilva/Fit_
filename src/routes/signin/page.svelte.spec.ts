@@ -39,7 +39,7 @@ const SESSION: SignedInSession = {
 };
 
 async function open() {
-	await render(SignInPage, { data: { serverChecked: true }, params: {}, form: null });
+	await render(SignInPage);
 }
 
 async function fillIn(name = 'robin', secret = 'a-long-password') {
@@ -210,10 +210,17 @@ describe('sign-in page', () => {
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Couldn’t reach the server');
 	});
 
-	it('forgets a record the server has just disproved by letting this page render', async () => {
+	/**
+	 * There is no guard turning a signed-in visitor away, so a stale cached
+	 * record must never be what stands between someone and the form that would
+	 * replace it. Signing out everywhere from another device leaves exactly that
+	 * record behind, and this page is the way back.
+	 */
+	it('shows the form even when this device still holds a session record', async () => {
 		session.begin(SESSION);
 		await open();
-		await vi.waitFor(() => expect(session.signedIn).toBe(false));
+		await expect.element(page.getByLabelText('Username')).toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
 	});
 
 	it('offers the way to the sign-up form', async () => {

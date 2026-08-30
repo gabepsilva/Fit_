@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -10,9 +9,6 @@
 	import AuthNotice from '$lib/components/auth/AuthNotice.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Button from '$lib/ui/Button.svelte';
-	import type { PageProps } from './$types';
-
-	let { data }: PageProps = $props();
 
 	let username = $state('');
 	let password = $state('');
@@ -23,16 +19,6 @@
 	/** When the throttle will accept another attempt, as a wall-clock time. */
 	let held = $state<number | null>(null);
 	let now = $state(Date.now());
-
-	/**
-	 * The server let this page render, so `locals.auth` was null and nothing is
-	 * signed in here — whatever the cached record says. That record is only
-	 * disproved when a server actually looked, which is what `serverChecked`
-	 * reports and the static build cannot.
-	 */
-	onMount(() => {
-		if (data.serverChecked) session.forget();
-	});
 
 	const waitLeft = $derived(held === null ? 0 : Math.max(0, Math.ceil((held - now) / 1000)));
 	const waiting = $derived(waitLeft > 0);
