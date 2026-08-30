@@ -1,6 +1,12 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { register, SESSION_DELIVERY_HEADER, signIn } from './auth-endpoints';
+import {
+	register,
+	SESSION_DELIVERY_HEADER,
+	signIn,
+	signOut,
+	signOutEverywhere
+} from './auth-endpoints';
 import type { AuthEvent } from './auth-endpoints';
 import { openDatabase } from './db';
 import { SESSION_COOKIE } from './session-cookie';
@@ -348,5 +354,138 @@ describe('signIn', () => {
 			error: { code: 'invalid-input', field: 'deviceLabel', reason: 'too-long' }
 		});
 		expect(db.prepare('select count(*) as n from sign_in_throttle').get()?.['n']).toBe(0);
+	});
+});
+
+/** Sign in through the endpoint and hand back the token it issued. */
+async function signedInToken(): Promise<string> {
+	const { event, written } = signInEvent({}, { headers: { [SESSION_DELIVERY_HEADER]: 'bearer' } });
+	const body = await bodyOf(await signIn(db, event, CHEAP));
+	expect(written).toHaveLength(0);
+	return String(body['token']);
+}
+
+function signOutEvent(token: string | undefined, carriedBy: 'cookie' | 'bearer'): Harness {
+	return eventFor({
+		path: '/api/sessions/current',
+		...(carriedBy === 'cookie'
+			? { ...(token === undefined ? {} : { cookie: token }) }
+			: { headers: token === undefined ? {} : { authorization: `Bearer ${token}` } })
+	});
+}
+
+describe('signOut', () => {
+	beforeEach(registered);
+
+	it('revokes the session the cookie presented', async () => {
+		const token = await signedInToken();
+		const { event } = signOutEvent(token, 'cookie');
+		expect(signOut(db, event).status).toBe(204);
+		expect(resolveSession(db, token)).toBeNull();
+	});
+
+	it('revokes the session the Android build presented as a bearer token', async () => {
+		const token = await signedInToken();
+		signOut(db, signOutEvent(token, 'bearer').event);
+		expect(resolveSession(db, token)).toBeNull();
+	});
+
+	it('removes the cookie so the browser stops sending a token that is gone', async () => {
+		const token = await signedInToken();
+		const { event, removed } = signOutEvent(token, 'cookie');
+		signOut(db, event);
+		expect(removed).toEqual([SESSION_COOKIE]);
+	});
+
+	it('leaves the account and every other device alone', async () => {
+		const kept = await signedInToken();
+		const ending = await signedInToken();
+		signOut(db, signOutEvent(ending, 'cookie').event);
+		expect(resolveSession(db, kept)?.account.username).toBe('jordan');
+		expect(db.prepare('select count(*) as n from account').get()?.['n']).toBe(1);
+	});
+
+	it('still clears the cookie of a session the server has already forgotten', async () => {
+		const token = await signedInToken();
+		signOut(db, signOutEvent(token, 'cookie').event);
+		const { event, removed } = signOutEvent(token, 'cookie');
+		expect(signOut(db, event).status).toBe(204);
+		expect(removed).toEqual([SESSION_COOKIE]);
+	});
+
+	it('answers the same to a request carrying no credential at all', () => {
+		const { event, removed } = signOutEvent(undefined, 'cookie');
+		expect(signOut(db, event).status).toBe(204);
+		expect(removed).toEqual([SESSION_COOKIE]);
+	});
+
+	it('says nothing about whether there was a session to end', async () => {
+		const token = await signedInToken();
+		const held = signOut(db, signOutEvent(token, 'cookie').event);
+		const gone = signOut(db, signOutEvent(token, 'cookie').event);
+		expect(gone.status).toBe(held.status);
+		expect(await gone.text()).toBe(await held.text());
+	});
+});
+
+describe('signOutEverywhere', () => {
+	beforeEach(registered);
+
+	it('revokes every session the account holds', async () => {
+		const phone = await signedInToken();
+		const laptop = await signedInToken();
+		const auth = resolveSession(db, phone);
+		const { event } = eventFor({ path: '/api/sessions' });
+		event.locals.auth = auth;
+		expect(signOutEverywhere(db, event).status).toBe(204);
+		expect(resolveSession(db, phone)).toBeNull();
+		expect(resolveSession(db, laptop)).toBeNull();
+	});
+
+	it('ends the session that asked, so a stolen phone is not a second request', async () => {
+		const stolen = await signedInToken();
+		const { event } = eventFor({ path: '/api/sessions' });
+		event.locals.auth = resolveSession(db, stolen);
+		signOutEverywhere(db, event);
+		expect(db.prepare('select count(*) as n from session').get()?.['n']).toBe(0);
+	});
+
+	it('removes the cookie along with the rows behind it', async () => {
+		const token = await signedInToken();
+		const { event, removed } = eventFor({ path: '/api/sessions' });
+		event.locals.auth = resolveSession(db, token);
+		signOutEverywhere(db, event);
+		expect(removed).toEqual([SESSION_COOKIE]);
+	});
+
+	it('leaves the account itself, and its household, in place', async () => {
+		const token = await signedInToken();
+		const { event } = eventFor({ path: '/api/sessions' });
+		event.locals.auth = resolveSession(db, token);
+		signOutEverywhere(db, event);
+		expect(db.prepare('select count(*) as n from account').get()?.['n']).toBe(1);
+		expect(db.prepare('select count(*) as n from household').get()?.['n']).toBe(1);
+	});
+
+	it('refuses an anonymous request, which names no account to act on', async () => {
+		const { event, removed } = eventFor({ path: '/api/sessions' });
+		const response = signOutEverywhere(db, event);
+		expect(response.status).toBe(401);
+		expect(await bodyOf(response)).toEqual({ error: { code: 'unauthenticated' } });
+		expect(removed).toHaveLength(0);
+	});
+
+	it('revokes nothing when it refuses', async () => {
+		const token = await signedInToken();
+		signOutEverywhere(db, eventFor({ path: '/api/sessions' }).event);
+		expect(resolveSession(db, token)?.account.username).toBe('jordan');
+	});
+
+	it('cannot be aimed at another account by the request body', async () => {
+		const token = await signedInToken();
+		const other = eventFor({ path: '/api/sessions', body: { accountId: 'someone-else' } });
+		other.event.locals.auth = resolveSession(db, token);
+		signOutEverywhere(db, other.event);
+		expect(db.prepare('select count(*) as n from session').get()?.['n']).toBe(0);
 	});
 });

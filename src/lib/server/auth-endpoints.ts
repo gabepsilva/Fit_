@@ -3,13 +3,19 @@ import type { Cookies } from '@sveltejs/kit';
 import type { DatabaseSync } from 'node:sqlite';
 import { apiError, readTextBody } from './api';
 import { clientAddressFor } from './client-address';
-import { setSessionCookie } from './session-cookie';
+import { sessionTokenFrom } from './request-auth';
+import { clearSessionCookie, SESSION_COOKIE, setSessionCookie } from './session-cookie';
 import type { SessionCookieWriter } from './session-cookie';
 import { authenticate, membershipsFor, registerAccount } from './users/accounts';
 import { storedTextProblem } from './users/input';
 import { OWASP_SCRYPT } from './users/password';
 import type { ScryptCost } from './users/password';
-import { createSession, MAX_DEVICE_LABEL_LENGTH } from './users/sessions';
+import {
+	createSession,
+	endAllSessions,
+	endSession,
+	MAX_DEVICE_LABEL_LENGTH
+} from './users/sessions';
 import { checkSignIn, clearSignInFailures, recordFailedSignIn } from './users/throttle';
 import type { Account } from './users/types';
 
@@ -204,4 +210,48 @@ export async function signIn(
 	}
 	clearSignInFailures(db, attempt.username);
 	return establishSession(db, event, account, { deviceLabel, status: 200 });
+}
+
+/** Nothing is left to say once a session is gone, and no body means none to leak. */
+function signedOut(): Response {
+	return new Response(null, { status: 204 });
+}
+
+/**
+ * End the session this request presented, and remove the cookie carrying it.
+ *
+ * The credential is read with `sessionTokenFrom`, the same resolver the request
+ * hook uses, so sign-out revokes exactly what the caller sent rather than
+ * whatever `locals.auth` happened to resolve to. Bearer beats cookie here for
+ * the same reason it does there.
+ *
+ * Idempotent on purpose. A browser holding a cookie the server has already
+ * forgotten — expired, revoked from another device — still has to be able to
+ * get rid of it, and answering 401 would leave it stuck presenting a session
+ * that does not exist. There is no oracle in that: 204 is the answer whether or
+ * not a row was deleted.
+ */
+export function signOut(db: DatabaseSync, event: AuthEvent): Response {
+	const token = sessionTokenFrom(event.request, event.cookies.get(SESSION_COOKIE));
+	if (token !== undefined) endSession(db, token);
+	clearSessionCookie(event.cookies, event.url);
+	return signedOut();
+}
+
+/**
+ * End every session the account has — the "sign out my other devices" a lost
+ * phone needs, and the reason sessions are rows rather than signed tokens.
+ *
+ * This one does need `locals.auth`, because it acts on an account rather than
+ * on a credential, and an anonymous request names no account to act on. The
+ * session making the request goes with the rest: a phone that has been stolen
+ * mid-session is exactly the case, and leaving the caller signed in would mean
+ * doing it twice.
+ */
+export function signOutEverywhere(db: DatabaseSync, event: AuthEvent): Response {
+	const auth = event.locals.auth;
+	if (auth === null) return apiError('unauthenticated');
+	endAllSessions(db, auth.account.id);
+	clearSessionCookie(event.cookies, event.url);
+	return signedOut();
 }
