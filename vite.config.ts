@@ -23,6 +23,15 @@ import tailwindcss from '@tailwindcss/vite';
 const testProjects = [
 	{
 		extends: './vite.config.ts',
+		// Its own dependency-optimizer cache, per project.
+		//
+		// `ignorePatterns` keeps `node_modules/.vite` out of the Stryker sandbox, so
+		// every worker's vitest optimizes from nothing — and the projects in that
+		// worker start together and were writing into one directory, because the
+		// cache key does not include the project. Two of them then raced on the
+		// rename that publishes it and the run died with ENOTEMPTY before a single
+		// mutant ran. A directory each removes the collision rather than retrying it.
+		cacheDir: 'node_modules/.vite-client-node',
 		test: {
 			name: 'client-node',
 			environment: 'jsdom',
@@ -35,6 +44,15 @@ const testProjects = [
 	},
 	{
 		extends: './vite.config.ts',
+		// Its own dependency-optimizer cache, per project.
+		//
+		// `ignorePatterns` keeps `node_modules/.vite` out of the Stryker sandbox, so
+		// every worker's vitest optimizes from nothing — and the projects in that
+		// worker start together and were writing into one directory, because the
+		// cache key does not include the project. Two of them then raced on the
+		// rename that publishes it and the run died with ENOTEMPTY before a single
+		// mutant ran. A directory each removes the collision rather than retrying it.
+		cacheDir: 'node_modules/.vite-client',
 		test: {
 			name: 'client',
 			sequence: { groupOrder: 1 },
@@ -49,6 +67,15 @@ const testProjects = [
 	},
 	{
 		extends: './vite.config.ts',
+		// Its own dependency-optimizer cache, per project.
+		//
+		// `ignorePatterns` keeps `node_modules/.vite` out of the Stryker sandbox, so
+		// every worker's vitest optimizes from nothing — and the projects in that
+		// worker start together and were writing into one directory, because the
+		// cache key does not include the project. Two of them then raced on the
+		// rename that publishes it and the run died with ENOTEMPTY before a single
+		// mutant ran. A directory each removes the collision rather than retrying it.
+		cacheDir: 'node_modules/.vite-server',
 		test: {
 			name: 'server',
 			environment: 'node',

@@ -74,6 +74,10 @@ export default {
 		// rename, which fails as ENOTEMPTY. CI hits this because the coverage step
 		// populates the cache immediately before mutation runs in the same job.
 		'node_modules/.vite/**',
+		// The per-project caches `vite.config.ts` gives each vitest project, for the
+		// same reason and with the same effect: copied in, two runners re-optimize
+		// into one directory and race on the rename.
+		'node_modules/.vite-*/**',
 		// The nutrition ETL pipeline: several gigabytes of Python environment,
 		// data extracts and a food database. Stryker copies what it does not
 		// ignore into every sandbox, which exhausted the disk quota before a
