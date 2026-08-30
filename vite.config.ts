@@ -54,6 +54,7 @@ const testProjects = [
 		test: {
 			name: 'client-node',
 			environment: 'jsdom',
+			sequence: { groupOrder: 0 },
 			setupFiles: ['./vitest-setup-client-node.ts'],
 			...(process.env.FIT_MUTATION_RUN ? { pool: 'threads' as const } : {}),
 			include: DOM_FREE_CLIENT_SPECS,
@@ -64,6 +65,7 @@ const testProjects = [
 		extends: './vite.config.ts',
 		test: {
 			name: 'client',
+			sequence: { groupOrder: 1 },
 			browser: {
 				enabled: true,
 				provider: playwright(),
