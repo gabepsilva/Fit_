@@ -7,6 +7,7 @@
 	import UserRound from '@lucide/svelte/icons/user-round';
 	import X from '@lucide/svelte/icons/x';
 	import { resolve } from '$app/paths';
+	import AccountMenu from './auth/AccountMenu.svelte';
 	import NavLink from './NavLink.svelte';
 	import type { NavRoute } from './nav-routes';
 
@@ -54,6 +55,7 @@
 					<NavLink {...item} />
 				{/each}
 			</nav>
+			<AccountMenu />
 		</Dialog.Content>
 	</Dialog.Portal>
 </Dialog.Root>

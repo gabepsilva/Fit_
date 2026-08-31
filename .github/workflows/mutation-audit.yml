@@ -1,0 +1,81 @@
+name: Full mutation audit
+
+on:
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-audit-${{ github.event_name == 'schedule' && 'scheduled-cold' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  full-mutation:
+    name: Full mutation audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Restore Bun package cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Restore Playwright browser cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('bun.lock') }}
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+
+      - name: Restore validated full-mutation cache
+        if: github.event_name != 'schedule'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            reports/mutation/full/incremental.json
+            reports/mutation/full/cache.json
+          key: stryker-v2-full-${{ runner.os }}-${{ hashFiles('.tool-versions', 'bun.lock', 'stryker.config.mjs', 'vite.config.ts', 'quality/mutation-policy.json') }}-${{ github.sha }}
+          restore-keys: stryker-v2-full-${{ runner.os }}-${{ hashFiles('.tool-versions', 'bun.lock', 'stryker.config.mjs', 'vite.config.ts', 'quality/mutation-policy.json') }}-
+
+      - name: Run incremental full audit
+        if: github.event_name != 'schedule'
+        run: bun run test:mutation:full
+
+      - name: Run forced-cold full audit
+        if: github.event_name == 'schedule'
+        run: bun run test:mutation:full -- --force-cold
+
+      - name: Upload full mutation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: full-mutation-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: reports/mutation/full/

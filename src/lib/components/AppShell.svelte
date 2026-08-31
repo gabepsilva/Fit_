@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { Toaster } from 'svelte-sonner';
 	import { logUi } from '$lib/state/log-ui.svelte';
+	import { session } from '$lib/state/session.svelte';
 	import { tend } from '$lib/state/tend.svelte';
 	import LogSheet from './LogSheet.svelte';
 	import Onboarding from './Onboarding.svelte';
@@ -17,7 +18,17 @@
 	// The store reads `localStorage`, so restoring it has to wait for the client.
 	// Until then nothing is rendered, rather than flashing onboarding at someone
 	// who onboarded months ago.
-	onMount(() => tend.hydrate());
+	onMount(() => {
+		tend.hydrate();
+		// The session record is restored beside the journal and for the same
+		// reason: both read `localStorage`, which only exists on the client.
+		session.hydrate();
+		// What was restored is only what signing in answered, months ago perhaps,
+		// and the session behind it may have been revoked from another device
+		// since. The server is asked once, and only when there is something to
+		// reconcile: a device that was never signed in has nothing to ask about.
+		if (session.signedIn) void session.refresh();
+	});
 
 	// Arriving somewhere new closes the drawer. Hooking navigation rather than the
 	// link clicks also covers the back button, which would otherwise leave the

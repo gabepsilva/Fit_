@@ -5,6 +5,12 @@ export interface GateStep {
 	purpose: string;
 	/** Machine-readable artifacts this step writes, relative to the project root. */
 	artifacts?: string[];
+	/**
+	 * Safe to run beside the other concurrent steps: holds no exclusive resource,
+	 * reads no artifact another step in the same tier writes, and binds no port.
+	 * Opt-in, so a new step is sequential until someone has checked that it is not.
+	 */
+	concurrent?: boolean;
 	/** Requires a running Docker daemon. */
 	docker?: boolean;
 	/** Launches a real browser. */
@@ -13,23 +19,37 @@ export interface GateStep {
 
 /** Ring 2/3: no Docker, no browser. Safe for a pre-commit or per-edit loop. */
 const staticSteps: GateStep[] = [
-	{ name: 'format:check', purpose: 'Prettier formatting' },
-	{ name: 'lint', purpose: 'Type-aware ESLint', artifacts: ['reports/quality/eslint.json'] },
-	{ name: 'lint:docs', purpose: 'Markdown lint' },
-	{ name: 'spellcheck', purpose: 'Spelling' },
-	{ name: 'check', purpose: 'Svelte and TypeScript types' },
-	{ name: 'check:scripts', purpose: 'Script types' },
+	{ name: 'format:check', purpose: 'Prettier formatting', concurrent: true },
+	{
+		name: 'lint',
+		purpose: 'Type-aware ESLint',
+		artifacts: ['reports/quality/eslint.json'],
+		concurrent: true
+	},
+	{ name: 'lint:docs', purpose: 'Markdown lint', concurrent: true },
+	{ name: 'spellcheck', purpose: 'Spelling', concurrent: true },
+	{ name: 'check', purpose: 'Svelte and TypeScript types', concurrent: true },
+	{ name: 'check:scripts', purpose: 'Script types', concurrent: true },
 	{
 		name: 'check:suppressions',
 		purpose: 'Suppression ratchet',
-		artifacts: ['reports/quality/suppressions.json']
+		artifacts: ['reports/quality/suppressions.json'],
+		concurrent: true
 	},
-	{ name: 'check:thresholds', purpose: 'Threshold guard' },
-	{ name: 'knip', purpose: 'Unused files, exports, dependencies' },
+	{ name: 'check:thresholds', purpose: 'Threshold guard', concurrent: true },
+	{ name: 'check:mutation-reviews', purpose: 'Exact mutation-review ledger', concurrent: true },
+	{
+		name: 'check:mutation-oracle',
+		purpose: 'Mutated client files stay measurable',
+		concurrent: true
+	},
+	{ name: 'check:ci-contract', purpose: 'Local and hosted CI job parity', concurrent: true },
+	{ name: 'knip', purpose: 'Unused files, exports, dependencies', concurrent: true },
 	{
 		name: 'duplicates',
 		purpose: 'Copy-paste detection',
-		artifacts: ['reports/quality/duplication/jscpd-report.json']
+		artifacts: ['reports/quality/duplication/jscpd-report.json'],
+		concurrent: true
 	}
 ];
 
@@ -57,10 +77,51 @@ const coverageStep: GateStep = {
 	browser: true
 };
 
-const mutationStep: GateStep = {
-	name: 'test:mutation',
-	purpose: 'Mutation score',
-	artifacts: ['reports/mutation/mutation.json'],
+const securityMutationStep: GateStep = {
+	name: 'test:mutation:security',
+	purpose: 'Security mutation strength',
+	artifacts: [
+		'reports/mutation/security/scope.json',
+		'reports/mutation/security/mutation.json',
+		'reports/mutation/security/verdict.json'
+	]
+};
+
+const changedNodeMutationStep: GateStep = {
+	name: 'test:mutation:changed:node',
+	purpose: 'Changed Node mutation strength',
+	artifacts: [
+		'reports/mutation/changed-node/scope.json',
+		'reports/mutation/changed-node/mutation.json',
+		'reports/mutation/changed-node/verdict.json'
+	]
+};
+
+const changedClientMutationStep: GateStep = {
+	name: 'test:mutation:changed:client',
+	purpose: 'Changed client mutation strength',
+	artifacts: [
+		'reports/mutation/changed-client/scope.json',
+		'reports/mutation/changed-client/mutation.json',
+		'reports/mutation/changed-client/verdict.json'
+	],
+	browser: true
+};
+
+const requiredMutationSteps = [
+	securityMutationStep,
+	changedNodeMutationStep,
+	changedClientMutationStep
+];
+
+const fullMutationStep: GateStep = {
+	name: 'test:mutation:full',
+	purpose: 'Full mutation audit',
+	artifacts: [
+		'reports/mutation/full/scope.json',
+		'reports/mutation/full/mutation.json',
+		'reports/mutation/full/verdict.json'
+	],
 	browser: true
 };
 
@@ -122,7 +183,11 @@ const advisorySecuritySteps: GateStep[] = [
  */
 export const ciJobs = {
 	static: [...staticSteps, workflowStep],
-	unit: [coverageStep, mutationStep],
+	unit: [coverageStep],
+	'mutation-security': [securityMutationStep],
+	'mutation-node': [changedNodeMutationStep],
+	'mutation-client': [changedClientMutationStep],
+	'mutation-full': [fullMutationStep],
 	build: buildSteps,
 	e2e: [e2eStep],
 	security: blockingSecuritySteps,
@@ -144,7 +209,8 @@ export const tiers = {
 		{
 			name: 'test:unit:server',
 			purpose: 'Server unit tests',
-			artifacts: ['reports/quality/vitest-server.json']
+			artifacts: ['reports/quality/vitest-server.json'],
+			concurrent: true
 		}
 	],
 	/** Ring 3/4. The pre-push gate. */
@@ -154,13 +220,16 @@ export const tiers = {
 		...staticSteps,
 		workflowStep,
 		coverageStep,
-		mutationStep,
+		...requiredMutationSteps,
+		fullMutationStep,
 		...buildSteps,
 		e2eStep,
 		selfTestStep
 	],
 	/** Ring 4. The complete merge gate, and the exact set CI runs. */
 	ci: ciSteps,
+	/** Deterministic full-tree audit, run on main and cold on schedule. */
+	audit: [fullMutationStep],
 	/** Ring 5. Scheduled, non-deterministic scanners. */
 	nightly: advisorySecuritySteps
 } satisfies Record<string, GateStep[]>;

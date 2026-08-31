@@ -29,9 +29,12 @@ export default defineConfig(
 		languageOptions: {
 			globals: { ...globals.browser, ...globals.node },
 			// `capacitor.config.ts` is read by the Capacitor CLI rather than by
-			// the app, so no tsconfig owns it; it still gets type-aware linting.
+			// the app, and `vitest-setup-client-node.ts` by the test runner, so
+			// no tsconfig owns either; both still get type-aware linting.
 			parserOptions: {
-				projectService: { allowDefaultProject: ['capacitor.config.ts'] }
+				projectService: {
+					allowDefaultProject: ['capacitor.config.ts', 'vitest-setup-client-node.ts']
+				}
 			}
 		},
 		rules: {

@@ -79,7 +79,7 @@ jobs:
             reports/
 
   unit:
-    name: Unit, component, and mutation
+    name: Unit and component coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -118,14 +118,7 @@ jobs:
       - name: Install browser runtimes
         run: bunx playwright install --with-deps chromium
 
-      - name: Restore Stryker incremental state
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: reports/mutation/stryker-incremental.json
-          key: stryker-${{ runner.os }}-${{ github.sha }}
-          restore-keys: stryker-${{ runner.os }}-
-
-      - name: Run coverage and mutation gates
+      - name: Run coverage gate
         run: bun scripts/quality/gate.ts ci --job unit
 
       - name: Upload unit reports
@@ -138,6 +131,105 @@ jobs:
           path: |
             coverage/
             reports/
+
+  mutation:
+    name: Mutation (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: security
+            job: mutation-security
+            lane: security
+            browser: false
+            timeout: 20
+          - name: changed-node
+            job: mutation-node
+            lane: changed-node
+            browser: false
+            timeout: 20
+          - name: changed-client
+            job: mutation-client
+            lane: changed-client
+            browser: true
+            timeout: 30
+          - name: full
+            job: mutation-full
+            lane: full
+            browser: true
+            # A cold run measured ~17 minutes with 9 workers; hosted runners may expose only 3.
+            timeout: 60
+    env:
+      MUTATION_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD^' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Restore Bun package cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Plan browser mutation scope
+        if: matrix.browser
+        id: mutation-scope
+        run: |
+          bun scripts/quality/mutation-run.ts ${{ matrix.lane }} --scope-only
+          echo "needed=$(jq -r '.files | length > 0' reports/mutation/${{ matrix.lane }}/scope.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Chromium cache
+        if: matrix.browser && steps.mutation-scope.outputs.needed == 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('bun.lock') }}
+
+      - name: Install Chromium
+        if: matrix.browser && steps.mutation-scope.outputs.needed == 'true'
+        run: bunx playwright install --with-deps chromium
+
+      - name: Restore validated mutation cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            reports/mutation/${{ matrix.lane }}/incremental.json
+            reports/mutation/${{ matrix.lane }}/cache.json
+          key: stryker-v2-${{ matrix.lane }}-${{ runner.os }}-${{ hashFiles('.tool-versions', 'bun.lock', 'stryker.config.mjs', 'vite.config.ts', 'quality/mutation-policy.json') }}-${{ github.sha }}
+          restore-keys: stryker-v2-${{ matrix.lane }}-${{ runner.os }}-${{ hashFiles('.tool-versions', 'bun.lock', 'stryker.config.mjs', 'vite.config.ts', 'quality/mutation-policy.json') }}-
+
+      - name: Run required mutation lane
+        run: bun scripts/quality/gate.ts ci --job ${{ matrix.job }}
+
+      - name: Upload mutation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-${{ matrix.lane }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            reports/mutation/${{ matrix.lane }}/
+            reports/quality/
 
   build:
     name: Build and bundle budget
@@ -380,7 +472,7 @@ jobs:
   all-green:
     name: Quality and security
     if: always()
-    needs: [static, unit, build, e2e, security, self-test]
+    needs: [static, unit, mutation, build, e2e, security, self-test]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

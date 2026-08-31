@@ -1,0 +1,22 @@
+{
+	"version": 1,
+	"full": {
+		"aggregateScore": 80
+	},
+	"security": {
+		"aggregateKilled": 95,
+		"perFileKilled": 90,
+		"changedLinesKilled": 100,
+		"maxTimeouts": 0,
+		"maxNoCoverage": 0,
+		"maxErrors": 0
+	},
+	"changed": {
+		"aggregateKilled": 80,
+		"perFileKilled": 80,
+		"changedLinesKilled": 100,
+		"maxTimeouts": 0,
+		"maxNoCoverage": 0,
+		"maxErrors": 0
+	}
+}

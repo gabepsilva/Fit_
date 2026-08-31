@@ -54,3 +54,6 @@ reports
 /data/clean
 /data/db
 /data/logs
+
+# Application database and its SQLite sidecars.
+/data/runtime

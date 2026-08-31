@@ -1,0 +1,331 @@
+import { createHash } from 'node:crypto';
+import type { DatabaseSync } from 'node:sqlite';
+import { integer, text } from './rows';
+import { normalizeUsername } from './username';
+
+/**
+ * Throttling for failed sign-ins.
+ *
+ * The password is the only factor and the username is the only identifier, so
+ * an attacker who can spend attempts freely needs nothing else. Two scopes are
+ * counted apart because they answer different attacks: `username` stops one
+ * account being ground down, and `address` stops one client spraying a
+ * common password across many names, which the username counter never sees.
+ *
+ * Nothing here reads the account table. The count is keyed on the username as
+ * it was submitted, existing or not, so a lockout cannot be used to enumerate
+ * accounts — the same care `authenticate` takes to make an unknown username
+ * cost the same as a wrong password.
+ *
+ * Registration is counted here too, in a scope of its own: it is the other
+ * endpoint that spends the derivation before it knows who is asking, and the
+ * only one that ever says a username exists. See `REGISTRATION_POLICY`.
+ *
+ * The state is rows rather than a process map. A restart is not a reset an
+ * attacker gets for free, a lockout is visible to whoever administers the
+ * server, and the module already owns a database whose writes are cheaper than
+ * the scrypt derivation this saves.
+ */
+
+export type ThrottleScope = 'username' | 'address' | 'registration';
+
+export type ThrottlePolicy = {
+	/** Failures inside one window that pass before the scope locks. */
+	limit: number;
+	/** How long a failure is remembered when no further failure follows it. */
+	windowMs: number;
+	/** The first lock, doubling with every further failure. */
+	baseLockMs: number;
+	/** The ceiling on that doubling. Never above `windowMs`; see `advance`. */
+	maxLockMs: number;
+};
+
+const MINUTE_MS = 60 * 1000;
+
+/**
+ * Five wrong passwords is a person who has forgotten theirs; the sixth starts a
+ * minute of waiting that doubles to a quarter of an hour. That is roughly 30
+ * guesses a day against one account, against a ten-character minimum — while a
+ * person locked out by somebody else's guessing is inconvenienced for minutes,
+ * not signed out or asked to reset a password nobody has stolen.
+ */
+export const USERNAME_POLICY: ThrottlePolicy = {
+	limit: 5,
+	windowMs: 15 * MINUTE_MS,
+	baseLockMs: MINUTE_MS,
+	maxLockMs: 15 * MINUTE_MS
+};
+
+/**
+ * The address ceiling is high on purpose: a household shares one public
+ * address, and the phone, the laptop and a partner all failing at once must not
+ * lock the front door. It is sized to catch spraying, which needs hundreds of
+ * attempts to be worth doing, rather than to catch forgetfulness.
+ */
+export const ADDRESS_POLICY: ThrottlePolicy = {
+	limit: 50,
+	windowMs: 15 * MINUTE_MS,
+	baseLockMs: MINUTE_MS,
+	maxLockMs: 15 * MINUTE_MS
+};
+
+/**
+ * Registration counts every attempt from one address, not only the failures.
+ *
+ * Sign-in counts failures because a success proves the caller owned the account
+ * it just used. Registration proves nothing of the sort: every attempt spends
+ * the same 350 ms of scrypt whether the name was free or taken, and `taken` is
+ * the one thing this system ever says out loud about who exists. So the counter
+ * is on attempts, and the address is the only identity an unregistered caller
+ * has to count against.
+ *
+ * Ten in an hour is more accounts than a household has. A household is one
+ * tenancy: a partner or a child is a profile, and only someone who signs in on
+ * their own needs an account of their own, so several sign-ups from one address
+ * in one sitting are ordinary and ten are not. The eleventh waits a minute,
+ * doubling to a quarter of an hour, which leaves a determined caller about four
+ * attempts an hour — a second and a half of derivation, and far too slow to
+ * walk a list of names — while a family signing up together never reaches it.
+ */
+export const REGISTRATION_POLICY: ThrottlePolicy = {
+	limit: 10,
+	windowMs: 60 * MINUTE_MS,
+	baseLockMs: MINUTE_MS,
+	maxLockMs: 15 * MINUTE_MS
+};
+
+/** Who is attempting to sign in, as the request presents it. */
+export type SignInAttempt = {
+	username: string;
+	/** `null` when the deployment cannot determine one; the address scope is then skipped. */
+	clientAddress: string | null;
+};
+
+export type ThrottleDecision =
+	{ allowed: true } | { allowed: false; scope: ThrottleScope; retryAfterMs: number };
+
+type Bucket = { scope: ThrottleScope; keyHash: string; policy: ThrottlePolicy };
+type BucketState = { failures: number; windowEndsAt: string; lockedUntil: string | null };
+type Lock = { scope: ThrottleScope; remainingMs: number };
+
+/** This runs on unauthenticated input: bound it before normalizing or hashing. */
+const MAX_KEY_LENGTH = 128;
+
+/**
+ * The key is hashed, so the table cannot become a list of the usernames people
+ * have tried, and one hostile address cannot store a megabyte by claiming a
+ * long name. The scope is inside the hash so the two counters cannot collide.
+ */
+function keyHash(scope: ThrottleScope, value: string): string {
+	// The separator is written as an escape rather than as a literal NUL byte:
+	// one in the source makes Git treat this file as binary, and a security
+	// file with no textual diff is one the changed-line lanes cannot see.
+	return createHash('sha256').update(`${scope}\u0000${value}`).digest('hex');
+}
+
+function bucketsFor(attempt: SignInAttempt): Bucket[] {
+	const username = normalizeUsername(attempt.username.slice(0, MAX_KEY_LENGTH));
+	const buckets: Bucket[] = [
+		{ scope: 'username', keyHash: keyHash('username', username), policy: USERNAME_POLICY }
+	];
+	const address = attempt.clientAddress?.slice(0, MAX_KEY_LENGTH);
+	if (address) {
+		buckets.push({
+			scope: 'address',
+			keyHash: keyHash('address', address),
+			policy: ADDRESS_POLICY
+		});
+	}
+	return buckets;
+}
+
+function readState(db: DatabaseSync, bucket: Bucket): BucketState | null {
+	const row = db
+		.prepare(
+			`select failures, window_ends_at, locked_until
+			 from sign_in_throttle
+			 where scope = ? and key_hash = ?`
+		)
+		.get(bucket.scope, bucket.keyHash);
+	if (!row) return null;
+	const lockedUntil = row['locked_until'];
+	return {
+		failures: integer(row, 'failures'),
+		windowEndsAt: text(row, 'window_ends_at'),
+		lockedUntil: typeof lockedUntil === 'string' ? lockedUntil : null
+	};
+}
+
+function writeState(db: DatabaseSync, bucket: Bucket, state: BucketState): void {
+	db.prepare(
+		`insert into sign_in_throttle (scope, key_hash, failures, window_ends_at, locked_until)
+		 values (?, ?, ?, ?, ?)
+		 on conflict (scope, key_hash) do update set
+		   failures = excluded.failures,
+		   window_ends_at = excluded.window_ends_at,
+		   locked_until = excluded.locked_until`
+	).run(bucket.scope, bucket.keyHash, state.failures, state.windowEndsAt, state.lockedUntil);
+}
+
+/**
+ * The state one more failure leaves behind.
+ *
+ * Because `maxLockMs` never exceeds `windowMs`, a lock always ends no later
+ * than the window that produced it. That is what lets an expired window reset
+ * the count without ever cutting a live lock short, and what lets `prune`
+ * delete a row on the strength of its window alone.
+ */
+function advance(state: BucketState | null, policy: ThrottlePolicy, now: Date): BucketState {
+	const stamp = now.toISOString();
+	// Both sides are UTC ISO-8601 of the same width, so this is a string
+	// comparison on purpose — the same trick `resolveSession` uses on expiry.
+	const carried = state !== null && state.windowEndsAt > stamp ? state.failures : 0;
+	const failures = carried + 1;
+	const excess = failures - policy.limit;
+	const lockMs = excess < 0 ? 0 : Math.min(policy.baseLockMs * 2 ** excess, policy.maxLockMs);
+	return {
+		failures,
+		windowEndsAt: new Date(now.getTime() + policy.windowMs).toISOString(),
+		lockedUntil: lockMs === 0 ? null : new Date(now.getTime() + lockMs).toISOString()
+	};
+}
+
+function remainingLockMs(state: BucketState | null, now: Date): number {
+	if (state === null || state.lockedUntil === null) return 0;
+	return Math.max(0, new Date(state.lockedUntil).getTime() - now.getTime());
+}
+
+/** The longest wait any scope imposes, so a caller is never told to retry early. */
+function longestLock(locks: Lock[]): ThrottleDecision {
+	let worst: Lock | null = null;
+	for (const lock of locks) {
+		if (lock.remainingMs > 0 && (worst === null || lock.remainingMs > worst.remainingMs)) {
+			worst = lock;
+		}
+	}
+	if (worst === null) return { allowed: true };
+	return { allowed: false, scope: worst.scope, retryAfterMs: worst.remainingMs };
+}
+
+/**
+ * Whether this attempt may be verified at all.
+ *
+ * Called before the password is checked, which is the point: a locked attempt
+ * costs a hash lookup instead of 350 ms of scrypt. It reveals nothing, because
+ * the lock is a function of the caller's own previous attempts and of nothing
+ * on the server.
+ */
+export function checkSignIn(
+	db: DatabaseSync,
+	attempt: SignInAttempt,
+	now = new Date()
+): ThrottleDecision {
+	const locks = bucketsFor(attempt).map((bucket) => ({
+		scope: bucket.scope,
+		remainingMs: remainingLockMs(readState(db, bucket), now)
+	}));
+	return longestLock(locks);
+}
+
+/** Count one failed attempt against every scope, and report the wait it now carries. */
+export function recordFailedSignIn(
+	db: DatabaseSync,
+	attempt: SignInAttempt,
+	now = new Date()
+): ThrottleDecision {
+	const locks = bucketsFor(attempt).map((bucket) => {
+		const state = advance(readState(db, bucket), bucket.policy, now);
+		writeState(db, bucket, state);
+		return { scope: bucket.scope, remainingMs: remainingLockMs(state, now) };
+	});
+	// Swept here rather than on a timer: writing is the only moment this table
+	// grows, so it is the moment to pay for what has expired.
+	pruneSignInThrottle(db, now);
+	return longestLock(locks);
+}
+
+/**
+ * Forget an account's failures after it has proved the password.
+ *
+ * Only the username scope is cleared. Signing in successfully from an address
+ * that is halfway to a spray lockout must not hand the attacker a reset, and
+ * one valid account is all that would take.
+ */
+export function clearSignInFailures(db: DatabaseSync, username: string): void {
+	db.prepare('delete from sign_in_throttle where scope = ? and key_hash = ?').run(
+		'username',
+		keyHash('username', normalizeUsername(username.slice(0, MAX_KEY_LENGTH)))
+	);
+}
+
+/**
+ * The bucket a registration attempt is counted in, or `null` when the
+ * deployment declares it cannot determine an address.
+ *
+ * There is no second scope to fall back to. Counting against the submitted
+ * username would let one caller hold a name it does not own out of ever being
+ * registered, and would answer "is this name taken" from the throttle instead
+ * of from the endpoint that is allowed to.
+ */
+function registrationBucket(clientAddress: string | null): Bucket | null {
+	const address = clientAddress?.slice(0, MAX_KEY_LENGTH);
+	if (!address) return null;
+	return {
+		scope: 'registration',
+		keyHash: keyHash('registration', address),
+		policy: REGISTRATION_POLICY
+	};
+}
+
+/**
+ * Whether this address may pay for another registration's derivation.
+ *
+ * Called before the account is created, for the same reason `checkSignIn` runs
+ * before `authenticate`: a refused attempt has to cost a hash lookup rather
+ * than the derivation it was trying to spend.
+ */
+export function checkRegistration(
+	db: DatabaseSync,
+	clientAddress: string | null,
+	now = new Date()
+): ThrottleDecision {
+	const bucket = registrationBucket(clientAddress);
+	if (bucket === null) return { allowed: true };
+	return longestLock([
+		{ scope: bucket.scope, remainingMs: remainingLockMs(readState(db, bucket), now) }
+	]);
+}
+
+/**
+ * Count one registration attempt, whatever it goes on to answer.
+ *
+ * Recorded before the account is created rather than after, so an attempt that
+ * ends in `username-taken` — the enumeration answer — costs the caller exactly
+ * as much of its allowance as one that ends in an account.
+ */
+export function recordRegistration(
+	db: DatabaseSync,
+	clientAddress: string | null,
+	now = new Date()
+): ThrottleDecision {
+	const bucket = registrationBucket(clientAddress);
+	if (bucket === null) return { allowed: true };
+	const state = advance(readState(db, bucket), bucket.policy, now);
+	writeState(db, bucket, state);
+	// Swept on the write, the same as a failed sign-in: this is the only moment
+	// the table grows, so it is the moment to pay for what has expired.
+	pruneSignInThrottle(db, now);
+	return longestLock([{ scope: bucket.scope, remainingMs: remainingLockMs(state, now) }]);
+}
+
+/** Drop the rows whose window has closed and whose lock has run out. */
+export function pruneSignInThrottle(db: DatabaseSync, now = new Date()): number {
+	const stamp = now.toISOString();
+	const result = db
+		.prepare(
+			`delete from sign_in_throttle
+			 where window_ends_at <= ? and (locked_until is null or locked_until <= ?)`
+		)
+		.run(stamp, stamp);
+	return Number(result.changes);
+}

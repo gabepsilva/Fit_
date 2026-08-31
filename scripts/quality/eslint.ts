@@ -1,5 +1,6 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { captureStatus } from '../security/shared';
@@ -25,9 +26,36 @@ await mkdir(path.dirname(reportPath), { recursive: true });
 
 // ESLint accepts one formatter per run. Emit the machine-readable one and
 // render it for humans here, so a single run serves both audiences.
+//
+// Type-aware linting is the slowest static gate because every worker builds its
+// own TypeScript program, and it is the critical path of the whole static tier:
+// the other twelve steps finish in nine seconds while this one runs. Measured
+// here at 218 files: off 98.5s/1.4GB, auto 18.7s/4.9GB, 8 threads 15.6s/7.1GB,
+// 28 threads 28.8s/18.0GB -- past the turnover, extra workers cost more than
+// they save. Findings are identical at every count; concurrency changes timing,
+// not the verdict.
+//
+// `auto` asks for ceil(files / 50) workers capped at half the host's cores,
+// which is five here and leaves the turnover unreached: 8 measured 16.7s
+// against auto's 19.8s. Half the cores capped at eight spends that headroom
+// without walking past the turnover on a bigger host, and still floors a
+// 4-vCPU runner at two and a 2-vCPU runner at one, exactly where `auto` put
+// them. This is derived from the host rather than hardcoded for one of them.
+const concurrency = Math.min(8, Math.max(1, Math.floor(availableParallelism() / 2)));
+
 const { exitCode } = await captureStatus(
 	path.join(projectRoot, 'node_modules', '.bin', 'eslint'),
-	['.', '--max-warnings', '0', '--format', 'json', '--output-file', reportPath],
+	[
+		'.',
+		'--max-warnings',
+		'0',
+		'--concurrency',
+		String(concurrency),
+		'--format',
+		'json',
+		'--output-file',
+		reportPath
+	],
 	{ stream: true }
 );
 

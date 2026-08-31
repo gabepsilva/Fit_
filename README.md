@@ -6,8 +6,9 @@ A fitness application for Android and iOS, built on SvelteKit. Food logging, an 
 calorie and macro model, a household meal plan, and progress tracking, behind a set of
 deterministic, reviewable quality gates.
 
-Data currently lives in the browser's `localStorage`. The SQLite backend is not built yet,
-so nothing leaves the device and nothing syncs between devices.
+Data currently lives in the browser's `localStorage`, so nothing leaves the device and
+nothing syncs between devices. The SQLite backend has been started — `src/lib/server/`
+holds accounts, sessions and household membership — but nothing in the app calls it yet.
 
 ## Requirements
 
@@ -50,14 +51,15 @@ Checks are tiered by how long they take, so the loop you run most often stays sh
 Every tier runs to completion and aggregates its results, rather than stopping at the
 first failure and making you pay another round trip per error.
 
-| Command               | Purpose                                              | Requires         |
-| --------------------- | ---------------------------------------------------- | ---------------- |
-| `bun run precommit`   | Formatting, lint, suppression ratchet. Fail-fast.    | Nothing          |
-| `bun run verify:fast` | Every static check plus server unit tests.           | Nothing          |
-| `bun run verify`      | Adds workflow lint, coverage, build, bundle budgets. | Docker, Chromium |
-| `bun run verify:deep` | Adds mutation testing and end-to-end flows.          | Docker, browsers |
-| `bun run ci`          | Adds Gitleaks and Semgrep. The merge gate.           | Docker, browsers |
-| `bun run nightly`     | Trivy and ZAP. Scheduled, never a merge gate.        | Docker, Chromium |
+| Command                  | Purpose                                              | Requires         |
+| ------------------------ | ---------------------------------------------------- | ---------------- |
+| `bun run precommit`      | Formatting, lint, suppression ratchet. Fail-fast.    | Nothing          |
+| `bun run verify:fast`    | Every static check plus server unit tests.           | Nothing          |
+| `bun run verify`         | Adds workflow lint, coverage, build, bundle budgets. | Docker, Chromium |
+| `bun run verify:deep`    | Adds mutation testing and end-to-end flows.          | Docker, browsers |
+| `bun run ci`             | Adds Gitleaks and Semgrep. The merge gate.           | Docker, browsers |
+| `bun run audit:mutation` | Explicit full-tree mutation audit.                   | Chromium         |
+| `bun run nightly`        | Trivy and ZAP. Scheduled, never a merge gate.        | Docker, Chromium |
 
 Each run writes `reports/quality/gate-<tier>.json`: every step with its exit code, duration,
 log path, and machine-readable artifact. Re-run a single step with

@@ -1,0 +1,425 @@
+{
+	"version": 1,
+	"entries": [
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 24,
+					"line": 169
+				},
+				"start": {
+					"column": 3,
+					"line": 168
+				}
+			},
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "e076c0d7b9775cba8686d01e59a154de79f87dcf5315154a429ee6b4c7e6eb19",
+			"classification": "host-specific-defense-in-depth",
+			"rationale": "On POSIX, a newly created directory is already restricted by mode 0700; for an existing directory mkdirSync returns undefined, so this composite replacement cannot change the observable permission verdict.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "LogicalOperator",
+			"replacement": "process.platform !== 'win32' || created === undefined",
+			"location": {
+				"end": {
+					"column": 24,
+					"line": 169
+				},
+				"start": {
+					"column": 3,
+					"line": 168
+				}
+			},
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "ce818da9233766930782abc3ba10ce0f46449e1ee2c450dbe48f68dcbbfdf8cb",
+			"classification": "host-specific-defense-in-depth",
+			"rationale": "On POSIX, the OR differs only for a newly created directory, whose requested 0700 mode already makes the outer permission check false; existing directories take the same branch.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 31,
+					"line": 168
+				},
+				"start": {
+					"column": 3,
+					"line": 168
+				}
+			},
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "590c278b6a351308d11ab9302bf18c6d010a73e94a89fb71ec38eeb2e942f666",
+			"classification": "host-specific-defense-in-depth",
+			"rationale": "This platform guard is always true on the Linux host where POSIX permission enforcement and this mutation are observable; Windows deliberately does not implement POSIX mode enforcement.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"\"",
+			"location": {
+				"end": {
+					"column": 31,
+					"line": 168
+				},
+				"start": {
+					"column": 24,
+					"line": 168
+				}
+			},
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "af198e6127c13f421f928d64a8246a70a93646a340a57cf42bdd501bfdd9d2c7",
+			"classification": "host-specific-defense-in-depth",
+			"rationale": "Changing the Windows platform sentinel to this exact empty string is observationally identical on the Linux security-test host; the classification is host-specific and fingerprinted to this replacement.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 24,
+					"line": 169
+				},
+				"start": {
+					"column": 3,
+					"line": 169
+				}
+			},
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "3089651fd3bb6114f49cd03f561c3cd84d0a3d8b3904cd3be9a6fc0d72cfcd9e",
+			"classification": "equivalent",
+			"rationale": "mkdirSync returns undefined for an existing directory; a newly created directory receives mode 0700, so forcing this condition true cannot change the outer permission verdict.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/db.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 9,
+					"line": 213
+				},
+				"start": {
+					"column": 7,
+					"line": 213
+				}
+			},
+			"sourceHash": "b43b4cdfae65087644236f890d38c52f00e9068542b83c55f1f4135146b7bfa0",
+			"fingerprint": "be080ee00cdfbec038f38b7a9e7d91b1cae9fbbb60268054671fe3a0bd53a878",
+			"classification": "equivalent",
+			"rationale": "When database creation fails before assignment, forcing the db guard true only throws inside the deliberately swallowing close-error try/catch; the original opening error and file-hardening behavior remain identical.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/users/password.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"Stryker was here!\"",
+			"location": {
+				"end": {
+					"column": 60,
+					"line": 154
+				},
+				"start": {
+					"column": 58,
+					"line": 154
+				}
+			},
+			"sourceHash": "1b37c84252c96c8bd8c98c48ea77930a16866d7345460c553afc33980fd090f1",
+			"fingerprint": "12d7ff5caa02c918a8c3b08e05e0aa2ee3dd1bf5aad18765eeb54e0bedfaa444",
+			"classification": "equivalent",
+			"rationale": "For a non-string stored credential, both the empty fallback and this exact replacement fail the anchored fixed-width serialized-hash grammar before any derivation or authentication.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/api.ts",
+			"mutatorName": "OptionalChaining",
+			"replacement": "request.headers.get('content-type')?.split(';')[0].trim",
+			"location": {
+				"end": {
+					"column": 79,
+					"line": 82
+				},
+				"start": {
+					"column": 23,
+					"line": 82
+				}
+			},
+			"sourceHash": "65c90fb369b50da928bf96ac42bca5ab61670102a52e44b657b33f4f282ed1a8",
+			"fingerprint": "57b3529ad78e6441944ffe9af7a4d1bacf9aac8f3fbb46b1719f50884c25fdb2",
+			"classification": "equivalent",
+			"rationale": "String.prototype.split always returns at least one element, so the element at index 0 is never null or undefined and the optional access before trim can only ever take its defined branch.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/api.ts",
+			"mutatorName": "BlockStatement",
+			"replacement": "{}",
+			"location": {
+				"end": {
+					"column": 3,
+					"line": 91
+				},
+				"start": {
+					"column": 10,
+					"line": 88
+				}
+			},
+			"sourceHash": "65c90fb369b50da928bf96ac42bca5ab61670102a52e44b657b33f4f282ed1a8",
+			"fingerprint": "e424a3332bfe49e37c701c4393b604c5bc46848df5a3587e86803a35dff0988a",
+			"classification": "equivalent",
+			"rationale": "Emptying the catch leaves parsed as undefined, which textFieldsOf already refuses because it is not an object, so a malformed body still answers null on both the guarded and the unguarded path.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/request-auth.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 31,
+					"line": 42
+				},
+				"start": {
+					"column": 9,
+					"line": 42
+				}
+			},
+			"sourceHash": "df84e05ecf1707f6395c92633a09c5cb408cba8cd5f467a07c9df3e5e0c239ba",
+			"fingerprint": "17ef8f5b38adec83c70b87a8a8f34a45f3b7d87ad5885dd6d5bfb08782edd81d",
+			"classification": "equivalent",
+			"rationale": "RegExp.prototype.test stringifies a null argument to the four characters null, which the anchored bearer pattern cannot match, so dropping the null guard still answers false for a request carrying no Authorization header.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/auth-endpoints.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"Stryker was here!\"",
+			"location": {
+				"end": {
+					"column": 83,
+					"line": 223
+				},
+				"start": {
+					"column": 81,
+					"line": 223
+				}
+			},
+			"sourceHash": "0a8e8561f808fd867cab0632480b78104f297f24265e1fa67f079dce6622ed8b",
+			"fingerprint": "ce6a57028313f2670872db833eebe77c82207f7d18f40cf3f8c40694551eee8c",
+			"classification": "equivalent",
+			"rationale": "The fallback for an absent password field is only ever verified against a stored hash and never persisted, so any literal that is not somebody's password yields the same invalid-credentials answer; the upgrade candidate a longer literal would derive is discarded because verification failed.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/users/throttle.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 47,
+					"line": 155
+				},
+				"start": {
+					"column": 16,
+					"line": 155
+				}
+			},
+			"sourceHash": "58216abb15dab242695f38952daf572d940aba2c20e43e8be348ea36c9712f6b",
+			"fingerprint": "3f167aadf6cab43719b03d4d3dd069dda5be8b97c6d4d841e959153d144ae683",
+			"classification": "equivalent",
+			"rationale": "The mutated ternary reads locked_until from a STRICT text column, so the value is a string or null; the guard's false branch and the column's own null are the same value, and the typeof test only narrows an unknown row value for the type checker.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/server/users/throttle.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "false",
+			"location": {
+				"end": {
+					"column": 50,
+					"line": 194
+				},
+				"start": {
+					"column": 24,
+					"line": 194
+				}
+			},
+			"sourceHash": "58216abb15dab242695f38952daf572d940aba2c20e43e8be348ea36c9712f6b",
+			"fingerprint": "4d46fd6b7348af16d17cd0b03e15f0d168e204d975fedab44fcb9b3ac82a99b6",
+			"classification": "equivalent",
+			"rationale": "Dropping the null check falls through to new Date(null), the epoch, so the subtraction is always negative for any clock after 1970 and Math.max(0, ...) clamps it to the same zero the guard returns.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "false",
+			"location": {
+				"end": {
+					"column": 30,
+					"line": 99
+				},
+				"start": {
+					"column": 6,
+					"line": 99
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "ee4834afdbc6ad4f2a5bcbf2e9e6ff1e814a3cfd4ef64b33cb985be89d84da7b",
+			"classification": "equivalent",
+			"rationale": "The `typeof body !== ‘object’` half only short-circuits a body that is a JSON string, number or boolean; each of those reads `.error` as undefined, so the very next guard returns the same `invalid-body`. Both halves reach one verdict and no response body can separate them.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 33,
+					"line": 103
+				},
+				"start": {
+					"column": 9,
+					"line": 103
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "8b747215f1424edf6bb65734ad865229ec231151b529dac30e0682597f23c87d",
+			"classification": "equivalent",
+			"rationale": "`CODES` is a set of strings, so `CODES.has(code)` is already false for every non-string value; the `typeof` guard narrows the type for the compiler and cannot change which branch runs.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ArrowFunction",
+			"replacement": "() => undefined",
+			"location": {
+				"end": {
+					"column": 62,
+					"line": 127
+				},
+				"start": {
+					"column": 52,
+					"line": 127
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "3fbe835cca7a171a64d959897b94cb8a026587356ca7fb176e3326289a2f9dc2",
+			"classification": "equivalent",
+			"rationale": "The catch supplies the value `codeOf` and `textOf` then read. `undefined` fails `typeof body !== ‘object’` where `null` fails `body === null`, both returning `invalid-body`, and `?.error` is undefined for either. No caller can tell the two apart.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ArrowFunction",
+			"replacement": "() => undefined",
+			"location": {
+				"end": {
+					"column": 63,
+					"line": 166
+				},
+				"start": {
+					"column": 53,
+					"line": 166
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "aed9ec3ab144d650892874ddbdd9788364e6783082db6b577758799a9ff6caf7",
+			"classification": "equivalent",
+			"rationale": "Same catch, in `sessionFrom`: the very next line rejects `undefined` on `typeof value !== ‘object’` and `null` on `value === null`, and both produce the identical `unreachable` failure.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/api.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "true",
+			"location": {
+				"end": {
+					"column": 26,
+					"line": 175
+				},
+				"start": {
+					"column": 7,
+					"line": 175
+				}
+			},
+			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
+			"fingerprint": "b65697901e6a066db9d4d4c64b945fe1659f00a154d7b09f860c4bca431ad1be",
+			"classification": "equivalent",
+			"rationale": "The object this builds is only ever handed to `JSON.stringify`, which omits a property whose value is `undefined`. Assigning the undefined entry rather than skipping it serializes to the same request body byte for byte.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/wording.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"Stryker was here!\"",
+			"location": {
+				"end": {
+					"column": 44,
+					"line": 48
+				},
+				"start": {
+					"column": 42,
+					"line": 48
+				}
+			},
+			"sourceHash": "afcbd50bbfb3c051de2e076be78f99ae59e60b1c2d1aa2e5ba9b0f44634f5587",
+			"fingerprint": "99f9e0931a766e7d0947ffe482d8b235ed443dcc3863d570ad746412733f7b05",
+			"classification": "equivalent",
+			"rationale": "The fallback is a lookup key for a reason that was not sent. No field record in `FIELD_WORDING` holds an empty key, so `‘’` and any other absent key alike miss the table and fall through to the same `UNRECOGNIZED_FIELD` sentence.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/auth/wording.ts",
+			"mutatorName": "StringLiteral",
+			"replacement": "\"Stryker was here!\"",
+			"location": {
+				"end": {
+					"column": 42,
+					"line": 89
+				},
+				"start": {
+					"column": 40,
+					"line": 89
+				}
+			},
+			"sourceHash": "afcbd50bbfb3c051de2e076be78f99ae59e60b1c2d1aa2e5ba9b0f44634f5587",
+			"fingerprint": "7de3799e5d1a4beb62613e5cf202441b1a63686bd357e00a2a5c4bdcebd6939f",
+			"classification": "equivalent",
+			"rationale": "The fallback is a field name for a failure that named none. `FIELD_WORDING` has no empty-string field, so `‘’` and any other unlisted name both miss the table and produce the same `UNRECOGNIZED_FIELD` sentence.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		},
+		{
+			"file": "src/lib/state/session.svelte.ts",
+			"mutatorName": "ConditionalExpression",
+			"replacement": "false",
+			"location": {
+				"end": {
+					"column": 11,
+					"line": 101
+				},
+				"start": {
+					"column": 7,
+					"line": 101
+				}
+			},
+			"sourceHash": "3eee06a4418f16c1f54783867035c7f32c5a9da28732cc71d46bb661edd3afd3",
+			"fingerprint": "78db7ddf2d2a3577f9d7e2cbb48d916cca709777fcad148124a574e973ff5d3b",
+			"classification": "equivalent",
+			"rationale": "The guard is a short circuit, not a decision. Without it an absent record reaches `JSON.parse`, where `null`, `undefined` and `‘’` either parse to a value `isSession` rejects or throw into the catch beside it — every path returns the same `null`, and nothing is written.",
+			"review": "https://github.com/gabepsilva/Fit_/pull/5"
+		}
+	]
+}

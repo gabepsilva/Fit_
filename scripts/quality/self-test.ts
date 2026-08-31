@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import type { GateFixture } from './fixtures';
 import { fixtures } from './fixtures';
+import { pooled } from './pool';
 import { captureStatus } from '../security/shared';
 
 /**
@@ -16,6 +17,7 @@ import { captureStatus } from '../security/shared';
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
 const reportPath = path.join(projectRoot, 'reports', 'quality', 'self-test.json');
 const excluded = [
+	'./.git',
 	'./node_modules',
 	'./.svelte-kit',
 	'./build',
@@ -24,6 +26,12 @@ const excluded = [
 	'./test-results',
 	'./playwright-report',
 	'./.stryker-tmp',
+	// The nutrition ETL pipeline: gigabytes of Python environment, data extracts
+	// and the food database, and gitignored rather than absent. Each fixture gets
+	// its own copy of this template, so copying it in exhausts the tmpfs holding
+	// the workspace before a single fixture runs. `stryker.config.mjs` ignores it
+	// for the same reason.
+	'./data',
 	'./.security-cache/images',
 	'./.security-cache/trivy'
 ];
@@ -40,10 +48,24 @@ interface FixtureResult {
 
 const skipDocker = process.argv.includes('--skip-docker');
 const skipBrowser = process.argv.includes('--skip-browser');
+const onlyIndex = process.argv.indexOf('--only');
+const onlyName = onlyIndex === -1 ? undefined : process.argv[onlyIndex + 1];
+if (onlyIndex !== -1 && onlyName === undefined) throw new Error('--only requires a fixture name.');
+const selectedFixtures =
+	onlyName === undefined ? fixtures : fixtures.filter((fixture) => fixture.name === onlyName);
+if (selectedFixtures.length === 0) throw new Error(`Unknown gate fixture: ${onlyName ?? ''}`);
 
 async function run(cwd: string, command: string, args: string[]): Promise<number> {
 	const { exitCode } = await captureStatus(command, args, { cwd, env: fixtureEnv });
 	return exitCode;
+}
+
+async function runCaptured(
+	cwd: string,
+	command: string,
+	args: string[]
+): Promise<{ exitCode: number; output: string }> {
+	return captureStatus(command, args, { cwd, env: fixtureEnv });
 }
 
 /**
@@ -53,7 +75,7 @@ async function run(cwd: string, command: string, args: string[]): Promise<number
  * in CI and it used to run them one at a time.
  *
  * The cap is deliberately well under the core count. A fixture is not one
- * process: `surviving-mutant` starts a whole mutation run and `uncovered-file`
+ * process: mutation fixtures start nested test runners and `uncovered-file`
  * a coverage run, each of which runs in parallel internally. Four heavy gates at
  * once already saturates a workstation, and a hosted runner has two cores.
  */
@@ -64,27 +86,11 @@ const concurrency = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 
  * siblings are doing the same. Two workers is enough for a fixture that only
  * has to fail.
  */
-const fixtureEnv: NodeJS.ProcessEnv = { ...process.env, STRYKER_CONCURRENCY: '2' };
-
-/** Run `work` over `items`, `limit` at a time, keeping the input order. */
-async function pooled<T, R>(
-	items: T[],
-	limit: number,
-	work: (item: T) => Promise<R>
-): Promise<R[]> {
-	const results = new Array<R>(items.length);
-	let next = 0;
-	const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-		while (next < items.length) {
-			const index = next++;
-			const item = items[index];
-			if (item === undefined) return;
-			results[index] = await work(item);
-		}
-	});
-	await Promise.all(workers);
-	return results;
-}
+const fixtureEnv: NodeJS.ProcessEnv = {
+	...process.env,
+	MUTATION_BASE: 'HEAD',
+	STRYKER_CONCURRENCY: '2'
+};
 
 /** Fixtures mutate their workspace, so a workspace must never be the real tree. */
 function assertDisposable(workspace: string): void {
@@ -103,7 +109,28 @@ async function createTemplate(root: string): Promise<string> {
 		`tar -cf - ${excludeArgs.join(' ')} . | tar -xf - -C ${JSON.stringify(template)}`
 	]);
 	if (copied !== 0) throw new Error('Could not copy the working tree.');
+	// A fixture needs a baseline containing the current working tree, including
+	// uncommitted implementation work. Reusing the source checkout .git file
+	// would share one index between concurrent fixtures and make diff-scoped
+	// gates compare against the branch commit instead of this copied baseline.
+	await run(template, 'git', ['init']);
+	await run(template, 'git', ['add', '-A']);
+	const committed = await run(template, 'git', [
+		'-c',
+		'user.name=Fit gate fixture',
+		'-c',
+		'user.email=fixture@example.test',
+		'commit',
+		'-m',
+		'fixture baseline'
+	]);
+	if (committed !== 0) throw new Error('Could not commit the fixture baseline.');
 	await symlink(path.join(projectRoot, 'node_modules'), path.join(template, 'node_modules'), 'dir');
+	// Stryker resolves the Vitest projects before its sandbox can regenerate
+	// SvelteKit's ignored tsconfig. A disposable template therefore needs the
+	// same generated config that `bun install` prepares in a clean CI checkout.
+	const synced = await run(template, 'bunx', ['svelte-kit', 'sync']);
+	if (synced !== 0) throw new Error('Could not prepare the fixture SvelteKit config.');
 	return template;
 }
 
@@ -131,8 +158,22 @@ async function proveFixture(
 	assertDisposable(workspace);
 	await run(root, 'cp', ['-a', `${template}/.`, workspace]);
 	await fixture.apply(workspace);
-	// The suppression scanner reads tracked files, so the fixture must be staged.
-	await run(workspace, 'git', ['add', '-A']);
+	if (fixture.baselinePaths !== undefined) {
+		await run(workspace, 'git', ['add', '--', ...fixture.baselinePaths]);
+		const committed = await run(workspace, 'git', [
+			'-c',
+			'user.name=Fit gate fixture',
+			'-c',
+			'user.email=fixture@example.test',
+			'commit',
+			'-m',
+			'fixture support test'
+		]);
+		if (committed !== 0) throw new Error(`Could not commit support files for ${fixture.name}.`);
+	}
+	// Most scanners read tracked files. One mutation fixture deliberately stays
+	// untracked to prove changed-file discovery cannot silently miss new code.
+	if (fixture.stage !== false) await run(workspace, 'git', ['add', '-A']);
 
 	for (const step of fixture.prepare ?? []) {
 		const prepareCode = await run(workspace, 'bun', ['run', step]);
@@ -146,31 +187,50 @@ async function proveFixture(
 		}
 	}
 
-	const exitCode = await run(workspace, 'bun', ['run', fixture.gate]);
+	const { exitCode, output } = await runCaptured(workspace, 'bun', ['run', fixture.gate]);
 	await rm(workspace, { recursive: true, force: true });
+	const intendedFailure =
+		fixture.failureIncludes === undefined || output.includes(fixture.failureIncludes);
 
 	return {
 		...base,
-		proven: exitCode !== 0,
+		proven: exitCode !== 0 && intendedFailure,
 		exitCode,
 		reason:
-			exitCode === 0 ? 'the gate accepted input it claims to reject' : 'gate failed as required',
+			exitCode === 0
+				? 'the gate accepted input it claims to reject'
+				: intendedFailure
+					? 'gate failed as required'
+					: `gate failed without expected evidence: ${fixture.failureIncludes ?? ''}\n${output.slice(-10_000)}`,
 		durationMs: Date.now() - startedAt
 	};
 }
 
 const root = await mkdtemp(path.join(tmpdir(), 'fit-self-test-'));
-console.log(`Gate self-test: ${fixtures.length} fixtures, ${concurrency} at a time.\n`);
+console.log(`Gate self-test: ${selectedFixtures.length} fixtures, ${concurrency} at a time.\n`);
 
 let results: FixtureResult[];
 try {
 	const template = await createTemplate(root);
-	results = await pooled(fixtures, concurrency, async (fixture) => {
+	const shared = selectedFixtures.filter((fixture) => fixture.exclusive !== true);
+	const exclusive = selectedFixtures.filter((fixture) => fixture.exclusive === true);
+	const runFixture = async (fixture: GateFixture): Promise<FixtureResult> => {
 		const result = await proveFixture(fixture, template, root);
 		// Printed on completion rather than in order, so a slow fixture never
 		// hides the ones that already finished. The report below keeps the order.
 		const status = result.reason === 'skipped' ? 'skip' : result.proven ? 'pass' : 'FAIL';
 		console.log(`${status}  ${result.gate.padEnd(20)} ${result.name}`);
+		return result;
+	};
+	const sharedResults = await pooled(shared, concurrency, runFixture);
+	const exclusiveResults: FixtureResult[] = [];
+	for (const fixture of exclusive) exclusiveResults.push(await runFixture(fixture));
+	const byName = new Map(
+		[...sharedResults, ...exclusiveResults].map((result) => [result.name, result])
+	);
+	results = selectedFixtures.map((fixture) => {
+		const result = byName.get(fixture.name);
+		if (result === undefined) throw new Error(`Fixture ${fixture.name} did not run.`);
 		return result;
 	});
 } finally {
