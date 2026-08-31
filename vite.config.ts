@@ -132,6 +132,22 @@ const selectedTestProjects =
 		? testProjects
 		: testProjects.filter(({ test }) => selectedNames.includes(test.name));
 
+/**
+ * Extra hostnames the dev and preview servers will answer to.
+ *
+ * Vite refuses a request whose `Host` it does not recognize, which is what
+ * stops a page on another site from driving a dev server over DNS rebinding.
+ * Reaching this one from a phone means answering under a name that is not
+ * `localhost` — a LAN address, or a tailnet name in front of a real
+ * certificate — and that name belongs to whoever is testing, not to the
+ * repository. So it is configuration rather than a committed list, for the
+ * same reason `FIT_ALLOWED_ORIGINS` is.
+ */
+const DEV_HOSTS = (process.env.FIT_DEV_HOSTS ?? '')
+	.split(',')
+	.map((host) => host.trim())
+	.filter((host) => host !== '');
+
 export default defineConfig({
 	plugins: [
 		tailwindcss(),
@@ -159,8 +175,9 @@ export default defineConfig({
 				: adapter()
 		})
 	],
+	server: { allowedHosts: DEV_HOSTS },
 	preview: {
-		allowedHosts: ['host.docker.internal']
+		allowedHosts: ['host.docker.internal', ...DEV_HOSTS]
 	},
 	test: {
 		expect: { requireAssertions: true },
