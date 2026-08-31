@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { E2E_DATABASE_PATH } from '../playwright.config';
 
@@ -18,6 +19,18 @@ import { E2E_DATABASE_PATH } from '../playwright.config';
  * sign-in on purpose still behaves the way a real one would.
  */
 export function clearRegistrationThrottle(): void {
+	// `data/runtime` is gitignored, so a fresh checkout does not have it, and the
+	// directory is created by `prepareDatabaseFile` inside the server — lazily, on
+	// the first request that actually needs the database. A test that clears the
+	// throttle before any such request would otherwise open a path whose directory
+	// does not exist yet and fail with "unable to open database file", which is how
+	// this read as five failing sign-in tests in CI and none locally, where
+	// `data/runtime` survives from earlier runs.
+	//
+	// Returning is the honest answer rather than creating the file here: no
+	// database means nothing has been counted, which is the state this is asking
+	// for, and the server owns that file's creation and its permissions.
+	if (!existsSync(E2E_DATABASE_PATH)) return;
 	const database = new DatabaseSync(E2E_DATABASE_PATH);
 	try {
 		// The preview server holds the same file, and workers run in parallel, so a
