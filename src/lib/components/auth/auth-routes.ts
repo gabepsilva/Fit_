@@ -44,17 +44,35 @@ export function signInPath(from: string): ResolvedPathname {
 }
 
 /**
+ * A second slash after the first, in either of the two spellings a URL has.
+ *
+ * `//host` is the obvious one. `/\host` is the same thing: the URL parser
+ * treats a backslash as a slash for `http` and `https`, so
+ * `new URL('/\\evil.example', 'http://app.local')` is `http://evil.example`
+ * exactly as the double slash is. Checking only the visible spelling left the
+ * other one certified as a path on this origin.
+ */
+const ABSOLUTE_ELSEWHERE = /^\/[/\\]/;
+
+/**
  * Where to go back to after signing in, taken from the query string.
  *
  * The value arrives in a URL, which anybody can write, so it is a destination
- * only if it is a path on this origin: it must start with a single slash.
- * `//host` and `https://host` are what that rejects — both are absolute
- * elsewhere, and following one would turn the sign-in page into an open
- * redirect. An auth route is refused too, so a stale `?next=/signin` cannot
- * bounce someone back to the form they just cleared.
+ * only if it is a path on this origin: it must start with a slash, and that
+ * slash must not be followed by another. `//host`, `/\host` and
+ * `https://host` are what that rejects — all three are absolute elsewhere, and
+ * following one would turn the sign-in page into an open redirect.
+ *
+ * An auth route is refused too, so a stale `?next=/signin` cannot bounce
+ * someone back to the form they just cleared. Both a query and a fragment are
+ * cut before that comparison: `/signin#x` is the sign-in page as surely as
+ * `/signin?x=1` is, and it is the worse one to miss — arriving there is a
+ * navigation within the same route, so the page is not remounted and the check
+ * that would have moved a signed-in visitor on never runs again.
  */
 export function returnPath(next: string | null): ResolvedPathname {
-	if (next === null || !next.startsWith('/') || next.startsWith('//')) return asPathname('/');
-	const path = next.split('?')[0];
+	if (next === null || !next.startsWith('/') || ABSOLUTE_ELSEWHERE.test(next))
+		return asPathname('/');
+	const path = next.split(/[?#]/)[0];
 	return AUTH_ROUTES.some((route) => route === path) ? asPathname('/') : asPathname(next);
 }

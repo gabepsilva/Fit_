@@ -136,6 +136,18 @@ describe('AppShell, before anyone has signed in', () => {
 		);
 	});
 
+	it('keeps the fragment, which is the part of a link easiest to lose', async () => {
+		seedOnboardedStorage();
+		at('/exercise/session#set-3');
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+		await vi.waitFor(() =>
+			expect(goto).toHaveBeenCalledWith(
+				`/signin?next=${encodeURIComponent('/exercise/session#set-3')}`,
+				{ replaceState: true }
+			)
+		);
+	});
+
 	it('asks nothing on behalf of a device that was never signed in', async () => {
 		seedOnboardedStorage();
 		const fetched = stubFetch();

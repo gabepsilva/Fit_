@@ -164,6 +164,21 @@ describe('session', () => {
 		expect(localStorage.getItem(SESSION_STORAGE_KEY)).toBeNull();
 	});
 
+	it('keeps a session that began while the refusal was still in flight', async () => {
+		// The sign-in form asks this on mount, and the visitor may sign in before
+		// the answer lands — a password manager filling and submitting is enough.
+		// The 401 is then news about the nothing that was there when it was asked,
+		// not about the session that arrived since, and acting on it signed the
+		// device straight back out of the account it had just signed into.
+		stubFetch(jsonResponse({ error: { code: 'unauthenticated' } }, { status: 401 }));
+		const asking = session.refresh();
+		const fresh = signedInSession(inDays(90));
+		session.begin(fresh);
+		await expect(asking).resolves.toBe(false);
+		expect(session.current).toEqual(fresh);
+		expect(session.signedIn).toBe(true);
+	});
+
 	it('keeps the record when the request never arrived, rather than guessing', async () => {
 		// Offline is not signed out. Dropping the record here would sign someone
 		// out of a working session every time they went through a tunnel.

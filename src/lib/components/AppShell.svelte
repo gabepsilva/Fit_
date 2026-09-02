@@ -47,6 +47,15 @@
 	const onAuthRoute = $derived(AUTH_ROUTES.some((route) => resolve(route) === pathname));
 
 	/**
+	 * The whole address that was asked for, fragment included.
+	 *
+	 * The fragment is the part it would be easiest to drop and hardest to
+	 * notice: a link to `/exercise/session#set-3` that came back without it
+	 * would look like it worked and land at the top of the page.
+	 */
+	const here = $derived(`${pathname}${page.url?.search ?? ''}${page.url?.hash ?? ''}`);
+
+	/**
 	 * The gate.
 	 *
 	 * A client-side gate and nothing more: it decides what this device draws, and
@@ -65,7 +74,7 @@
 		if (!restored || onAuthRoute || session.signedIn) return;
 		// Where they were headed rides along, so signing in lands on the page they
 		// asked for rather than on the front one.
-		void goto(signInPath(`${pathname}${page.url?.search ?? ''}`), { replaceState: true });
+		void goto(signInPath(here), { replaceState: true });
 	});
 </script>
 
