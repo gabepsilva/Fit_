@@ -418,9 +418,44 @@ describe('mutation verdict', () => {
 				policyPath,
 				ledgerPath,
 				verdictPath: path.join(root, 'verdict.json'),
-				startedAt: Date.now() + 1000
+				// Comfortably past the margin the check now allows for coarse
+				// filesystem timestamps. It used to be a second, which is exactly
+				// that margin, so the case would have sat on the boundary it is
+				// meant to be well clear of.
+				startedAt: Date.now() + 60_000
 			})
 		).rejects.toThrow('Mutation report is stale.');
+	});
+
+	it('accepts a report written moments after the run began', async () => {
+		// The regression this guards. A changed lane with an empty scope writes
+		// its report microseconds after `startedAt`, and a filesystem that stamps
+		// from the coarse clock hands back an mtime just before it -- which read
+		// as a stale report and failed every pull request that mutated nothing.
+		const { root, scope } = await fixture();
+		const scopePath = path.join(root, 'scope.json');
+		const reportPath = path.join(root, 'mutation.json');
+		const policyPath = path.join(root, 'policy.json');
+		const ledgerPath = path.join(root, 'ledger.json');
+		const startedAt = Date.now();
+		await Promise.all([
+			writeFile(scopePath, JSON.stringify(scope)),
+			writeFile(reportPath, JSON.stringify({ files: {} })),
+			writeFile(policyPath, JSON.stringify(policy)),
+			writeFile(ledgerPath, JSON.stringify({ version: 1, entries: [] }))
+		]);
+		const verdict = await verifyMutationFiles({
+			projectRoot: root,
+			lane: 'security',
+			scopePath,
+			reportPath,
+			policyPath,
+			ledgerPath,
+			verdictPath: path.join(root, 'verdict.json'),
+			// A tick behind the write, the way a coarse clock reports it.
+			startedAt: startedAt + 5
+		});
+		expect(verdict.lane).toBe('security');
 	});
 
 	it('accepts only an exact, reviewed survivor fingerprint on a changed line', async () => {

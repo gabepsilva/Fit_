@@ -455,6 +455,29 @@ export async function evaluateMutationReport(options: {
 	};
 }
 
+/**
+ * How far a report's mtime may sit behind the moment the run started.
+ *
+ * The check below weighs a wall-clock reading against a filesystem timestamp,
+ * and the two are allowed to disagree a little. Linux stamps an inode from the
+ * coarse clock, which advances once per timer tick rather than continuously,
+ * and some filesystems store the field to whole seconds and truncate. Either
+ * way a file written just after `Date.now()` can carry an mtime fractionally
+ * before it.
+ *
+ * Comparing them exactly made this a race, and one path always lost it. A
+ * changed lane with an empty scope skips Stryker and writes its empty report
+ * microseconds after the run begins, so every pull request that touched no
+ * mutated file failed with "Mutation report is stale." on a runner whose tick
+ * is coarse enough, while a run that spent minutes in Stryker never noticed.
+ * A margin ends that without weakening anything: it is orders of magnitude
+ * above any tick and orders of magnitude below real staleness, because the
+ * report this guards against belongs to an earlier run and
+ * `resetMutationResultArtifacts` has already deleted this lane's copy on the
+ * way in.
+ */
+const CLOCK_MARGIN_MS = 1000;
+
 export async function verifyMutationFiles(options: {
 	projectRoot: string;
 	lane: MutationLane;
@@ -466,7 +489,8 @@ export async function verifyMutationFiles(options: {
 	startedAt: number;
 }): Promise<MutationVerdict> {
 	const reportStats = await stat(options.reportPath);
-	if (reportStats.mtimeMs < options.startedAt) throw new Error('Mutation report is stale.');
+	if (reportStats.mtimeMs < options.startedAt - CLOCK_MARGIN_MS)
+		throw new Error('Mutation report is stale.');
 	const [scope, report, policy, ledger] = await Promise.all([
 		readFile(options.scopePath, 'utf8').then((value) => JSON.parse(value) as MutationScope),
 		readFile(options.reportPath, 'utf8').then((value) => JSON.parse(value) as MutationReport),
