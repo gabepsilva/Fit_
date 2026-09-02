@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { AUTH_ROUTES, returnPath, signInPath } from './auth-routes';
 
+/** The address this app is being served from, as the sign-in page reads it. */
+const ORIGIN = 'http://app.local';
+
 describe('AUTH_ROUTES', () => {
 	it('lets an unauthenticated visitor reach the form', () => {
 		expect(AUTH_ROUTES).toContain('/signin');
@@ -42,71 +45,106 @@ describe('signInPath', () => {
 
 	it('survives a round trip through the rule that reads it back', () => {
 		const path = '/exercise/routines/r-1?edit=1';
-		const next = new URL(signInPath(path), 'http://localhost').searchParams.get('next');
-		expect(returnPath(next)).toBe(path);
+		const next = new URL(signInPath(path), ORIGIN).searchParams.get('next');
+		expect(returnPath(next, ORIGIN)).toBe(path);
 	});
 });
 
 describe('returnPath', () => {
 	it('goes to the front page when the gate sent nobody', () => {
-		expect(returnPath(null)).toBe('/');
+		expect(returnPath(null, ORIGIN)).toBe('/');
 	});
 
 	it('returns to the page that was gated', () => {
-		expect(returnPath('/exercise')).toBe('/exercise');
+		expect(returnPath('/exercise', ORIGIN)).toBe('/exercise');
 	});
 
 	it('keeps the query the gated page carried', () => {
-		expect(returnPath('/plan?week=3')).toBe('/plan?week=3');
+		expect(returnPath('/plan?week=3', ORIGIN)).toBe('/plan?week=3');
 	});
 
 	it('refuses another origin written as a protocol-relative path', () => {
 		// `//evil.example` is absolute, and following it would make the sign-in
 		// page an open redirect for anybody who could hand someone a link.
-		expect(returnPath('//evil.example/steal')).toBe('/');
+		expect(returnPath('//evil.example/steal', ORIGIN)).toBe('/');
 	});
 
 	it('refuses an absolute URL', () => {
-		expect(returnPath('https://evil.example/steal')).toBe('/');
+		expect(returnPath('https://evil.example/steal', ORIGIN)).toBe('/');
 	});
 
 	it('refuses the backslash spelling of another origin', () => {
 		// `/\host` is not a path. The URL parser treats the backslash as a slash
-		// for http and https, so this resolves to http://evil.example exactly as
+		// for http and https, so this resolves to another origin exactly as
 		// `//evil.example` does — which the assertion below states outright,
 		// because the whole point of the rule is what the browser will do with it.
-		expect(new URL('/\\evil.example/steal', 'http://app.local').origin).toBe('http://evil.example');
-		expect(returnPath('/\\evil.example/steal')).toBe('/');
+		expect(new URL('/\\evil.example/steal', ORIGIN).origin).toBe('http://evil.example');
+		expect(returnPath('/\\evil.example/steal', ORIGIN)).toBe('/');
 	});
 
-	it('refuses a path that is not one', () => {
-		expect(returnPath('exercise')).toBe('/');
+	it('refuses a scheme, which is not a destination on this origin', () => {
+		// Parsed rather than pattern-matched, so a scheme nobody thought to list
+		// is still answered correctly: it has an origin, and it is not this one.
+		expect(returnPath('javascript:alert(1)', ORIGIN)).toBe('/');
 	});
 
-	it('minds only how the value starts, not what its query carries', () => {
-		// The rule is about the first two characters. Applied anywhere in the
-		// string it would reject this, and a destination whose query holds a URL
-		// is an ordinary thing to be sent back to.
+	it('reads a scheme written after a slash as the path it is', () => {
+		// `/javascript:...` is a path on this origin whose first segment happens
+		// to contain a colon. It leads to the app's own not-found page, which is
+		// what any address naming no route does, and nothing is executed.
+		expect(returnPath('/javascript:alert(1)', ORIGIN)).toBe('/javascript:alert(1)');
+	});
+
+	it('normalizes the path it hands back', () => {
+		// `/a/../b` is `/b` to the browser, so it is `/b` here too rather than a
+		// string every later comparison would have to know how to fold.
+		expect(returnPath('/exercise/../plan', ORIGIN)).toBe('/plan');
+	});
+
+	it('cannot be walked above the root', () => {
+		// The parser clamps the climb, so this stays on this origin instead of
+		// reaching for something outside it. It names no route, so it lands on
+		// the not-found page.
+		expect(returnPath('/../../etc/passwd', ORIGIN)).toBe('/etc/passwd');
+	});
+
+	it('answers rather than throws when the origin is unusable', () => {
+		// The origin is read from the page's own address, so this should not
+		// happen — but a parse failure inside a redirect rule must not become an
+		// exception thrown at whoever asked where to go. There is one sensible
+		// answer to an unanswerable question, and it is the front page.
+		expect(returnPath('/plan', 'not-an-origin')).toBe('/');
+	});
+
+	it('refuses a relative path, which does not say where it starts', () => {
+		// The parser would read this as `/exercise`, and guessing at a link that
+		// did not say is how an unintended address gets followed.
+		expect(returnPath('exercise', ORIGIN)).toBe('/');
+	});
+
+	it('minds where the value points, not what its query carries', () => {
+		// The query belongs to a destination on this origin. A rule that went
+		// looking for `//` anywhere in the string would refuse it.
 		const path = '/foods?source=https://example.com/list';
-		expect(returnPath(path)).toBe(path);
+		expect(returnPath(path, ORIGIN)).toBe(path);
 	});
 
 	it('refuses to bounce back to the form just cleared', () => {
-		expect(returnPath('/signin')).toBe('/');
+		expect(returnPath('/signin', ORIGIN)).toBe('/');
 	});
 
 	it('refuses the sign-up form too, query and all', () => {
-		expect(returnPath('/signup?next=%2F')).toBe('/');
+		expect(returnPath('/signup?next=%2F', ORIGIN)).toBe('/');
 	});
 
 	it('refuses the sign-in form wearing a fragment', () => {
 		// The worse half of the same rule: arriving at `/signin#x` is a navigation
 		// within the route already on screen, so the page is not remounted and the
 		// check that moves a signed-in visitor on never runs a second time.
-		expect(returnPath('/signin#x')).toBe('/');
+		expect(returnPath('/signin#x', ORIGIN)).toBe('/');
 	});
 
 	it('keeps a fragment on a page that is not the form', () => {
-		expect(returnPath('/exercise/session#set-3')).toBe('/exercise/session#set-3');
+		expect(returnPath('/exercise/session#set-3', ORIGIN)).toBe('/exercise/session#set-3');
 	});
 });

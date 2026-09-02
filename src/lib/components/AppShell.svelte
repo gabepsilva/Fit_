@@ -56,6 +56,37 @@
 	const here = $derived(`${pathname}${page.url?.search ?? ''}${page.url?.hash ?? ''}`);
 
 	/**
+	 * A clock the gate can see.
+	 *
+	 * `session.signedIn` compares the expiry against `Date.now()`, and a wall
+	 * clock is not reactive: left alone, a tab open past the expiry keeps
+	 * rendering the app because nothing tells it the moment passed. That was a
+	 * cosmetic staleness when the record only named an account in the drawer.
+	 * It is not cosmetic now — it is the whole app on the wrong side of the gate
+	 * — so the moment is waited for rather than noticed.
+	 */
+	let clock = $state(Date.now());
+
+	/** A day. `setTimeout` overflows past ~24.9 days and fires at once. */
+	const LONGEST_WAIT = 86_400_000;
+
+	$effect(() => {
+		const expiresAt = session.current?.expiresAt;
+		if (expiresAt === undefined) return;
+		const due = Date.parse(expiresAt) - clock;
+		// The record is dropped rather than merely stopping counting: it describes
+		// a session the server forgot, and the gate below reads what is left.
+		if (due <= 0) {
+			session.forget();
+			return;
+		}
+		// A ninety-day session is far past what one timer can hold, so the wait is
+		// taken a day at a time and re-armed by the tick this effect depends on.
+		const id = setTimeout(() => (clock = Date.now()), Math.min(due, LONGEST_WAIT));
+		return () => clearTimeout(id);
+	});
+
+	/**
 	 * The gate.
 	 *
 	 * A client-side gate and nothing more: it decides what this device draws, and
@@ -69,6 +100,14 @@
 	 * feature before they have signed in. Rendering nothing while the redirect
 	 * runs is deliberate — a shell drawn first and replaced afterwards would show
 	 * the journal it is meant to withhold.
+	 *
+	 * It is an effect rather than a `load` guard in `+layout.ts`, and that is the
+	 * deliberate half of the design. A `load` guard runs on entry and on
+	 * navigation, which are only one of the three ways someone ends up on the
+	 * wrong side of this line: the other two are signing out and the expiry
+	 * above, both of which change the session while the page sits still. One
+	 * rule that watches the state covers all three; a `load` guard would cover
+	 * the first and need a second mechanism for the rest.
 	 */
 	$effect(() => {
 		if (!restored || onAuthRoute || session.signedIn) return;

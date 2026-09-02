@@ -110,9 +110,21 @@ export async function signInThroughApi(
 	});
 	expect(response.status()).toBe(201);
 	const record = JSON.stringify(await response.json());
+	// Seeded once for the context, not on every document.
+	//
+	// `addInitScript` runs before the scripts of *each* page load, so writing the
+	// record unconditionally would put it back after any reload — including one
+	// that follows a sign-out through the drawer, which resurrects the session
+	// the test had just ended and fails it somewhere that looks unrelated. The
+	// flag in `sessionStorage` survives reloads within the tab and nothing else,
+	// so the seed happens on the first document and never again.
 	await page.addInitScript(
-		([key, value]) => globalThis.localStorage.setItem(key ?? '', value ?? ''),
-		[SESSION_STORAGE_KEY, record]
+		([key, value, flag]) => {
+			if (globalThis.sessionStorage.getItem(flag ?? '') !== null) return;
+			globalThis.sessionStorage.setItem(flag ?? '', '1');
+			globalThis.localStorage.setItem(key ?? '', value ?? '');
+		},
+		[SESSION_STORAGE_KEY, record, 'fit.e2e.seeded']
 	);
 	return username;
 }

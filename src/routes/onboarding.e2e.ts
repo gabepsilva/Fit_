@@ -13,15 +13,17 @@ test.describe('arriving without an account', () => {
 	test('shows nothing of the app behind it', async ({ page }) => {
 		await page.goto('/');
 		await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
-		// No top bar, so no way to open the drawer, and no journal underneath.
-		await expect(page.getByRole('button', { name: 'Open menu' })).toBeHidden();
-		await expect(page.getByRole('button', { name: 'Log food' })).toBeHidden();
+		// Counted rather than checked for visibility: these must be absent from
+		// the page, and `toBeHidden` would also pass for an element that is
+		// present and merely off screen.
+		await expect(page.getByRole('button', { name: 'Open menu' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Log food' })).toHaveCount(0);
 	});
 
 	test('gates onboarding too, so the account comes first', async ({ page }) => {
 		await page.goto('/');
 		await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'Tend' })).toBeHidden();
+		await expect(page.getByRole('heading', { name: 'Tend' })).toHaveCount(0);
 	});
 
 	test('gates a destination reached directly, and remembers which', async ({ page }) => {

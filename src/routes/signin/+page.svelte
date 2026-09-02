@@ -13,8 +13,17 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Button from '$lib/ui/Button.svelte';
 
-	/** The page the gate turned away, or the front one when it sent nobody. */
-	const target = $derived(returnPath(page.url?.searchParams.get('next') ?? null));
+	/**
+	 * The page the gate turned away, or the front one when it sent nobody.
+	 *
+	 * The origin comes from the address this page was loaded at rather than from
+	 * a constant, because it is what `returnPath` measures the parameter against
+	 * and there is exactly one right answer for it: wherever this app is being
+	 * served from now.
+	 */
+	const target = $derived(
+		returnPath(page.url?.searchParams.get('next') ?? null, page.url?.origin ?? '')
+	);
 
 	/**
 	 * A session this device has but cannot see.

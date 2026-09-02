@@ -38,8 +38,8 @@ function seedOnboardedStorage() {
 }
 
 /** A session record of the shape signing in leaves behind, still in date. */
-function seedSessionStorage() {
-	const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+function seedSessionStorage({ expiresInMs = 90 * 24 * 60 * 60 * 1000 } = {}) {
+	const expiresAt = new Date(Date.now() + expiresInMs).toISOString();
 	localStorage.setItem(
 		SESSION_STORAGE_KEY,
 		JSON.stringify({
@@ -251,6 +251,46 @@ describe('AppShell, signed in', () => {
 		await render(AppShellHarness, { props: { body: 'Page body' } });
 		await page.getByRole('button', { name: 'Log food' }).click();
 		expect(logUi.tab).toBe('type');
+	});
+
+	it('closes the app the moment the session expires under it', async () => {
+		// The gate compares the expiry against a wall clock, and a clock is not
+		// reactive: without something waiting for the moment, a tab open past it
+		// keeps rendering the whole app on the wrong side of the gate.
+		vi.useFakeTimers();
+		try {
+			seedOnboardedStorage();
+			seedSessionStorage({ expiresInMs: 60_000 });
+			await render(AppShellHarness, { props: { body: 'Page body' } });
+			await vi.waitFor(() => expect(document.body.textContent).toContain('Page body'));
+
+			await vi.advanceTimersByTimeAsync(61_000);
+
+			expect(session.signedIn).toBe(false);
+			expect(goto).toHaveBeenCalledWith('/signin', { replaceState: true });
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('waits for an expiry further off than one timer can hold', async () => {
+		// `setTimeout` overflows past about twenty-five days and fires at once, so
+		// a ninety-day session scheduled in one go would sign the device out
+		// immediately. The wait is taken a day at a time instead.
+		vi.useFakeTimers();
+		try {
+			seedOnboardedStorage();
+			seedSessionStorage({ expiresInMs: 90 * 24 * 60 * 60 * 1000 });
+			await render(AppShellHarness, { props: { body: 'Page body' } });
+			await vi.waitFor(() => expect(document.body.textContent).toContain('Page body'));
+
+			await vi.advanceTimersByTimeAsync(2 * 24 * 60 * 60 * 1000);
+
+			expect(session.signedIn).toBe(true);
+			expect(goto).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('reconciles a restored session against the server it was issued by', async () => {

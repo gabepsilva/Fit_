@@ -15,20 +15,20 @@ export type AuthRoute = '/signin' | '/signup';
 export const AUTH_ROUTES: readonly AuthRoute[] = ['/signin', '/signup'];
 
 /**
- * A path this app may navigate to, as far as the type system is concerned.
+ * The one place a string becomes something this app will navigate to.
  *
- * `ResolvedPathname` is generated from the route tree, and neither value below
- * can be checked against it: one is a query string appended to a resolved
- * route, and the other arrives in a URL a person can type. The assertion is
- * where that gap is admitted, and it is confined to this file so there is one
- * place to read about it.
+ * `ResolvedPathname` is generated from the route tree, so it can only describe
+ * an address known at compile time. Neither value here is: one is a query
+ * appended to a resolved route, and the other is read out of a URL. The
+ * assertion is where that is admitted, and it is a single private function so
+ * that admitting it twice is impossible.
  *
- * What makes it safe is not the type but `returnPath`, which is the validator:
- * everything it returns is a path on this origin. An address that names no
- * route reaches the app's own not-found page, which is what typing one into the
- * bar does anyway.
+ * What it rests on is `returnPath` below, which does not inspect the string but
+ * parses it — against the same `URL` the browser will build from it. A value
+ * that survives that parse is on this origin because the parser says so, which
+ * is a stronger claim than any list of prefixes I could remember to reject.
  */
-function asPathname(path: string): ResolvedPathname {
+function navigable(path: string): ResolvedPathname {
 	return path as ResolvedPathname;
 }
 
@@ -40,39 +40,53 @@ function asPathname(path: string): ResolvedPathname {
  */
 export function signInPath(from: string): ResolvedPathname {
 	const query = from === '/' ? '' : `?next=${encodeURIComponent(from)}`;
-	return asPathname(`${resolve('/signin')}${query}`);
+	return navigable(`${resolve('/signin')}${query}`);
 }
 
 /**
- * A second slash after the first, in either of the two spellings a URL has.
+ * Where to go back to after signing in, read from the query string.
  *
- * `//host` is the obvious one. `/\host` is the same thing: the URL parser
- * treats a backslash as a slash for `http` and `https`, so
- * `new URL('/\\evil.example', 'http://app.local')` is `http://evil.example`
- * exactly as the double slash is. Checking only the visible spelling left the
- * other one certified as a path on this origin.
+ * The value arrives in a URL, so it is written by whoever wrote the link, and
+ * the question is not "does it look like a path" but "where would the browser
+ * actually go". Those differ, which is the whole difficulty: `//host` is an
+ * absolute URL, and so is `/\host`, because the parser treats a backslash as a
+ * slash for `http` and `https`. A hand-written list of prefixes is only ever as
+ * good as the spellings its author thought of.
+ *
+ * So this parses rather than inspects. `new URL(next, origin)` is the same
+ * construction the browser performs, and comparing the result's origin to this
+ * one settles every spelling at once — the two above, an absolute `https://`
+ * URL, and a `javascript:` scheme, which parses to an origin that is not this
+ * one. What comes back is rebuilt from the parsed parts, so it is also
+ * normalized: `/a/../b` returns as `/b` rather than as something a later
+ * comparison has to know how to fold.
+ *
+ * A leading slash is still required. The parser would happily read `exercise`
+ * as a relative path and resolve it to `/exercise`, but a `next` that does not
+ * say where it starts is a malformed link rather than a destination, and
+ * guessing at one is how an unintended address gets followed.
+ *
+ * An auth route is refused last, so a stale `?next=/signin` cannot bounce
+ * someone back to the form they just cleared. That comparison uses `pathname`,
+ * which the parse has already separated from any query or fragment: `/signin#x`
+ * is the sign-in page, and it is the worse one to miss, because arriving there
+ * is a navigation within the route already on screen — the page is not
+ * remounted, so the check that would move a signed-in visitor on never runs.
  */
-const ABSOLUTE_ELSEWHERE = /^\/[/\\]/;
+export function returnPath(next: string | null, origin: string): ResolvedPathname {
+	const home = resolve('/');
+	if (next === null || !next.startsWith('/')) return home;
 
-/**
- * Where to go back to after signing in, taken from the query string.
- *
- * The value arrives in a URL, which anybody can write, so it is a destination
- * only if it is a path on this origin: it must start with a slash, and that
- * slash must not be followed by another. `//host`, `/\host` and
- * `https://host` are what that rejects — all three are absolute elsewhere, and
- * following one would turn the sign-in page into an open redirect.
- *
- * An auth route is refused too, so a stale `?next=/signin` cannot bounce
- * someone back to the form they just cleared. Both a query and a fragment are
- * cut before that comparison: `/signin#x` is the sign-in page as surely as
- * `/signin?x=1` is, and it is the worse one to miss — arriving there is a
- * navigation within the same route, so the page is not remounted and the check
- * that would have moved a signed-in visitor on never runs again.
- */
-export function returnPath(next: string | null): ResolvedPathname {
-	if (next === null || !next.startsWith('/') || ABSOLUTE_ELSEWHERE.test(next))
-		return asPathname('/');
-	const path = next.split(/[?#]/)[0];
-	return AUTH_ROUTES.some((route) => route === path) ? asPathname('/') : asPathname(next);
+	let destination: URL;
+	try {
+		destination = new URL(next, origin);
+	} catch {
+		// An origin this malformed is not something a caller can act on, and a
+		// refused `next` is the same answer as an absent one.
+		return home;
+	}
+
+	if (destination.origin !== origin) return home;
+	if (AUTH_ROUTES.some((route) => resolve(route) === destination.pathname)) return home;
+	return navigable(`${destination.pathname}${destination.search}${destination.hash}`);
 }
