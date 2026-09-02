@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Tend — can't connect</title>
+		<!--
+			The screen behind `server.errorPath`.
+
+			A build that points the WebView at a server loads every asset over the
+			network: the bundle copied into the APK is never used. So an unreachable
+			server is a failed navigation rather than a failed request, and the
+			default for that is the WebView's own `ERR_CONNECTION_REFUSED`
+			interstitial -- a browser error page inside something that is not
+			supposed to look like a browser.
+
+			Written for whoever is holding the phone, not for whoever is running the
+			server. It cannot tell a stopped process from a dead connection: the
+			WebView reports both as a navigation that failed, and the person reading
+			it can only act on the second, so it names both and blames neither.
+
+			Deliberately one static file with no dependencies. The Capacitor bridge
+			is not attached to an error page on Android, so no plugin call works
+			here; it must render with the network already gone, so nothing is
+			fetched and no font is linked. `--font-display` and `--font-sans` name
+			Fraunces and Figtree but the app ships neither -- there is no
+			`@font-face` anywhere -- so the stacks below are the faces the real UI
+			already falls back to. The palette is inlined from `src/app.css` for the
+			same reason.
+
+			If you are the one running the server and reached this in development:
+			`bun run dev`, and `adb reverse tcp:5173 tcp:5173` if the cable was
+			unplugged.
+		-->
+		<style>
+			:root {
+				--background: #f3eee4;
+				--foreground: #1f1b16;
+				--muted-foreground: #6f675d;
+				--primary: #3f5a48;
+				--primary-foreground: #f6f3eb;
+				--font-display: ui-serif, Georgia, 'Times New Roman', serif;
+				--font-sans: ui-sans-serif, system-ui, sans-serif;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			html,
+			body {
+				margin: 0;
+				min-height: 100%;
+				background: var(--background);
+				color: var(--foreground);
+				-webkit-font-smoothing: antialiased;
+			}
+
+			body {
+				font-family: var(--font-sans);
+				line-height: 1.5;
+			}
+
+			main {
+				display: flex;
+				flex-direction: column;
+				min-height: 100dvh;
+				margin: 0 auto;
+				width: 100%;
+				max-width: 32rem;
+				padding: max(2rem, env(safe-area-inset-top)) 1.25rem 2.5rem;
+			}
+
+			.eyebrow {
+				margin: 0;
+				color: var(--muted-foreground);
+				font-size: 0.75rem;
+				font-weight: 500;
+				letter-spacing: 0.2em;
+				text-transform: uppercase;
+			}
+
+			.mark {
+				display: flex;
+				align-items: flex-end;
+				justify-content: center;
+				width: 64px;
+				height: 64px;
+				margin-top: 2.5rem;
+				padding-bottom: 0.5rem;
+				border-radius: 32px;
+				background: var(--primary);
+				color: var(--primary-foreground);
+			}
+
+			.mark svg {
+				width: 40px;
+			}
+
+			h1 {
+				margin: 2rem 0 0;
+				font-family: var(--font-display);
+				/* Onboarding sets its display heading at 3rem, but "Tend" is one
+				   word there and this is a sentence: at that size it wrapped to
+				   three lines and read as a wordmark rather than a message. */
+				font-size: 2.25rem;
+				font-weight: 400;
+				letter-spacing: -0.02em;
+				line-height: 1.15;
+				text-wrap: balance;
+			}
+
+			p.lead {
+				margin: 0.75rem 0 0;
+				color: var(--muted-foreground);
+				font-size: 1.125rem;
+			}
+
+			p.reassure {
+				margin: 2.5rem 0 0;
+				font-size: 0.95rem;
+				line-height: 1.625;
+			}
+
+			.spacer {
+				flex: 1;
+				min-height: 2.5rem;
+			}
+
+			button {
+				width: 100%;
+				padding: 1rem 1.25rem;
+				border: 0;
+				border-radius: 9999px;
+				background: var(--primary);
+				color: var(--primary-foreground);
+				font: inherit;
+				font-weight: 600;
+				font-size: 1rem;
+			}
+
+			button[disabled] {
+				opacity: 0.6;
+			}
+
+			p.fallback {
+				margin: 0;
+				color: var(--muted-foreground);
+				font-size: 0.95rem;
+				text-align: center;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<p class="eyebrow">A quieter tracker</p>
+
+			<div class="mark">
+				<svg viewBox="0 0 32 18" aria-hidden="true">
+					<path
+						d="M4 2h24M4 2c.6 10 4.5 14 12 14S27.4 12 28 2"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.4"
+						stroke-linecap="round"
+					/>
+				</svg>
+			</div>
+
+			<h1>We can’t connect right now</h1>
+			<p class="lead">Either this device is offline, or the service is down for a short while.</p>
+
+			<p class="reassure">
+				Nothing you’ve logged is lost — it’s saved here on your phone. Come back in a few minutes
+				and pick up where you left off.
+			</p>
+
+			<div class="spacer"></div>
+
+			<button type="button" id="retry">Try again</button>
+			<p class="fallback" id="fallback" hidden>Open Fit_ again to retry.</p>
+		</main>
+
+		<script>
+			const retry = document.getElementById('retry');
+
+			/**
+			 * Where to retry, from the fragment `server.errorPath` carries.
+			 *
+			 * This page is served from the WebView's own local origin, so it cannot
+			 * derive the server it was meant to reach, and reloading only re-requests
+			 * this file. Worse, the native side compares every navigation against the
+			 * configured server URL and sends anything whose host or scheme differs to
+			 * the system browser -- which the local origin always does. So the one
+			 * navigation that stays inside the app is the server URL itself.
+			 *
+			 * The fragment is only believed inside the WebView, and that guard is the
+			 * important one. `static/` is copied into the adapter-node build too, so
+			 * this file is also served publicly at `/server-offline.html`, where the
+			 * fragment is written by whoever composed the link rather than by the
+			 * build. Navigating there on request would make the deployed site an open
+			 * redirect: a real `https://<site>/server-offline.html#https%3A%2F%2Felse`
+			 * wearing Fit_'s own branding, one tap from somewhere else entirely.
+			 *
+			 * Capacitor serves this page from its local origin, whose host is
+			 * `localhost` on both platforms -- `capacitor://localhost` on iOS and
+			 * `https://localhost` on Android -- and no deployment answers to that
+			 * name, so it separates the two cases exactly. A web build falls through
+			 * to the no-target branch and offers no navigation at all.
+			 *
+			 * Only http and https are honoured beyond that: a value that is not a URL
+			 * would turn the button into a no-op that still looked like a button, and
+			 * a `javascript:` or `intent:` one has no business being navigated to
+			 * whatever put it there.
+			 */
+			function target() {
+				if (window.location.hostname !== 'localhost') return null;
+				const raw = window.location.hash.slice(1);
+				if (raw === '') return null;
+				try {
+					const url = new URL(decodeURIComponent(raw));
+					return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+				} catch {
+					return null;
+				}
+			}
+
+			const appUrl = target();
+
+			if (appUrl === null) {
+				// No usable target: a button that cannot do anything is worse than no
+				// button, so the page stays an explanation and says how to leave it.
+				retry.remove();
+				document.getElementById('fallback').hidden = false;
+			} else {
+				const go = () => {
+					retry.disabled = true;
+					retry.textContent = 'Trying…';
+					// `replace`, so returning does not land back on this page.
+					window.location.replace(appUrl);
+				};
+				retry.addEventListener('click', go);
+				// The phone knowing it is back on a network is not proof the service
+				// answers, but it is the one moment worth spending a retry on.
+				window.addEventListener('online', go);
+			}
+		</script>
+	</body>
+</html>
