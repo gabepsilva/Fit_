@@ -1,25 +1,12 @@
-import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
-import { clearRegistrationThrottle } from '../../../tests/e2e-support';
+import { clearRegistrationThrottle, freshUsername } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
- * Creating an account, from the drawer that offers one to the journal that
- * already works without it. Registration is the only path that necessarily
- * answers "does this username exist", so the taken name is exercised here and
- * nowhere else.
+ * Creating an account, which is how a new device gets in at all. Registration
+ * is the only path that necessarily answers "does this username exist", so the
+ * taken name is exercised here and nowhere else.
  */
-
-/**
- * A name no other run has used. The database behind the preview server is a
- * file that survives the suite, so a fixed name would pass once and then meet
- * its own leftover row; a random one would make the failure intermittent
- * instead of impossible. A UUID is neither — it is unique by construction, and
- * its hex and hyphens are inside the `. _ -` the server accepts.
- */
-function freshUsername(): string {
-	return `e2e-${randomUUID().slice(0, 13)}`;
-}
 
 /** Ten characters is the server's floor, so the happy path clears it by a margin. */
 const PASSWORD = 'salt-and-pepper-mill';
@@ -33,16 +20,13 @@ async function axeViolations(page: Page) {
 }
 
 /**
- * Onboard, then take the route a person takes: the drawer, where the account
- * lives at the foot of the navigation rather than behind a wall.
+ * Take the route a person takes: ask for the app, be given the sign-in form,
+ * and follow the offer to create one. The gate is the only way in, so this is
+ * the only way here.
  */
 async function reachSignUp(page: Page) {
 	await page.goto('/');
-	await page.getByRole('button', { name: 'Continue' }).click();
-	await page.getByRole('button', { name: 'Continue' }).click();
-	await page.getByRole('button', { name: 'Open the sample journal' }).click();
-	await page.getByRole('button', { name: 'Open menu' }).click();
-	await page.getByRole('link', { name: 'Create an account' }).click();
+	await page.getByRole('link', { name: 'Create one' }).click();
 	await expect(page.getByRole('heading', { name: 'Create an account', level: 1 })).toBeVisible();
 }
 
@@ -73,15 +57,19 @@ test.describe('creating an account', () => {
 		expect(await axeViolations(page)).toEqual([]);
 	});
 
-	test('signs the new account in and returns to the journal', async ({ page }) => {
+	test('signs the new account in and opens the app', async ({ page }) => {
 		const username = freshUsername();
 		await submitAccount(page, username);
 
 		await expect(page.getByText('Welcome, Robin.')).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+		// A new account on a new device opens on the first run rather than on a
+		// journal: registering creates the account, not the journal.
+		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 
-		// The drawer is where the account shows, and it is the only thing that
-		// changed: the sample journal is still the one that was there before.
+		// And the drawer, once there is one, names who is signed in.
+		await page.getByRole('button', { name: 'Continue' }).click();
+		await page.getByRole('button', { name: 'Continue' }).click();
+		await page.getByRole('button', { name: 'Open the sample journal' }).click();
 		await page.getByRole('button', { name: 'Open menu' }).click();
 		await expect(page.getByText('Robin', { exact: true })).toBeVisible();
 		await expect(page.getByText(`@${username}`)).toBeVisible();
@@ -118,14 +106,14 @@ test.describe('creating an account', () => {
 
 /**
  * The second sign-up for one name. The form is reached directly the second
- * time because the drawer stops offering it once an account is signed in,
+ * time because the gate no longer stands between this device and the app,
  * which is the state the first registration leaves behind.
  */
 test('says a username is taken, under the box that holds it', async ({ page }) => {
 	const username = freshUsername();
 	await reachSignUp(page);
 	await submitAccount(page, username);
-	await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 
 	await page.goto('/signup');
 	await submitAccount(page, username);

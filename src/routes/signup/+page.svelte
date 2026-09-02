@@ -63,9 +63,10 @@
 	<title>Create an account · Fit_</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6 pb-10">
-	<PageHeader kicker="Account" title="Create an account">
-		Nothing here is sent anywhere yet. An account is what a second device will one day sign in to.
+<div class="flex w-full flex-col gap-6">
+	<PageHeader kicker="Fit_" title="Create an account">
+		An account is how you get in, and what a second device will one day sign in to. Your journal
+		itself is kept on this device.
 	</PageHeader>
 
 	<form class="flex flex-col gap-4" onsubmit={submit}>

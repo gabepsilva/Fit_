@@ -43,16 +43,27 @@ numbers nobody lifted.
 
 **The server signs people in, and does nothing else yet.** `src/routes/api/` carries
 registration, sign-in and the two sign-outs, and `/signin` and `/signup` are the forms
-that call them. Nothing else is wired: no sync, and no feature is behind a login. The app
-still keeps every gram and every workout in `localStorage`, and the store's methods remain
-the call sites that will one day talk to the server. So an account can be created and used
-to sign in, but it carries no data — do not describe the app as syncing or as having
-accounts that hold a journal, and do not extend the backend beyond what has been asked
-for.
+that call them. No sync is wired. The app still keeps every gram and every workout in
+`localStorage`, and the store's methods remain the call sites that will one day talk to
+the server. So an account can be created and used to sign in, but it carries no data — do
+not describe the app as syncing or as having accounts that hold a journal, and do not
+extend the backend beyond what has been asked for.
 
-Authentication is additive on purpose. Signing in adds an account to a journal that
-already works without one, and signing out leaves that journal exactly where it was.
-Putting a destination behind a login is a product decision nobody has made.
+**Signing in is how the app opens.** `AppShell.svelte` sends anyone without a session to
+`/signin`, carrying `?next=` for the page they asked for, and renders nothing while it
+goes — a shell drawn first and replaced afterwards would show the journal it is meant to
+withhold. `/signin` and `/signup` are the only destinations reachable without one, listed
+in `components/auth/auth-routes.ts`; onboarding is inside the gate like everything else,
+so the account comes first on a new device.
+
+That gate decides what this device draws, and nothing more. It is not an authorization
+boundary and cannot be one: `ssr` is off for both targets and the Capacitor build is
+static, so there is no server render to refuse with. The boundary arrives with the first
+endpoint that answers 401 — until the store fetches something, the gate is a product rule
+enforced on the client, and a journal in `localStorage` is as readable as it ever was.
+
+The journal itself stays additive. Signing in opens the app rather than fetching one, and
+signing out closes the app and leaves the device's journal exactly where it was.
 
 Three concepts stay separate, and collapsing them is the mistake to avoid: an **account**
 signs in, a **household** is the tenancy boundary every row is filtered by, and a

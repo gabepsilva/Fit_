@@ -1,7 +1,56 @@
 import { expect, test } from '@playwright/test';
+import { clearRegistrationThrottle, signInThroughApi } from '../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
-test.describe('first visit', () => {
+test.beforeEach(clearRegistrationThrottle);
+
+test.describe('arriving without an account', () => {
+	test('opens on the sign-in form rather than on the app', async ({ page }) => {
+		await page.goto('/');
+		await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+	});
+
+	test('shows nothing of the app behind it', async ({ page }) => {
+		await page.goto('/');
+		await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+		// No top bar, so no way to open the drawer, and no journal underneath.
+		await expect(page.getByRole('button', { name: 'Open menu' })).toBeHidden();
+		await expect(page.getByRole('button', { name: 'Log food' })).toBeHidden();
+	});
+
+	test('gates onboarding too, so the account comes first', async ({ page }) => {
+		await page.goto('/');
+		await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Tend' })).toBeHidden();
+	});
+
+	test('gates a destination reached directly, and remembers which', async ({ page }) => {
+		await page.goto('/progress');
+		await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+		await expect(page).toHaveURL(`/signin?next=${encodeURIComponent('/progress')}`);
+	});
+
+	test('offers the way to create one', async ({ page }) => {
+		await page.goto('/');
+		await page.getByRole('link', { name: 'Create one' }).click();
+		await expect(page.getByRole('heading', { name: 'Create an account', level: 1 })).toBeVisible();
+	});
+
+	test('has no detectable accessibility violations', async ({ page }) => {
+		await page.goto('/');
+		await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+			.analyze();
+		expect(results.violations).toEqual([]);
+	});
+});
+
+test.describe('first visit, signed in', () => {
+	test.beforeEach(async ({ page, baseURL }) => {
+		await signInThroughApi(page, baseURL ?? '');
+	});
+
 	test('opens on the welcome step', async ({ page }) => {
 		await page.goto('/');
 		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
@@ -14,6 +63,7 @@ test.describe('first visit', () => {
 
 	test('has no detectable accessibility violations', async ({ page }) => {
 		await page.goto('/');
+		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 		const results = await new AxeBuilder({ page })
 			.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
 			.analyze();
@@ -22,7 +72,8 @@ test.describe('first visit', () => {
 });
 
 test.describe('once onboarded', () => {
-	test.beforeEach(async ({ page }) => {
+	test.beforeEach(async ({ page, baseURL }) => {
+		await signInThroughApi(page, baseURL ?? '');
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await page.getByRole('button', { name: 'Continue' }).click();
