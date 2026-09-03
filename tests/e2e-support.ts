@@ -66,20 +66,24 @@ const SESSION_STORAGE_KEY = 'fit.session.v1';
 const PASSWORD = 'salt-and-pepper-mill';
 
 /**
- * Wait for a toast to go before driving what is underneath it.
+ * Take the pointer off the toaster, then wait for the toast to go.
  *
  * `<Toaster />` takes svelte-sonner's default corner, which on a phone viewport
- * is over the button onboarding puts at the bottom of the screen — Playwright's
- * own log names the toast as the element that intercepted the click. Retrying
- * does not wait it out, it keeps it alive: every retry moves the pointer onto
- * the toaster, `mouseenter` sets `expanded`, and an expanded toast pauses its
- * dismiss timer. So a four-second toast was still there when the test timed out
- * thirty seconds later.
+ * is over the button onboarding puts at the bottom — Playwright's own log names
+ * the toast as the element that intercepted the click there.
  *
- * Waiting first is what makes the click land on the thing it names. Nothing
- * here hovers, so the countdown runs.
+ * The move is the half that is not obvious. Playwright leaves the pointer
+ * wherever the last click put it, and the toaster mounts underneath it, so
+ * `mouseenter` fires without anybody hovering anything: `expanded` goes true,
+ * and Toast.svelte pauses its dismiss timer for exactly as long as it stays
+ * that way. Only a `mouseleave` that actually moved clears it, and nothing in a
+ * test moves the pointer on its own — so a four-second toast was still on
+ * screen when the test gave up thirty seconds later, `data-expanded="true"` in
+ * every trace snapshot. Waiting alone does not fix that; waiting is what the
+ * timed-out click was already doing.
  */
 export async function toastsCleared(page: Page): Promise<void> {
+	await page.mouse.move(0, 0);
 	await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 10_000 });
 }
 
