@@ -24,6 +24,7 @@
 export const DOM_FREE_CLIENT_SPECS = [
 	'src/lib/auth/api.svelte.spec.ts',
 	'src/lib/auth/wording.svelte.spec.ts',
+	'src/lib/components/auth/auth-routes.svelte.spec.ts',
 	'src/lib/components/exercise/plan-options.svelte.spec.ts',
 	'src/lib/components/exercise/routine-tone.svelte.spec.ts',
 	'src/lib/state/log-ui.svelte.spec.ts',

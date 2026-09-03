@@ -75,12 +75,20 @@ export class SessionStore {
 	 * people out of a working session every time they went through a tunnel.
 	 */
 	async refresh(): Promise<boolean> {
+		// What the answer is about, remembered before it is asked for. A refusal
+		// is only news about the session that was current when the question went
+		// out, and the sign-in form is a place where that can stop being true
+		// mid-flight: it asks this on mount, and the visitor may sign in before
+		// the answer lands. Signing the freshly signed-in device straight back
+		// out is what that used to do, and the gate then returned it to the form
+		// it had just cleared.
+		const asked = this.current;
 		const result = await currentSession();
 		if (result.ok) {
 			this.begin(result.value);
 			return true;
 		}
-		if (result.failure.code !== 'unreachable') this.forget();
+		if (result.failure.code !== 'unreachable' && this.current === asked) this.forget();
 		return false;
 	}
 

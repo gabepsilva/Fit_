@@ -48,33 +48,12 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-describe('AccountMenu, signed out', () => {
-	it('offers a way in', async () => {
-		await render(AccountMenu);
-		await expect
-			.element(page.getByRole('link', { name: 'Sign in' }))
-			.toHaveAttribute('href', '/signin');
-	});
-
-	it('offers a way to register', async () => {
-		await render(AccountMenu);
-		await expect
-			.element(page.getByRole('link', { name: 'Create an account' }))
-			.toHaveAttribute('href', '/signup');
-	});
-
-	it('says the journal works without one, because it does', async () => {
-		await render(AccountMenu);
-		await expect.element(page.getByText('The journal works without one.')).toBeInTheDocument();
-	});
-
-	it('offers no sign-out for a session nobody has', async () => {
-		await render(AccountMenu);
-		expect(page.getByRole('button', { name: 'Sign out', exact: true }).elements()).toHaveLength(0);
-	});
-});
-
-describe('AccountMenu, signed in', () => {
+/**
+ * There is no signed-out half to test: the drawer lives inside the gate, so a
+ * visitor without a session never reaches a screen that renders one. What
+ * happens to them instead belongs to `AppShell.svelte.spec.ts`.
+ */
+describe('AccountMenu', () => {
 	it('names who is signed in', async () => {
 		signedIn();
 		await render(AccountMenu);

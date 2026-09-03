@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
-	import { resolve } from '$app/paths';
 	import { signOut, signOutEverywhere } from '$lib/auth/api';
 	import { failureWording } from '$lib/auth/wording';
 	import { session } from '$lib/state/session.svelte';
@@ -10,12 +9,10 @@
 	/**
 	 * The account, at the foot of the drawer.
 	 *
-	 * Additive on purpose: nothing in the app is behind it. Signing in adds an
-	 * account to a journal that already works without one, and signing out takes
-	 * the account away and leaves the journal exactly where it was. Until the
-	 * store talks to the server, that is the honest shape of it, and gating the
-	 * six destinations behind a login wall would be a product decision this slice
-	 * is not entitled to make.
+	 * There is no signed-out half any more, and there cannot be one: the drawer
+	 * is inside the gate, so a visitor who is not signed in never reaches a
+	 * screen that has a drawer on it. Signing out here leaves the journal on the
+	 * device exactly where it was and returns to the sign-in form.
 	 *
 	 * What is shown comes from `session`, which is a cache of what the endpoint
 	 * last said rather than proof of anything. That is fine for a drawer: the
@@ -59,19 +56,5 @@
 		<Button variant="quiet" size="sm" disabled={busy} onclick={() => end(true)}>
 			Sign out everywhere
 		</Button>
-	{:else}
-		<p class="text-muted-foreground mt-1 text-xs">Not signed in. The journal works without one.</p>
-		<a
-			href={resolve('/signin')}
-			class="text-primary mt-2 inline-flex h-9 items-center text-sm font-medium"
-		>
-			Sign in
-		</a>
-		<a
-			href={resolve('/signup')}
-			class="text-muted-foreground inline-flex h-9 items-center text-sm font-medium"
-		>
-			Create an account
-		</a>
 	{/if}
 </div>

@@ -1,12 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
+import { clearRegistrationThrottle, signInThroughApi } from '../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
+
+test.beforeEach(clearRegistrationThrottle);
 
 /**
  * The exercise tab from the outside: pick a starting point, train, and see what
  * was filed. Onboarding seeds meals but no training, so every run starts from
  * the same empty rotation and the journey below is the one a new user takes.
  */
-async function onboard(page: Page) {
+async function onboard(page: Page, baseURL: string) {
+	// The tab is behind the gate like everything else, so the account comes first.
+	await signInThroughApi(page, baseURL);
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Continue' }).click();
@@ -36,8 +41,8 @@ async function pickFullBody(page: Page) {
 }
 
 test.describe('with nothing planned yet', () => {
-	test.beforeEach(async ({ page }) => {
-		await onboard(page);
+	test.beforeEach(async ({ page, baseURL }) => {
+		await onboard(page, baseURL ?? '');
 	});
 
 	test('offers starting points rather than an empty page', async ({ page }) => {
@@ -62,8 +67,8 @@ test.describe('with nothing planned yet', () => {
 });
 
 test.describe('once a routine is in the rotation', () => {
-	test.beforeEach(async ({ page }) => {
-		await onboard(page);
+	test.beforeEach(async ({ page, baseURL }) => {
+		await onboard(page, baseURL ?? '');
 		await pickFullBody(page);
 	});
 
@@ -177,9 +182,9 @@ test.describe('a session where nothing was ticked', () => {
 	/** Tuesday, week 1 of 2026 — a rest day under the two-day template. */
 	const TUESDAY = new Date('2026-01-06T09:00:00');
 
-	test.beforeEach(async ({ page }) => {
+	test.beforeEach(async ({ page, baseURL }) => {
 		await page.clock.setFixedTime(TUESDAY);
-		await onboard(page);
+		await onboard(page, baseURL ?? '');
 		await pickFullBody(page);
 	});
 
