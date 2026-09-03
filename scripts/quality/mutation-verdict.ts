@@ -42,6 +42,8 @@ interface Counts {
 interface FileVerdict extends Counts {
 	file: string;
 	killedScore: number;
+	/** The change reached no mutable code, so the file carries no strict liability. */
+	inertChange: boolean;
 	observableChangedTotal: number;
 	observableChangedKilled: number;
 	reviewedChangedSurvivors: number;
@@ -57,6 +59,8 @@ export interface MutationVerdict extends Counts {
 	/** Stryker-compatible score retained only for the legacy full-tree audit. */
 	mutationScore: number;
 	strictFiles: number;
+	/** Changed files excused from the strict verdict because their diff was inert. */
+	inertFiles: number;
 	strictKilled: number;
 	strictTotal: number;
 	strictKilledScore: number;
@@ -206,10 +210,24 @@ function compatibleMutationScore(counts: Counts): number {
 	return percent(counts.killed + counts.timeout, valid);
 }
 
+function intersectsLines(start: number, end: number, ranges: readonly LineRange[]): boolean {
+	return ranges.some((range) => start <= range.end && end >= range.start);
+}
+
 function intersects(location: Mutant['location'], ranges: readonly LineRange[]): boolean {
-	return ranges.some(
-		(range) => location.start.line <= range.end && location.end.line >= range.start
-	);
+	return intersectsLines(location.start.line, location.end.line, ranges);
+}
+
+/**
+ * Where Stryker anchored a mutant, as opposed to how far it reaches.
+ *
+ * A `BlockStatement` mutant replaces a whole function body, so it *intersects*
+ * every comment inside that function while being anchored to the brace far
+ * above. Asking about the anchor is what separates "Stryker mutated this line"
+ * from "Stryker mutated something that happens to span this line".
+ */
+function startsOnChangedLine(location: Mutant['location'], ranges: readonly LineRange[]): boolean {
+	return intersectsLines(location.start.line, location.start.line, ranges);
 }
 
 function isDeclarationOnly(statement: ts.Statement): boolean {
@@ -234,6 +252,44 @@ function hasMutationCandidate(source: string, file: string): boolean {
 	const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
 	// Fail closed: an omitted file is safe only when it has no statements Stryker can mutate.
 	return parsed.statements.some((statement) => !isDeclarationOnly(statement));
+}
+
+/**
+ * Whether a file's changed lines reach code Stryker could mutate.
+ *
+ * The strict verdict below judges a changed file on every mutant it holds, not
+ * only the ones its diff produced, so that editing a function means answering
+ * for the file that has to hold it up. A diff that only rewrites a comment
+ * reaches no behavior at all, and charging it the file's whole history measures
+ * how wide a change is rather than how much it risks.
+ *
+ * The question is put to the syntax rather than to the mutant list, because
+ * Stryker has no mutator for a renamed call target: counting mutants alone
+ * would wave a real behavior change through. Comments and blank lines are
+ * trivia and carry no token, and imports, interfaces and type aliases are the
+ * same declarations `hasMutationCandidate` already treats as beyond Stryker's
+ * reach.
+ */
+function changedLinesReachMutableCode(
+	source: string,
+	file: string,
+	ranges: readonly LineRange[]
+): boolean {
+	const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+	const line = (position: number) => parsed.getLineAndCharacterOfPosition(position).line + 1;
+	// Only a token pins code to a line. Every node above one spans its whole
+	// subtree, so asking a statement would report a comment buried inside a long
+	// function as code. JSDoc is the exception that has to be named: it hangs off
+	// the tree as a childless node rather than as trivia, and it is the very
+	// thing being excluded.
+	const reaches = (node: ts.Node): boolean => {
+		if (ts.isJSDoc(node)) return false;
+		const children = node.getChildren(parsed);
+		return children.length === 0
+			? intersectsLines(line(node.getStart(parsed)), line(node.getEnd()), ranges)
+			: children.some(reaches);
+	};
+	return parsed.statements.some((statement) => !isDeclarationOnly(statement) && reaches(statement));
 }
 
 async function missingExecutableFiles(
@@ -264,6 +320,10 @@ export async function evaluateMutationReport(options: {
 }): Promise<MutationVerdict> {
 	const { projectRoot, lane, scope, report, policy } = options;
 	const limits = lane === 'full' ? null : limitsFor(policy, lane);
+	// Only a diff-scoped lane can excuse anything. `full` judges the whole tree
+	// and `security` judges the security closure; neither asks what changed, so
+	// naming the two positively keeps a lane added later out until it opts in.
+	const diffScopedLane = lane === 'changed-node' || lane === 'changed-client';
 	const failures: string[] = [];
 	if (scope.version !== 2) failures.push('mutation scope must have version 2');
 	for (const file of scope.files) {
@@ -302,12 +362,14 @@ export async function evaluateMutationReport(options: {
 	const backgroundAggregate = blankCounts();
 	const files: FileVerdict[] = [];
 	let strictFiles = 0;
+	let inertFiles = 0;
 	let reviewedSurvivors = 0;
 	for (const [file, fileReport] of reportEntries) {
 		const counts = blankCounts();
 		let observableChangedTotal = 0;
 		let observableChangedKilled = 0;
 		let reviewedChangedSurvivors = 0;
+		let anchorsAChangedLine = false;
 		let verifiedSource = fileReport.source;
 		if (expected.has(file)) {
 			verifiedSource = await readFile(path.join(projectRoot, file), 'utf8');
@@ -316,6 +378,7 @@ export async function evaluateMutationReport(options: {
 			}
 		}
 		const sourceHash = sha256(verifiedSource);
+		const changedLines = changed.get(file) ?? [];
 		for (const mutant of fileReport.mutants) {
 			const fingerprint = mutantFingerprint({
 				file,
@@ -331,7 +394,8 @@ export async function evaluateMutationReport(options: {
 			}
 			addStatus(counts, mutant.status);
 			addStatus(aggregate, mutant.status);
-			if (intersects(mutant.location, changed.get(file) ?? [])) {
+			if (startsOnChangedLine(mutant.location, changedLines)) anchorsAChangedLine = true;
+			if (intersects(mutant.location, changedLines)) {
 				if (isReviewed) reviewedChangedSurvivors += 1;
 				else {
 					observableChangedTotal += 1;
@@ -339,9 +403,27 @@ export async function evaluateMutationReport(options: {
 				}
 			}
 		}
+		/*
+		 * A change is inert when it provably touches nothing this gate can judge:
+		 * it leaves lines in the new source to reason about, Stryker anchored no
+		 * mutant to any of them, and none of them reach mutable code. A pure
+		 * deletion leaves no changed lines at all and so stays strict -- absence of
+		 * evidence is not evidence, and the file still has to hold up what remains.
+		 *
+		 * The mutant clause is not implied by the syntax one: it fails closed if the
+		 * two ever disagree, and it is cheap, so it is asked before the source is
+		 * parsed.
+		 */
+		const inertChange =
+			diffScopedLane &&
+			changedLines.length > 0 &&
+			!anchorsAChangedLine &&
+			!changedLinesReachMutableCode(verifiedSource, file, changedLines);
+		if (inertChange) inertFiles += 1;
 		const fileVerdict: FileVerdict = {
 			file,
 			...counts,
+			inertChange,
 			killedScore: percent(counts.killed, counts.total),
 			observableChangedTotal,
 			observableChangedKilled,
@@ -354,7 +436,9 @@ export async function evaluateMutationReport(options: {
 		files.push(fileVerdict);
 		const strictFile =
 			lane === 'security' ||
-			(lane !== 'full' && (scope.fallback === null || changeStatuses.get(file) !== null));
+			(lane !== 'full' &&
+				!inertChange &&
+				(scope.fallback === null || changeStatuses.get(file) !== null));
 		if (strictFile) {
 			strictFiles += 1;
 			for (const mutant of fileReport.mutants) addStatus(strictAggregate, mutant.status);
@@ -441,6 +525,7 @@ export async function evaluateMutationReport(options: {
 		killedScore,
 		mutationScore,
 		strictFiles,
+		inertFiles,
 		strictKilled: strictAggregate.killed,
 		strictTotal: strictAggregate.total,
 		strictKilledScore,
