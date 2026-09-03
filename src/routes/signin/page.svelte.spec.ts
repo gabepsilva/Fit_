@@ -107,13 +107,19 @@ describe('sign-in page', () => {
 		await vi.waitFor(() => expect(sent[0]?.path).toBe('/api/sessions'));
 	});
 
-	it('sends the device label when one was typed', async () => {
+	/**
+	 * The session's device label is derived from the request's own `User-Agent`
+	 * on the server, so the form has nothing to say about it and this page must
+	 * not start sending one again.
+	 */
+	it('sends the credentials and nothing else', async () => {
 		const sent = answer(SESSION, 200);
 		await open();
 		await fillIn();
-		await page.getByLabelText('Name this device').fill('Pixel');
 		await submit();
-		await vi.waitFor(() => expect(sent[0]?.body.deviceLabel).toBe('Pixel'));
+		await vi.waitFor(() =>
+			expect(sent[0]?.body).toEqual({ username: 'robin', password: 'a-long-password' })
+		);
 	});
 
 	it('remembers the account it signed in as', async () => {
@@ -259,17 +265,6 @@ describe('sign-in page', () => {
 		await fillIn();
 		await submit();
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Try again shortly.');
-	});
-
-	it('puts a rejected device label under the device label', async () => {
-		answer({ error: { code: 'invalid-input', field: 'deviceLabel', reason: 'too-long' } }, 400);
-		await open();
-		await fillIn();
-		await page.getByLabelText('Name this device').fill('x');
-		await submit();
-		await expect
-			.element(page.getByLabelText('Name this device'))
-			.toHaveAttribute('aria-invalid', 'true');
 	});
 
 	it('separates a server it could not reach from a credential it refused', async () => {

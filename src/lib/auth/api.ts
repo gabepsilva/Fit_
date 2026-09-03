@@ -69,20 +69,22 @@ export type AuthFailure = {
 
 export type AuthResult<T> = { ok: true; value: T } | { ok: false; failure: AuthFailure };
 
-/** What a sign-up form submits. `deviceLabel` names the device in a session list. */
+/**
+ * What a sign-up form submits. The session's device label is not among them:
+ * the server derives it from the request's own `User-Agent`, so there is
+ * nothing for a form to ask.
+ */
 export type Registration = {
 	username: string;
 	displayName: string;
 	password: string;
 	householdName: string;
-	deviceLabel?: string | undefined;
 };
 
 /** What a sign-in form submits. */
 export type Credentials = {
 	username: string;
 	password: string;
-	deviceLabel?: string | undefined;
 };
 
 const CODES = new Set<string>([
@@ -168,21 +170,12 @@ async function sessionFrom(response: Response): Promise<AuthResult<SignedInSessi
 	return { ok: true, value: value as SignedInSession };
 }
 
-/** Every value the endpoints read is text, so a body carrying anything else is malformed. */
-function fields(input: Record<string, string | undefined>): Record<string, string> {
-	const body: Record<string, string> = {};
-	for (const [name, value] of Object.entries(input)) {
-		if (value !== undefined) body[name] = value;
-	}
-	return body;
-}
-
 /** Register: the account, the household it owns and its profile, then signed in. */
 export async function register(input: Registration): Promise<AuthResult<SignedInSession>> {
 	const response = await send({
 		path: resolve('/api/accounts'),
 		method: 'POST',
-		body: fields({ ...input })
+		body: input
 	});
 	return response === null ? { ok: false, failure: UNREACHABLE } : sessionFrom(response);
 }
@@ -192,7 +185,7 @@ export async function signIn(input: Credentials): Promise<AuthResult<SignedInSes
 	const response = await send({
 		path: resolve('/api/sessions'),
 		method: 'POST',
-		body: fields({ ...input })
+		body: input
 	});
 	return response === null ? { ok: false, failure: UNREACHABLE } : sessionFrom(response);
 }

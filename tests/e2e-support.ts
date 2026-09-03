@@ -66,6 +66,33 @@ const SESSION_STORAGE_KEY = 'fit.session.v1';
 const PASSWORD = 'salt-and-pepper-mill';
 
 /**
+ * Take the pointer off the toaster and wait for the toast on screen to go.
+ *
+ * Call this with the toast already up — assert the sentence it says first. An
+ * empty toaster is what this waits for, so calling it before the toast renders
+ * is answered immediately and proves nothing, which is how three tests went on
+ * to click into a toast that arrived a moment later.
+ *
+ * `<Toaster />` takes svelte-sonner's default corner, which on a phone viewport
+ * is over the button onboarding puts at the bottom — Playwright's own log names
+ * the toast as the element that intercepted the click there.
+ *
+ * The pointer is the half that is not obvious. Playwright leaves it wherever
+ * the last click put it, and the toaster mounts underneath it, so `mouseenter`
+ * fires without anybody hovering anything: `expanded` goes true, and
+ * `Toast.svelte` pauses its dismiss timer for as long as it stays that way.
+ * Only a `mouseleave` that actually moved clears it, and nothing in a test
+ * moves the pointer on its own — so a four-second toast was still on screen
+ * when the test gave up thirty seconds later, `data-expanded="true"` in every
+ * trace snapshot. Waiting alone does not fix that: waiting is what the
+ * timed-out click was already doing.
+ */
+export async function toastCleared(page: Page): Promise<void> {
+	await page.mouse.move(0, 0);
+	await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 10_000 });
+}
+
+/**
  * A name no other run has used.
  *
  * The database behind the preview server is a file that survives the suite, so

@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { clearRegistrationThrottle, freshUsername } from '../../../tests/e2e-support';
+import { clearRegistrationThrottle, freshUsername, toastCleared } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -54,6 +54,12 @@ async function reachSignIn(page: Page, path = '/') {
 
 /** Take the sample journal, so there is something on the device to come back to. */
 async function openSampleJournal(page: Page) {
+	// Signing in toasts, and the toast lands on the button below. Waited for by
+	// name before it is waited out, because this runs a moment after the submit
+	// that raises it and an empty toaster here would mean "not yet" rather than
+	// "gone". See `toastCleared`.
+	await expect(page.getByText(`Signed in as ${DISPLAY_NAME}.`)).toBeVisible();
+	await toastCleared(page);
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Open the sample journal' }).click();
@@ -92,14 +98,6 @@ test.describe('the sign-in form', () => {
 	test('describes a wrong password without confirming the name', async ({ page }) => {
 		await attempt(page, freshUsername(), PASSWORD);
 		await expect(page.getByRole('alert')).toHaveText('That username and password don’t match.');
-	});
-
-	test('refuses a device label over a hundred characters', async ({ page }) => {
-		await page.getByLabel('Name this device').fill('d'.repeat(101));
-		await attempt(page, freshUsername(), PASSWORD);
-
-		await expect(page.getByText('At most 100 characters.')).toBeVisible();
-		await expect(page.getByLabel('Name this device')).toHaveAttribute('aria-invalid', 'true');
 	});
 
 	test('has no detectable accessibility violations with the form refused', async ({ page }) => {

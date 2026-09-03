@@ -208,15 +208,15 @@
 			"location": {
 				"end": {
 					"column": 83,
-					"line": 223
+					"line": 192
 				},
 				"start": {
 					"column": 81,
-					"line": 223
+					"line": 192
 				}
 			},
-			"sourceHash": "0a8e8561f808fd867cab0632480b78104f297f24265e1fa67f079dce6622ed8b",
-			"fingerprint": "ce6a57028313f2670872db833eebe77c82207f7d18f40cf3f8c40694551eee8c",
+			"sourceHash": "aef7fe835f5cbe7b1a62a26c26170efc77cfcf19e1ea2a6f45225821f023020c",
+			"fingerprint": "552b163a11cc33a5a1fc18b5952c3fc0d90ace3ea12a419df22511f1363e8f0e",
 			"classification": "equivalent",
 			"rationale": "The fallback for an absent password field is only ever verified against a stored hash and never persisted, so any literal that is not somebody's password yields the same invalid-credentials answer; the upgrade candidate a longer literal would derive is discarded because verification failed.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -268,15 +268,15 @@
 			"location": {
 				"end": {
 					"column": 30,
-					"line": 99
+					"line": 101
 				},
 				"start": {
 					"column": 6,
-					"line": 99
+					"line": 101
 				}
 			},
-			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
-			"fingerprint": "ee4834afdbc6ad4f2a5bcbf2e9e6ff1e814a3cfd4ef64b33cb985be89d84da7b",
+			"sourceHash": "42240f7ed939ae6e618da50b7128986657d1e7c0dba39c0827d667e07ab7f636",
+			"fingerprint": "23ddf85bb5a5ed96b0392d69a7560ca0d72994e46a3d656d4f99bfe80f9fb4af",
 			"classification": "equivalent",
 			"rationale": "The `typeof body !== ‘object’` half only short-circuits a body that is a JSON string, number or boolean; each of those reads `.error` as undefined, so the very next guard returns the same `invalid-body`. Both halves reach one verdict and no response body can separate them.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -288,15 +288,15 @@
 			"location": {
 				"end": {
 					"column": 33,
-					"line": 103
+					"line": 105
 				},
 				"start": {
 					"column": 9,
-					"line": 103
+					"line": 105
 				}
 			},
-			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
-			"fingerprint": "8b747215f1424edf6bb65734ad865229ec231151b529dac30e0682597f23c87d",
+			"sourceHash": "42240f7ed939ae6e618da50b7128986657d1e7c0dba39c0827d667e07ab7f636",
+			"fingerprint": "ef928bb3d0334c198a577b4b7e01a2e230f90ab8ee4e60c2d8de689c069b079e",
 			"classification": "equivalent",
 			"rationale": "`CODES` is a set of strings, so `CODES.has(code)` is already false for every non-string value; the `typeof` guard narrows the type for the compiler and cannot change which branch runs.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -308,15 +308,15 @@
 			"location": {
 				"end": {
 					"column": 62,
-					"line": 127
+					"line": 129
 				},
 				"start": {
 					"column": 52,
-					"line": 127
+					"line": 129
 				}
 			},
-			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
-			"fingerprint": "3fbe835cca7a171a64d959897b94cb8a026587356ca7fb176e3326289a2f9dc2",
+			"sourceHash": "42240f7ed939ae6e618da50b7128986657d1e7c0dba39c0827d667e07ab7f636",
+			"fingerprint": "f87ab01aced0a657a751aadc0b6341ee3eb70769731ad0624556b1e6726a5f6e",
 			"classification": "equivalent",
 			"rationale": "The catch supplies the value `codeOf` and `textOf` then read. `undefined` fails `typeof body !== ‘object’` where `null` fails `body === null`, both returning `invalid-body`, and `?.error` is undefined for either. No caller can tell the two apart.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -328,37 +328,17 @@
 			"location": {
 				"end": {
 					"column": 63,
-					"line": 166
+					"line": 168
 				},
 				"start": {
 					"column": 53,
-					"line": 166
+					"line": 168
 				}
 			},
-			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
-			"fingerprint": "aed9ec3ab144d650892874ddbdd9788364e6783082db6b577758799a9ff6caf7",
+			"sourceHash": "42240f7ed939ae6e618da50b7128986657d1e7c0dba39c0827d667e07ab7f636",
+			"fingerprint": "94cf71e8aa672d387fc6561c01f42c98caf46b0426b87407e92bf8cdd1b9243a",
 			"classification": "equivalent",
 			"rationale": "Same catch, in `sessionFrom`: the very next line rejects `undefined` on `typeof value !== ‘object’` and `null` on `value === null`, and both produce the identical `unreachable` failure.",
-			"review": "https://github.com/gabepsilva/Fit_/pull/5"
-		},
-		{
-			"file": "src/lib/auth/api.ts",
-			"mutatorName": "ConditionalExpression",
-			"replacement": "true",
-			"location": {
-				"end": {
-					"column": 26,
-					"line": 175
-				},
-				"start": {
-					"column": 7,
-					"line": 175
-				}
-			},
-			"sourceHash": "7cfae06ea46eb4c1329758434f6a6b16aea566edefdfce43cb3019de222e9b4f",
-			"fingerprint": "b65697901e6a066db9d4d4c64b945fe1659f00a154d7b09f860c4bca431ad1be",
-			"classification": "equivalent",
-			"rationale": "The object this builds is only ever handed to `JSON.stringify`, which omits a property whose value is `undefined`. Assigning the undefined entry rather than skipping it serializes to the same request body byte for byte.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		},
 		{
@@ -368,15 +348,15 @@
 			"location": {
 				"end": {
 					"column": 44,
-					"line": 48
+					"line": 44
 				},
 				"start": {
 					"column": 42,
-					"line": 48
+					"line": 44
 				}
 			},
-			"sourceHash": "afcbd50bbfb3c051de2e076be78f99ae59e60b1c2d1aa2e5ba9b0f44634f5587",
-			"fingerprint": "99f9e0931a766e7d0947ffe482d8b235ed443dcc3863d570ad746412733f7b05",
+			"sourceHash": "88bd26ccf37124e0c7879a8b76cee98e23d38666c5069ef205f098f37bc4e170",
+			"fingerprint": "a89372da5bf459bc3c21610e599a4efc59fed50bb928a3bf830509eda4fa0aec",
 			"classification": "equivalent",
 			"rationale": "The fallback is a lookup key for a reason that was not sent. No field record in `FIELD_WORDING` holds an empty key, so `‘’` and any other absent key alike miss the table and fall through to the same `UNRECOGNIZED_FIELD` sentence.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -388,15 +368,15 @@
 			"location": {
 				"end": {
 					"column": 42,
-					"line": 89
+					"line": 85
 				},
 				"start": {
 					"column": 40,
-					"line": 89
+					"line": 85
 				}
 			},
-			"sourceHash": "afcbd50bbfb3c051de2e076be78f99ae59e60b1c2d1aa2e5ba9b0f44634f5587",
-			"fingerprint": "7de3799e5d1a4beb62613e5cf202441b1a63686bd357e00a2a5c4bdcebd6939f",
+			"sourceHash": "88bd26ccf37124e0c7879a8b76cee98e23d38666c5069ef205f098f37bc4e170",
+			"fingerprint": "e0883908772f69b342f5aaf7a0e70b63d90ac8c82633987c62d78aaaf2a6dfac",
 			"classification": "equivalent",
 			"rationale": "The fallback is a field name for a failure that named none. `FIELD_WORDING` has no empty-string field, so `‘’` and any other unlisted name both miss the table and produce the same `UNRECOGNIZED_FIELD` sentence.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
