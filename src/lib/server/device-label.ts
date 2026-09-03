@@ -34,6 +34,13 @@ type Vocabulary = readonly (readonly [token: string, name: string])[];
  * Every token here is one a browser sends alone. `Chromium/` is not among them
  * for that reason — the browsers that send it send `Chrome/` beside it, so the
  * entry could never be the one that decided an answer.
+ *
+ * Revisit this list when there is an iOS shell — `README.md` says there is not
+ * one today, so the three iOS aliases exist for people reaching the web build
+ * from an iPhone. A shell would arrive as a WKWebView, which sends no `Safari/`
+ * token unless it is given a custom agent, and would land on the platform
+ * alone. Worth deciding then whether the aliases still earn their place and
+ * what the shell itself should be called.
  */
 const BROWSERS: Vocabulary = [
 	['Edg/', 'Edge'],
