@@ -9,8 +9,14 @@ import type { Auth, Session } from './types';
 const TOKEN_BYTES = 32;
 const LIFETIME_MS = 90 * 24 * 60 * 60 * 1000;
 export const LAST_SEEN_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
-/** Exported so an endpoint can reject a label before it does the work a session follows. */
-export const MAX_DEVICE_LABEL_LENGTH = 100;
+/**
+ * The ceiling on a stored device label. `device-label.ts` builds every label
+ * this application writes out of constants far shorter than this, so the check
+ * below is a guard on the column rather than a rule anyone can hit; it stays
+ * because `createSession` takes the label as an argument and nothing outside
+ * this module has to be trusted to have kept it short.
+ */
+const MAX_DEVICE_LABEL_LENGTH = 100;
 
 /**
  * Sessions are rows, not signed tokens: a JWT cannot be withdrawn before it

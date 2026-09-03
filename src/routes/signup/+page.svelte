@@ -14,7 +14,6 @@
 	let displayName = $state('');
 	let password = $state('');
 	let householdName = $state('');
-	let deviceLabel = $state('');
 	let busy = $state(false);
 	let problem = $state<FormProblem | null>(null);
 
@@ -26,14 +25,12 @@
 
 	// Blank household falls back to the display name; every row is filtered by household_id.
 	function submitted() {
-		const label = deviceLabel.trim();
 		const name = displayName.trim();
 		return {
 			username: username.trim(),
 			displayName: name,
 			password,
-			householdName: householdName.trim() === '' ? name : householdName.trim(),
-			deviceLabel: label === '' ? undefined : label
+			householdName: householdName.trim() === '' ? name : householdName.trim()
 		};
 	}
 
@@ -106,15 +103,6 @@
 			autocomplete="off"
 			hint="Optional. The kitchen everyone's plates belong to; your name by default."
 			error={fieldError('householdName')}
-		/>
-
-		<AuthField
-			id="signup-device"
-			label="Name this device"
-			bind:value={deviceLabel}
-			autocomplete="off"
-			hint="Optional. It is how you will recognize this session later."
-			error={fieldError('deviceLabel')}
 		/>
 
 		<Button type="submit" size="lg" disabled={busy}>

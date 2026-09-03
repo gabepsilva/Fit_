@@ -20,6 +20,10 @@ const CHEAP = { n: 2 ** 12, r: 8, p: 1 };
 const SITE = 'https://fit.example';
 const ADDRESS = '203.0.113.7';
 
+/** A real Android Chrome header, which is also what the Capacitor WebView sends. */
+const ANDROID_CHROME =
+	'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+
 const REGISTRATION = {
 	username: 'jordan',
 	displayName: 'Jordan',
@@ -146,10 +150,34 @@ describe('register', () => {
 		expect(resolveSession(db, String(body['token']))?.account.username).toBe('jordan');
 	});
 
-	it('records the device label the client named', async () => {
-		const { event } = eventFor({ body: { ...REGISTRATION, deviceLabel: 'Pixel 7' } });
+	it('labels the session from the request the registration arrived in', async () => {
+		const { event } = eventFor({ body: REGISTRATION, headers: { 'user-agent': ANDROID_CHROME } });
 		await register(db, event, CHEAP);
-		expect(db.prepare('select device_label from session').get()?.['device_label']).toBe('Pixel 7');
+		expect(db.prepare('select device_label from session').get()?.['device_label']).toBe(
+			'Chrome on Android'
+		);
+	});
+
+	/**
+	 * The label is derived, and a body field of that name is an ordinary unread
+	 * field. Reading it back would put caller-written text in the column the
+	 * derivation exists to keep constants in.
+	 */
+	it('ignores a device label the body asks for', async () => {
+		const { event } = eventFor({
+			body: { ...REGISTRATION, deviceLabel: 'Someone else’s phone' },
+			headers: { 'user-agent': ANDROID_CHROME }
+		});
+		await register(db, event, CHEAP);
+		expect(db.prepare('select device_label from session').get()?.['device_label']).toBe(
+			'Chrome on Android'
+		);
+	});
+
+	it('leaves the label empty when the request named no browser', async () => {
+		const { event } = eventFor({ body: REGISTRATION });
+		await register(db, event, CHEAP);
+		expect(db.prepare('select device_label from session').get()?.['device_label']).toBeNull();
 	});
 
 	it('answers a bearer registration with the created status, not a plain 200', async () => {
@@ -239,15 +267,6 @@ describe('register', () => {
 		const response = await register(db, event, CHEAP);
 		expect(response.status).toBe(400);
 		expect(await bodyOf(response)).toEqual({ error: { code: 'invalid-input', field, reason } });
-	});
-
-	it('refuses an oversize device label before it creates an account', async () => {
-		const { event } = eventFor({ body: { ...REGISTRATION, deviceLabel: 'p'.repeat(101) } });
-		const response = await register(db, event, CHEAP);
-		expect(await bodyOf(response)).toEqual({
-			error: { code: 'invalid-input', field: 'deviceLabel', reason: 'too-long' }
-		});
-		expect(db.prepare('select count(*) as n from account').get()?.['n']).toBe(0);
 	});
 
 	it('refuses a body that is not JSON text fields', async () => {
@@ -358,7 +377,7 @@ async function registered(): Promise<void> {
 	await register(db, eventFor({ body: REGISTRATION }).event, CHEAP);
 }
 
-type Credentials = { username?: string; password?: string; deviceLabel?: string };
+type Credentials = { username?: string; password?: string };
 
 function signInEvent(credentials: Credentials = {}, options: EventOptions = {}): Harness {
 	return eventFor({
@@ -517,13 +536,14 @@ describe('signIn', () => {
 		expect(signInScopes()).toEqual(['username']);
 	});
 
-	it('records the device label the client named', async () => {
-		await signIn(db, signInEvent({ deviceLabel: 'Pixel 7' }).event, CHEAP);
+	it('labels the session from the request the sign-in arrived in', async () => {
+		const { event } = signInEvent({}, { headers: { 'user-agent': ANDROID_CHROME } });
+		await signIn(db, event, CHEAP);
 		const labels = db
 			.prepare('select device_label from session')
 			.all()
 			.map((row) => row['device_label']);
-		expect(labels).toContain('Pixel 7');
+		expect(labels).toContain('Chrome on Android');
 	});
 
 	it('says how long to wait in whole seconds, and never in one', async () => {
@@ -559,15 +579,6 @@ describe('signIn', () => {
 	it('refuses a body that is not JSON text fields', async () => {
 		const { event } = eventFor({ path: '/api/sessions', body: { username: 7, password: 'x' } });
 		expect((await signIn(db, event, CHEAP)).status).toBe(400);
-	});
-
-	it('refuses an oversize device label before it counts an attempt', async () => {
-		const { event } = signInEvent({ deviceLabel: 'p'.repeat(101) });
-		const response = await signIn(db, event, CHEAP);
-		expect(await bodyOf(response)).toEqual({
-			error: { code: 'invalid-input', field: 'deviceLabel', reason: 'too-long' }
-		});
-		expect(signInScopes()).toHaveLength(0);
 	});
 });
 

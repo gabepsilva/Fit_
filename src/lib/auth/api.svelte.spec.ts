@@ -96,12 +96,6 @@ describe('signIn', () => {
 		expect(calls[0]?.body).toEqual(CREDENTIALS);
 	});
 
-	it('leaves out a device label nobody supplied, rather than sending an empty one', async () => {
-		const calls = stub(jsonResponse(SESSION));
-		await signIn(CREDENTIALS);
-		expect(calls[0]?.body).not.toHaveProperty('deviceLabel');
-	});
-
 	it('returns the session the endpoint answered with', async () => {
 		stub(jsonResponse(SESSION));
 		const result = await signIn(CREDENTIALS);
@@ -128,12 +122,12 @@ describe('signIn', () => {
 	it('carries the field and reason of a rejected input', async () => {
 		stub(
 			jsonResponse(
-				{ error: { code: 'invalid-input', field: 'deviceLabel', reason: 'too-long' } },
+				{ error: { code: 'invalid-input', field: 'username', reason: 'too-long' } },
 				{ status: 400 }
 			)
 		);
-		const result = await signIn({ ...CREDENTIALS, deviceLabel: 'x' });
-		expect(result).toMatchObject({ failure: { field: 'deviceLabel', reason: 'too-long' } });
+		const result = await signIn(CREDENTIALS);
+		expect(result).toMatchObject({ failure: { field: 'username', reason: 'too-long' } });
 	});
 
 	it('reads a failure body with no error in it as a malformed one', async () => {
@@ -218,16 +212,16 @@ describe('register', () => {
 		expect(calls[0]?.method).toBe('POST');
 	});
 
+	it('sends the fields the form collected, and only those', async () => {
+		const calls = stub(jsonResponse(SESSION, { status: 201 }));
+		await register(REGISTRATION);
+		expect(calls[0]?.body).toEqual(REGISTRATION);
+	});
+
 	it('treats the 201 as a success', async () => {
 		stub(jsonResponse(SESSION, { status: 201 }));
 		const result = await register(REGISTRATION);
 		expect(result).toEqual({ ok: true, value: SESSION });
-	});
-
-	it('sends a device label when one was given', async () => {
-		const calls = stub(jsonResponse(SESSION, { status: 201 }));
-		await register({ ...REGISTRATION, deviceLabel: 'Pixel' });
-		expect(calls[0]?.body).toMatchObject({ deviceLabel: 'Pixel' });
 	});
 
 	it('reports a taken username', async () => {

@@ -44,7 +44,6 @@
 
 	let username = $state('');
 	let password = $state('');
-	let deviceLabel = $state('');
 	let busy = $state(false);
 	let problem = $state<FormProblem | null>(null);
 
@@ -89,12 +88,7 @@
 		event.preventDefault();
 		if (busy || waiting) return;
 		busy = true;
-		const label = deviceLabel.trim();
-		const result = await signIn({
-			username: username.trim(),
-			password,
-			deviceLabel: label === '' ? undefined : label
-		});
+		const result = await signIn({ username: username.trim(), password });
 		busy = false;
 		if (!result.ok) {
 			fail(result.failure);
@@ -140,15 +134,6 @@
 			bind:value={password}
 			autocomplete="current-password"
 			error={fieldError('password')}
-		/>
-
-		<AuthField
-			id="signin-device"
-			label="Name this device"
-			bind:value={deviceLabel}
-			autocomplete="off"
-			hint="Optional. It is how you will recognize this session later."
-			error={fieldError('deviceLabel')}
 		/>
 
 		<Button type="submit" size="lg" disabled={busy || waiting}>

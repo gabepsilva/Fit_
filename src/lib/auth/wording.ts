@@ -26,10 +26,6 @@ const FIELD_WORDING: Record<string, Record<string, string>> = {
 	householdName: {
 		'too-long': 'At most 100 characters.',
 		'unsafe-characters': 'Remove any invisible or control characters.'
-	},
-	deviceLabel: {
-		'too-long': 'At most 100 characters.',
-		'unsafe-characters': 'Remove any invisible or control characters.'
 	}
 };
 

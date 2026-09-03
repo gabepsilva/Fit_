@@ -3,19 +3,14 @@ import type { Cookies } from '@sveltejs/kit';
 import type { DatabaseSync } from 'node:sqlite';
 import { apiError, readTextBody } from './api';
 import { clientAddressFor } from './client-address';
+import { deviceLabelFrom } from './device-label';
 import { sessionTokenFrom } from './request-auth';
 import { clearSessionCookie, SESSION_COOKIE, setSessionCookie } from './session-cookie';
 import type { SessionCookieWriter } from './session-cookie';
 import { authenticate, membershipsFor, registerAccount } from './users/accounts';
-import { storedTextProblem } from './users/input';
 import { OWASP_SCRYPT } from './users/password';
 import type { ScryptCost } from './users/password';
-import {
-	createSession,
-	endAllSessions,
-	endSession,
-	MAX_DEVICE_LABEL_LENGTH
-} from './users/sessions';
+import { createSession, endAllSessions, endSession } from './users/sessions';
 import {
 	checkRegistration,
 	checkSignIn,
@@ -61,59 +56,33 @@ function wantsBearerSession(request: Request): boolean {
 	return request.headers.get(SESSION_DELIVERY_HEADER)?.trim().toLowerCase() === BEARER_DELIVERY;
 }
 
-/** What both endpoints read off a body once it has been proved to be one. */
-type Submission = { fields: Record<string, string>; deviceLabel: string | null };
-
-type SubmissionResult = { ok: true; submission: Submission } | { ok: false; response: Response };
-
-/**
- * The device label is validated before an account is created, not after:
- * `createSession` would refuse it either way, but by then registration has
- * committed four rows and the caller would get a 400 for an account that
- * exists.
- */
-async function readSubmission(request: Request): Promise<SubmissionResult> {
-	const fields = await readTextBody(request);
-	if (fields === null) return { ok: false, response: apiError('invalid-body') };
-	const deviceLabel = fields['deviceLabel'] ?? null;
-	const problem =
-		deviceLabel === null
-			? null
-			: storedTextProblem(deviceLabel, 'deviceLabel', MAX_DEVICE_LABEL_LENGTH);
-	if (problem) {
-		return {
-			ok: false,
-			response: apiError('invalid-input', { field: problem.field, reason: problem.code })
-		};
-	}
-	return { ok: true, submission: { fields, deviceLabel } };
-}
-
-type IssueOptions = { deviceLabel: string | null; status: number };
-
 /**
  * Start a session and answer with it. `households` is in the body because
  * `household_id` is the predicate every later read filters on, so a fresh
  * client has nothing else to ask for. `expiresAt` tells the client when to stop
  * trusting what it holds, without decoding anything.
+ *
+ * The session is labelled from the request's own `User-Agent`, not from
+ * anything the form asked for — see `device-label.ts`.
  */
 function establishSession(
 	db: DatabaseSync,
 	event: AuthEvent,
 	account: Account,
-	options: IssueOptions
+	status: number
 ): Response {
-	const { token, session } = createSession(db, account.id, options.deviceLabel);
+	const deviceLabel = deviceLabelFrom(event.request.headers.get('user-agent'));
+	const { token, session } = createSession(db, account.id, deviceLabel);
 	const body = {
 		account,
 		households: membershipsFor(db, account.id),
 		expiresAt: session.expiresAt
 	};
 	if (wantsBearerSession(event.request)) {
-		return json({ ...body, token }, { status: options.status });
+		return json({ ...body, token }, { status });
 	}
 	setSessionCookie(event.cookies, event.url, { token, expiresAt: session.expiresAt });
-	return json(body, { status: options.status });
+	return json(body, { status });
 }
 
 /**
@@ -154,9 +123,8 @@ export async function register(
 	event: AuthEvent,
 	cost: ScryptCost = OWASP_SCRYPT
 ): Promise<Response> {
-	const submission = await readSubmission(event.request);
-	if (!submission.ok) return submission.response;
-	const { fields, deviceLabel } = submission.submission;
+	const fields = await readTextBody(event.request);
+	if (fields === null) return apiError('invalid-body');
 	const clientAddress = clientAddressFor(event.request, event.getClientAddress);
 	const decision = checkRegistration(db, clientAddress);
 	if (!decision.allowed) return tooManyAttempts(decision.retryAfterMs);
@@ -172,7 +140,7 @@ export async function register(
 		cost
 	);
 	if (!result.ok) return registrationError(result.problem);
-	return establishSession(db, event, result.account, { deviceLabel, status: 201 });
+	return establishSession(db, event, result.account, 201);
 }
 
 /**
@@ -196,9 +164,8 @@ export async function signIn(
 	event: AuthEvent,
 	cost: ScryptCost = OWASP_SCRYPT
 ): Promise<Response> {
-	const submission = await readSubmission(event.request);
-	if (!submission.ok) return submission.response;
-	const { fields, deviceLabel } = submission.submission;
+	const fields = await readTextBody(event.request);
+	if (fields === null) return apiError('invalid-body');
 	const attempt = {
 		username: fields['username'] ?? '',
 		clientAddress: clientAddressFor(event.request, event.getClientAddress)
@@ -211,7 +178,7 @@ export async function signIn(
 		return apiError('invalid-credentials');
 	}
 	clearSignInFailures(db, attempt.username);
-	return establishSession(db, event, account, { deviceLabel, status: 200 });
+	return establishSession(db, event, account, 200);
 }
 
 /**
