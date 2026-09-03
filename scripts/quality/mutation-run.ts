@@ -6,7 +6,11 @@ import { captureStatus } from '../security/shared';
 import { prepareMutationCache, recordMutationCache } from './mutation-cache';
 import { buildMutationScope } from './mutation-scope';
 import { parseMutationPolicy, type MutationLane } from './mutation-types';
-import { mutationReviewLedgerFailures, verifyMutationFiles } from './mutation-verdict';
+import {
+	mutationReviewLedgerFailures,
+	verifyMutationFiles,
+	type MutationVerdict
+} from './mutation-verdict';
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -15,6 +19,16 @@ interface Arguments {
 	base?: string;
 	forceCold: boolean;
 	scopeOnly: boolean;
+}
+
+/**
+ * Names the files a lane excused, so a wide comment-only change does not report
+ * a suspiciously small strict set with nothing on the line to explain it.
+ */
+function excused(verdict: MutationVerdict): string {
+	return verdict.inertFiles === 0
+		? ''
+		: ` ${verdict.inertFiles} changed file(s) reached no mutable code.`;
 }
 
 function parseArguments(argv: string[]): Arguments {
@@ -159,12 +173,13 @@ export async function runMutation(options: Arguments): Promise<number> {
 			`${options.lane}: ${verdict.strictKilledScore.toFixed(2)}% killed-only for ` +
 				`${verdict.strictFiles} changed production file(s) (${verdict.strictKilled}/${verdict.strictTotal}); ` +
 				`${verdict.backgroundMutationScore?.toFixed(2) ?? '100.00'}% legacy-compatible score for unchanged fallback files; ` +
-				`${scope.files.length} scoped file(s).`
+				`${scope.files.length} scoped file(s).${excused(verdict)}`
 		);
 	} else {
 		console.log(
 			`${options.lane}: ${verdict.strictKilledScore.toFixed(2)}% strict killed-only ` +
-				`(${verdict.strictKilled}/${verdict.strictTotal}); ${scope.files.length} scoped file(s).`
+				`(${verdict.strictKilled}/${verdict.strictTotal}); ${scope.files.length} scoped file(s).` +
+				excused(verdict)
 		);
 	}
 	return 0;
