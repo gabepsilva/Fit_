@@ -31,3 +31,77 @@ Formatting, type safety, type-aware lint, Svelte diagnostics, test discipline, d
 duplication and complexity caps, secret scanning, SAST, bundle budgets, the production
 build, workflow lint, report retention and branch protection are enforced and considered
 done.
+
+## Gate operation
+
+Every tier runs to completion rather than stopping at the first failure, and writes
+`reports/quality/gate-<tier>.json` listing each step, its exit code, its log path and its
+machine-readable artifact. `README.md` has the tier table; `make` lists local shortcuts for
+the same tiers.
+
+`make ci` runs the exact steps the CI workflow runs, but arranges them for one machine
+instead of separate hosted runners: the static and security jobs run beside the browser
+gates, and mutation testing gets the machine to itself afterwards. It cannot be reordered
+freely — `build`, `test:e2e` and `test:gates` all contend for `build/` and port 4173, and
+`reuseExistingServer` in `playwright.config.ts` means a second Playwright would silently
+reuse the first one's server and prove nothing.
+
+`check:ci-contract` proves every declared local CI slice is hosted and every hosted gate job
+is listed in `all-green.needs`; a job outside that protected aggregator is not a merge gate.
+
+`bun run check:thresholds` guards the numbers that decide whether a gate passes: coverage,
+mutation score, bundle budgets, duplication, and the suppression baseline. Lowering any of
+them fails the gate. The suppression ratchet stops a diagnostic being silenced; this stops
+the bar being moved instead.
+
+No tier needs Firefox or WebKit. Every gate runs end-to-end flows through the default
+`mobile-chrome` project (Pixel 7 viewport, Chromium engine); only `bun run test:e2e:all`
+reaches for `mobile-safari` (iPhone 15, WebKit) and desktop Chrome and Firefox, and CI is
+where that runs. Fit_ is a mobile web app, so a mobile viewport is the primary target and
+desktop is a regression backstop.
+
+`scripts/security/zap.ts` pins the project it proxies. If a project is renamed in
+`playwright.config.ts`, that reference has to move with it or the nightly scan fails with no
+matching project. `bun run nightly` also needs the Docker bridge to reach the host preview
+server; a host firewall that blocks it produces a timeout, not a security verdict, and must
+not be read as a passing scan.
+
+Trivy blocks on High and Critical findings. When the fix sits inside the range the parent
+already allows, pin it in the `overrides` block of `package.json` and drop the override once
+the tree resolves to a patched version by itself. Do not force an override across a major
+boundary a direct dependency declares against; record why here instead.
+
+## Mutation lanes
+
+Pull requests always run four lanes: the complete Node-only server security closure, changed
+Node files, changed client files, and the blocking full-tree compatibility audit. Test, spec
+and end-to-end artifacts are never mutation targets. Untracked production files count as
+changes. Security-boundary specs belong exclusively to the always-on security lane; other
+changed tests, deleted or renamed inputs, and mutation-configuration changes broaden the
+affected lane rather than guessing narrowly.
+
+Security and changed lanes use the **strict verdict**: only an explicit `Killed` result is
+positive. Timeouts, uncovered mutants, errors, stale or source-mismatched reports, wrong
+scope, omitted executable files, and an empty security scope all fail. A reviewed survivor is
+classified as exact equivalence or host-specific defense in depth and bound to an exact
+source/location/mutator/replacement fingerprint with a pull-request rationale. It is the sole
+changed-line exception, is disclosed separately from the 100 percent observable changed-mutant
+score, and is invalidated by source or report drift.
+
+When a configuration, test, deletion, rename, or non-mutated runtime input forces a broad
+changed-lane fallback, actual changed production files retain the strict verdict. Unchanged
+background files must preserve the historical 80 percent Stryker-compatible aggregate, so
+existing legacy debt cannot masquerade as a new regression or make the gate knowingly red.
+The verdict records this as `strict-changed-with-legacy-background` and reports both scores.
+Scope records Git change status separately from added-line ranges: a production file modified
+only by deletions is still strict even though it has no changed-line denominator.
+
+`bun run test:mutation:full` preserves the pre-existing Stryker-compatible aggregate score and
+80 percent merge threshold while legacy files are remediated. It remains blocking and
+incremental on every pull request, and also runs after pushes to `main` and forced-cold every
+Monday. Do not describe that legacy lane as killed-only, per-file, or zero-timeout.
+
+Mutation caches are lane-specific and are recorded only after the governing verdict passes.
+Never copy an incremental file between lanes or publish one from a failed or cancelled run.
+Regular CI supplies the full audit on pull requests and `main`; the separate audit workflow is
+scheduled and manual so it cannot duplicate a `main` push or race its cache.

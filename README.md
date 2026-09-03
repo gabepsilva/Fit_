@@ -6,9 +6,37 @@ A fitness application for Android and iOS, built on SvelteKit. Food logging, an 
 calorie and macro model, a household meal plan, and progress tracking, behind a set of
 deterministic, reviewable quality gates.
 
-Data currently lives in the browser's `localStorage`, so nothing leaves the device and
-nothing syncs between devices. The SQLite backend has been started — `src/lib/server/`
-holds accounts, sessions and household membership — but nothing in the app calls it yet.
+## What's built
+
+The product UI is in: the six nutrition destinations (today, catalog, plan, progress,
+exercise, profile), onboarding, the logging flow, and the exercise tab's own eight screens.
+It is a port of two design sources — an earlier React prototype for the nutrition side and a
+screen-flow prototype for exercise — rebuilt in Svelte 5. Navigation is a side drawer opened
+from the top bar, not a bottom bar.
+
+Exercise is its own small application under `/exercise`: the rotation of routines and today's
+session, the running session and its summary, the routine sheet and builder with an exercise
+library, a month and year planner, and training progress.
+
+The backend is one module deep. `src/lib/server/db.ts` opens SQLite through Node's built-in
+`node:sqlite` and owns the migration list; `users/` holds accounts, sessions, passwords and
+household membership; `src/hooks.server.ts` resolves the session once per request onto
+`locals.auth`. `src/routes/api/` carries registration, sign-in and the two sign-outs, and
+`/signin` and `/signup` are the forms that call them.
+
+**The server signs people in, and does nothing else yet.** No sync is wired: the app keeps
+every gram and every workout in `localStorage`, and the store's methods remain the call sites
+that will one day talk to the server. An account can be created and used to sign in, but it
+carries no data.
+
+Signing in is nevertheless how the app opens. `AppShell.svelte` sends anyone without a session
+to `/signin`, carrying `?next=` for the page they asked for, and renders nothing while it goes
+— a shell drawn first and replaced afterwards would show the journal it is meant to withhold.
+`/signin` and `/signup` are the only destinations reachable without a session, listed in
+`components/auth/auth-routes.ts`; onboarding is inside the gate like everything else, so the
+account comes first on a new device. That gate decides what this device draws and nothing
+more — it is not an authorization boundary, because `ssr` is off for both targets and the
+Capacitor build is static, so there is no server render to refuse with.
 
 ## Requirements
 
@@ -84,14 +112,7 @@ and they block a merge. Trivy and ZAP depend on external feeds whose results cha
 any code change; gating on them would contradict the determinism this repository promises,
 so they run on a schedule and open an issue instead.
 
-ZAP runs in a container and reaches the host preview server through the Docker bridge. A
-host firewall that blocks the bridge makes every proxied flow time out, and `bun run
-nightly` fails with an unreachable target rather than a security verdict. On a host
-running `ufw`, allow the bridge first:
-
-```bash
-sudo ufw allow in on docker0
-```
+ZAP runs in a container and reaches the host preview server through the Docker bridge.
 
 ### Mobile-first end-to-end runs
 
@@ -113,37 +134,5 @@ than behind half an hour of browser and container work. The `main` branch is pro
 hosted `CI / Quality and security` check, which passes only when every parallel gate succeeds.
 
 Repository-specific agent and review rules live in `AGENTS.md`. `QUALITY.md` is the control
-inventory: what each area currently enforces, what to add next, and what should trigger
-adding it.
-
-## Deployment
-
-Fit_ ships from one codebase to two targets.
-
-**Web.** Served over HTTP rather than through an app store. `@sveltejs/adapter-node` is
-pinned so that `bun run build` proves a deployable artifact. With `adapter-auto` the build
-succeeded while adapting to nothing: it exited 0, printed "Could not detect a supported
-production environment", and emitted no `build/` directory, so the build gate proved
-compilation but never deployability. Swap the adapter if the hosting target changes.
-
-**Android.** The same client bundle inside a Capacitor WebView. A WebView has no Node to
-run a server bundle, so `bun run build:capacitor` sets `VITE_CAPACITOR=1`, which switches
-the adapter to `@sveltejs/adapter-static` and turns off SSR in `src/routes/+layout.ts`.
-That build writes to `build-capacitor/` rather than `build/`, so the two targets can never
-overwrite each other. This is the only place the targets diverge: web rendering is
-unchanged.
-
-| Command                   | Does                                                      |
-| ------------------------- | --------------------------------------------------------- |
-| `bun run build`           | Web build (`adapter-node`) into `build/`.                 |
-| `bun run build:capacitor` | Static SPA build into `build-capacitor/`.                 |
-| `bun run android:sync`    | Static build, then copy it into the native project.       |
-| `bun run android:run`     | The above, then install and launch on a plugged-in phone. |
-
-The generated `android/` project is committed, because it carries edits that are not
-reproducible from config: the `CAMERA` permission that `src/lib/ui/camera.ts` needs, and
-the launcher icons. Its own `.gitignore` keeps the copied web assets and build outputs out.
-
-Building it needs a JDK and the Android SDK, neither of which the repository can pin:
-JDK 21 (the Android Gradle Plugin does not support 25 or later), SDK platform 36, and
-build-tools 36. Point `local.properties` at the SDK, or export `ANDROID_HOME`.
+inventory: what each area currently enforces, what is deliberately absent, and the gate and
+mutation-lane policy behind the numbers.
