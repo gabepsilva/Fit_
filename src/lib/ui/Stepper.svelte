@@ -27,9 +27,12 @@
 		class?: string | undefined;
 	} = $props();
 
+	// Both variants carry their fill at rest. Chrome that only arrives on hover
+	// never arrives at all on a touch screen, which is where every one of these
+	// is actually pressed.
 	const SIZES = {
 		sm: {
-			button: 'text-muted-foreground hover:bg-secondary size-8 rounded-lg',
+			button: 'bg-secondary text-muted-foreground size-8 rounded-lg active:scale-[0.96]',
 			icon: 'size-3.5',
 			readout: 'w-9'
 		},

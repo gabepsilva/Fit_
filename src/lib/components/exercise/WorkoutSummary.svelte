@@ -23,8 +23,16 @@
 	 */
 	const workout = $derived(tend.state.workouts.at(-1) ?? null);
 
+	/**
+	 * A session can be walked out of with nothing ticked. That is worth one kind
+	 * sentence, not a page of zeroes read back as though they were a result: no
+	 * stat tiles, no list of "not done", and no coaching note drawn from a
+	 * session that contributed nothing to it.
+	 */
+	const logged = $derived(workout !== null && workoutSetsDone(workout) > 0);
+
 	const stats = $derived(
-		workout
+		workout && logged
 			? [
 					{ key: 'Duration', value: formatDuration(elapsedSeconds(workout, Date.now())) },
 					{ key: 'Sets done', value: String(workoutSetsDone(workout)) },
@@ -33,24 +41,22 @@
 			: []
 	);
 
-	/**
-	 * A session can be walked out of with nothing ticked, and that is worth
-	 * saying out loud rather than answering with a page of zeroes.
-	 */
 	const line = $derived(
-		workout && workoutSetsDone(workout) === 0
-			? 'Nothing logged this time. Showing up counts; the numbers can wait.'
-			: 'Logged and filed. Nothing else to do.'
+		logged
+			? 'Logged and filed. Nothing else to do.'
+			: 'Nothing logged this time. Showing up counts; the numbers can wait.'
 	);
 
 	// The same four weeks the volume card on the progress screen looks over, so
 	// the note and the chart it points at cannot disagree.
 	const note = $derived(
-		summaryNote({
-			workouts: tend.state.workouts,
-			unit: tend.state.loadUnit,
-			sinceISO: addDaysISO(todayISO(), -28)
-		})
+		!logged
+			? ''
+			: summaryNote({
+					workouts: tend.state.workouts,
+					unit: tend.state.loadUnit,
+					sinceISO: addDaysISO(todayISO(), -28)
+				})
 	);
 
 	/**
@@ -70,29 +76,31 @@
 	<div class="flex flex-col gap-5 pb-10">
 		<PageHeader kicker="Session done" title={workout.routineName}>{line}</PageHeader>
 
-		<section class="flex gap-2">
-			{#each stats as stat (stat.key)}
-				<div class="bg-card flex-1 rounded-3xl px-3 py-3.5 shadow-border">
-					<p class="font-display tabular text-2xl">{stat.value}</p>
-					<p class="text-muted-foreground mt-1 text-xs tracking-wide uppercase">{stat.key}</p>
-				</div>
-			{/each}
-		</section>
-
-		<section class="bg-card rounded-3xl p-4 shadow-border">
-			<h2 class="font-display text-lg tracking-tight">What you did</h2>
-			<div class="mt-2.5 flex flex-col gap-2.5">
-				<!-- Keyed by position, not by name: a swap may rename one movement to
-				     what another already holds, and two rows keyed alike is a runtime
-				     error. A filed workout's list never reorders. -->
-				{#each workout.exercises as exercise, index (index)}
-					<div class="flex items-baseline gap-2.5">
-						<span class="min-w-0 flex-1 truncate text-sm">{exercise.name}</span>
-						<span class="tabular text-muted-foreground text-sm">{detail(exercise.sets)}</span>
+		{#if logged}
+			<section class="flex gap-2">
+				{#each stats as stat (stat.key)}
+					<div class="bg-card flex-1 rounded-3xl px-3 py-3.5 shadow-border">
+						<p class="font-display tabular text-2xl">{stat.value}</p>
+						<p class="text-muted-foreground mt-1 text-xs tracking-wide uppercase">{stat.key}</p>
 					</div>
 				{/each}
-			</div>
-		</section>
+			</section>
+
+			<section class="bg-card rounded-3xl p-4 shadow-border">
+				<h2 class="font-display text-lg tracking-tight">What you did</h2>
+				<div class="mt-2.5 flex flex-col gap-2.5">
+					<!-- Keyed by position, not by name: a swap may rename one movement to
+				     what another already holds, and two rows keyed alike is a runtime
+				     error. A filed workout's list never reorders. -->
+					{#each workout.exercises as exercise, index (index)}
+						<div class="flex items-baseline gap-2.5">
+							<span class="min-w-0 flex-1 truncate text-sm">{exercise.name}</span>
+							<span class="tabular text-muted-foreground text-sm">{detail(exercise.sets)}</span>
+						</div>
+					{/each}
+				</div>
+			</section>
+		{/if}
 
 		{#if note}
 			<section class="bg-accent text-primary rounded-3xl p-4 text-sm leading-relaxed">
@@ -101,9 +109,11 @@
 		{/if}
 
 		<div class="mt-2 flex flex-col gap-2">
-			<LinkButton variant="outline" size="lg" class="w-full" href={resolve('/exercise/progress')}>
-				See training progress
-			</LinkButton>
+			{#if logged}
+				<LinkButton variant="outline" size="lg" class="w-full" href={resolve('/exercise/progress')}>
+					See training progress
+				</LinkButton>
+			{/if}
 			<LinkButton size="lg" class="w-full" href={resolve('/exercise')}>Done</LinkButton>
 		</div>
 	</div>

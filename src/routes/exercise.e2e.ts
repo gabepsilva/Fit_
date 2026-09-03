@@ -200,9 +200,12 @@ test.describe('a session where nothing was ticked', () => {
 		await expect(
 			page.getByText('Nothing logged this time. Showing up counts; the numbers can wait.')
 		).toBeVisible();
-		// A page of zeroes is still shown honestly beside the sentence.
-		await expect(page.getByText('Sets done')).toBeVisible();
-		await expect(page.getByText('not done').first()).toBeVisible();
+		// The sentence and nothing else: a page of zeroes beside it would take the
+		// kindness back, and the only thing left to do is leave.
+		await expect(page.getByText('Sets done')).toHaveCount(0);
+		await expect(page.getByText('not done')).toHaveCount(0);
+		await expect(page.getByRole('link', { name: 'See training progress' })).toHaveCount(0);
+		await expect(page.getByRole('link', { name: 'Done' })).toBeVisible();
 	});
 
 	test('does not count as this week’s training', async ({ page }) => {

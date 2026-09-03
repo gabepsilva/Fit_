@@ -58,6 +58,16 @@ describe('Stepper', () => {
 		expect(document.querySelectorAll('button.size-8')).toHaveLength(2);
 	});
 
+	// Chrome that only arrives on hover never arrives on a touch screen, which
+	// left the most-tapped control in the app with no visible target at rest.
+	it('carries its fill at rest, at either size', async () => {
+		for (const size of ['sm', 'md'] as const) {
+			await render(Stepper, { props: { value: 2, label: 'reps', size, onstep: vi.fn() } });
+			expect(document.querySelectorAll('button.bg-secondary')).toHaveLength(2);
+			document.body.replaceChildren();
+		}
+	});
+
 	it('takes an extra class from whoever placed it', async () => {
 		await render(Stepper, {
 			props: { value: 8, label: 'reps', onstep: vi.fn(), class: 'ml-auto' }

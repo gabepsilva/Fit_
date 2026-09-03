@@ -6,6 +6,7 @@ describe('routine tones', () => {
 		const tones = [routineTone(0), routineTone(1), routineTone(2)];
 		expect(new Set(tones.map((t) => t.solid)).size).toBe(3);
 		expect(new Set(tones.map((t) => t.ink)).size).toBe(3);
+		expect(new Set(tones.map((t) => t.dot)).size).toBe(3);
 	});
 
 	it('gives every tone a filled, a washed and a bare form', () => {
@@ -14,6 +15,8 @@ describe('routine tones', () => {
 			expect(tone.solid.length).toBeGreaterThan(0);
 			expect(tone.tint.length).toBeGreaterThan(0);
 			expect(tone.ink.length).toBeGreaterThan(0);
+			// A dot is an empty span: a text color paints nothing on one.
+			expect(tone.dot.startsWith('border-')).toBe(true);
 		}
 	});
 
@@ -25,6 +28,7 @@ describe('routine tones', () => {
 	it('gives a rest week the quiet non-color rather than a fourth palette entry', () => {
 		expect(routineTone(-1)).toEqual(REST_TONE);
 		expect(REST_TONE.ink).toBe('text-muted-foreground');
+		expect(REST_TONE.dot.startsWith('border-')).toBe(true);
 		expect(routineTone(0)).not.toEqual(REST_TONE);
 	});
 });
