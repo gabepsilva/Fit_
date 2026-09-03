@@ -37,6 +37,14 @@ function logFood(
 	]);
 }
 
+/**
+ * Say whether the tab is on screen. `visibilityState` is read-only on a real
+ * document, so the test defines it rather than assigning to it.
+ */
+function setVisibility(state: DocumentVisibilityState) {
+	Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+}
+
 /** Put a known plan in place, so a swap has something predictable to move. */
 function setPlan(store: TendStore, plan: PlannedMeal[]) {
 	store.state.weekPlan = plan;
@@ -228,6 +236,16 @@ describe('onboarding', () => {
 			useSample: true
 		});
 		expect(store.profile?.name).toBe('Robin');
+	});
+
+	it('falls back to the sample profile name when none was entered', () => {
+		const store = freshStore();
+		store.completeOnboarding({
+			profile: emptyProfile({ name: '' }),
+			household: false,
+			useSample: true
+		});
+		expect(store.profile?.name).toBe('Alex');
 	});
 });
 
@@ -1384,6 +1402,32 @@ describe('saving a session without paying for it on every tap', () => {
 		store.toggleSet(1);
 		window.dispatchEvent(new Event('pagehide'));
 		expect(stored().activeWorkout?.exercises[0]?.sets[1]?.done).toBe(true);
+	});
+
+	// A phone backgrounds a tab rather than closing it, and may never come back.
+	it('writes what the last taps were holding when the tab goes into the background', () => {
+		const store = inSession();
+		store.toggleSet(1);
+		setVisibility('hidden');
+		window.dispatchEvent(new Event('visibilitychange'));
+		expect(stored().activeWorkout?.exercises[0]?.sets[1]?.done).toBe(true);
+	});
+
+	it('holds the save while the tab is still on screen', () => {
+		const store = inSession();
+		store.toggleSet(1);
+		setVisibility('visible');
+		window.dispatchEvent(new Event('visibilitychange'));
+		expect(stored().activeWorkout?.exercises[0]?.sets[1]?.done).toBe(false);
+	});
+
+	it('opens an added set at a default when the exercise has none to copy', () => {
+		const store = inSession();
+		const exercise = store.state.activeWorkout?.exercises[0];
+		if (!exercise) throw new Error('the session opened without an exercise');
+		exercise.sets = [];
+		store.addSet();
+		expect(exercise.sets).toEqual([{ reps: 10, load: 0, done: false }]);
 	});
 
 	it('comes back to a burst that was never flushed by hand', async () => {
