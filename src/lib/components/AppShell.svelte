@@ -15,6 +15,17 @@
 
 	let { children }: { children: Snippet } = $props();
 
+	/**
+	 * How far below the top of the screen a toast sits.
+	 *
+	 * Enough to clear `TopBar`, which is `sticky top-0`: its own height, the
+	 * safe area it pads for, and a gap. Without it a toast covers the three
+	 * buttons that bar exists for — `Log food` among them — for as long as it
+	 * is up. Onboarding renders without that bar, so there a toast simply
+	 * begins a little lower down.
+	 */
+	const TOAST_OFFSET = { top: 'calc(3.5rem + env(safe-area-inset-top) + 0.5rem)' };
+
 	let menuOpen = $state(false);
 
 	// The store reads `localStorage`, so restoring it has to wait for the client.
@@ -154,7 +165,15 @@
 			navigation is what swaps the branch above. A toaster inside the branch
 			was unmounted mid-announcement and took the message with it, so the
 			sentence confirming the sign-in never arrived.
+
+			Top rather than svelte-sonner's default corner, because the bottom of
+			the screen is where this application puts the button it is asking you
+			to press. `Onboarding` pins its actions there with `sticky bottom-0`,
+			and a toast lands on `Continue` every time — on a phone the toaster is
+			full width, so the corner it nominally sits in means nothing. Signing
+			in is precisely when that happens: the toast and the first screen of
+			onboarding arrive together.
 		-->
-		<Toaster />
+		<Toaster position="top-center" offset={TOAST_OFFSET} mobileOffset={TOAST_OFFSET} />
 	</div>
 {/if}
