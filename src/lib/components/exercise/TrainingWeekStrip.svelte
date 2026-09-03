@@ -97,7 +97,7 @@
 							: day.isToday
 								? 'bg-primary-foreground/50'
 								: day.letter
-									? planned.tone.ink
+									? ['border-[1.5px]', planned.tone.dot]
 									: 'bg-border'
 					)}
 				></span>

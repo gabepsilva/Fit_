@@ -77,6 +77,24 @@ describe('TrainingWeekStrip', () => {
 		expect(page.getByText('·', { exact: true }).elements()).toHaveLength(7);
 	});
 
+	// The dot carried a text color, which paints nothing on an empty span, so a
+	// planned day drew a blank where the other two states drew a mark.
+	it('draws the dot on a planned day that has not been trained yet', async () => {
+		await render(TrainingWeekStrip, { props: { ...base } });
+		expect(markers('border-primary')).toHaveLength(3);
+	});
+
+	// Outline for planned, filled for done. The two cannot be told apart by
+	// strength of the same color — the tones are not all dark enough to survive
+	// being washed out, so shape carries it.
+	it('tells a planned day apart from one already trained', async () => {
+		await render(TrainingWeekStrip, {
+			props: { ...base, today: WEDNESDAY, workouts: [finished(MONDAY)] }
+		});
+		expect(markers('bg-primary')).toHaveLength(1);
+		expect(markers('border-primary')).toHaveLength(1);
+	});
+
 	it('fills in a day earlier in the week that was trained', async () => {
 		await render(TrainingWeekStrip, {
 			props: { ...base, today: WEDNESDAY, workouts: [finished(MONDAY)] }

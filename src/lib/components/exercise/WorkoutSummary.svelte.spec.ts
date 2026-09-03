@@ -128,9 +128,13 @@ describe('WorkoutSummary', () => {
 	it('reads an exercise with no sets at all back the same way', async () => {
 		fileSession();
 		const filed = tend.state.workouts.at(-1);
-		if (filed) filed.exercises = [{ name: 'Pull-up', group: 'Back', note: '', sets: [] }];
+		// Beside the movement that did happen: the read-back only appears at all
+		// once something was ticked.
+		filed?.exercises.push({ name: 'Pull-up', group: 'Back', note: '', sets: [] });
 		await render(WorkoutSummary);
-		await expect.element(page.getByText('not done')).toBeInTheDocument();
+		await expect.element(page.getByText('Pull-up')).toBeInTheDocument();
+		// Its own row, beside the movement that was reached but not ticked.
+		expect(page.getByText('not done').elements()).toHaveLength(2);
 	});
 
 	// A swap renames the movement in place, so a session that swapped exercise 2
@@ -161,10 +165,32 @@ describe('WorkoutSummary', () => {
 		await expect
 			.element(page.getByText('Nothing logged this time. Showing up counts; the numbers can wait.'))
 			.toBeInTheDocument();
-		await expect.element(page.getByText('0 kg')).toBeInTheDocument();
 	});
 
+	// The kind sentence and a page of zeroes under it would contradict each
+	// other, and the zeroes are the half that is not worth saying.
+	it('reads nothing back after a session that logged nothing', async () => {
+		fileEmptySession();
+		await render(WorkoutSummary);
+		expect(page.getByText('0 kg').elements()).toHaveLength(0);
+		expect(page.getByText('Sets done').elements()).toHaveLength(0);
+		expect(page.getByText('What you did').elements()).toHaveLength(0);
+		expect(page.getByText('not done').elements()).toHaveLength(0);
+	});
+
+	// Nothing was logged, so there is nothing to go and look at; the way out is
+	// the only thing left to offer.
+	it('offers only the way out after a session that logged nothing', async () => {
+		fileEmptySession();
+		await render(WorkoutSummary);
+		await expect.element(page.getByRole('link', { name: 'Done' })).toBeInTheDocument();
+		expect(page.getByRole('link', { name: 'See training progress' }).elements()).toHaveLength(0);
+	});
+
+	// Weeks of training sit behind this one, so the note has plenty to say — it
+	// just must not say it over a session that contributed nothing to it.
 	it('has no take-away to offer after a session that logged nothing', async () => {
+		fileTwoWeeksOfPressing();
 		fileEmptySession();
 		await render(WorkoutSummary);
 		expect(page.getByText(/thin part of the plan/).elements()).toHaveLength(0);
