@@ -9,16 +9,13 @@ import {
 } from '$lib/domain/exercises';
 import { seedTrainingPlan } from '$lib/domain/training-plan';
 import { FOOD_BY_ID, scaleFood } from '$lib/domain/foods';
-import { emptyProfile, isGlp1 } from '$lib/domain/profile';
-import { recipeFits, RECIPES } from '$lib/domain/recipes';
+import { emptyProfile } from '$lib/domain/profile';
 import type {
 	Injection,
 	LoadUnit,
 	LogItem,
-	PlannedMeal,
 	PlannedMealSlot,
 	Profile,
-	Restriction,
 	Routine,
 	TendState,
 	WeightEntry,
@@ -28,11 +25,11 @@ import {
 	DEFAULT_LOAD_UNIT,
 	DEFAULT_REST_SECONDS,
 	MAX_REST_SECONDS,
-	MIN_REST_SECONDS,
-	PLANNED_MEALS
+	MIN_REST_SECONDS
 } from '$lib/domain/types';
-import { addDaysISO, round1, startOfWeek, todayISO, uid } from '$lib/domain/utils';
+import { round1, todayISO, uid } from '$lib/domain/utils';
 import { currentExercise, workoutFromRoutine } from '$lib/domain/workout';
+import { buildWeekPlan, mealPool } from '$lib/domain/week-plan';
 
 export const STORAGE_KEY = 'tend.v1';
 
@@ -81,40 +78,6 @@ function rescale(item: LogItem, servings: number): LogItem {
 		};
 	}
 	return { ...item, servings, ...scaleFood(source, servings) };
-}
-
-/**
- * Choose one recipe for a slot, favouring the least-used option so a week does
- * not become the same three dinners. The day and meal decide which of the
- * equally-unused candidates it lands on, so a rebuild is repeatable. Falls
- * back to any recipe for that meal when the filtered pool has none.
- */
-function pickRecipe(
-	usable: typeof RECIPES,
-	meal: PlannedMealSlot,
-	dayIndex: number,
-	used: Record<string, number>
-) {
-	const offset = dayIndex * PLANNED_MEALS.length + PLANNED_MEALS.indexOf(meal);
-	const candidates = usable.filter((r) => r.meal === meal);
-	if (candidates.length) {
-		const fewest = Math.min(...candidates.map((r) => used[r.id] ?? 0));
-		const leastUsed = candidates.filter((r) => (used[r.id] ?? 0) === fewest);
-		return leastUsed[offset % leastUsed.length];
-	}
-	const byMeal = RECIPES.filter((r) => r.meal === meal);
-	return byMeal[dayIndex % Math.max(1, byMeal.length)] ?? usable[dayIndex % usable.length];
-}
-
-/** Union of every household member's restrictions, so one plan suits everyone. */
-function householdRestrictions(profiles: Profile[]): Restriction[] {
-	const out: Restriction[] = [];
-	for (const p of profiles) {
-		for (const r of p.restrictions) {
-			if (!out.includes(r)) out.push(r);
-		}
-	}
-	return out;
 }
 
 /**
@@ -328,44 +291,15 @@ export class TendStore {
 	// -- plan ----------------------------------------------------------------
 
 	generatePlan() {
-		const restrictions = householdRestrictions(this.state.profiles);
-		// GLP-1 appetite suppression makes protein the thing at risk, so the plan
-		// treats it as a household-wide constraint.
-		const anyGlp1 = this.state.profiles.some(isGlp1);
-		if (anyGlp1 && !restrictions.includes('high-protein')) restrictions.push('high-protein');
-
-		// An over-constrained household would otherwise get an empty week; a plan
-		// that bends a restriction still beats no plan at all.
-		const pool = RECIPES.filter((r) => recipeFits(r, restrictions));
-		const usable = pool.length ? pool : RECIPES;
-
-		const start = startOfWeek(todayISO());
-		const used: Record<string, number> = {};
-		const plan: PlannedMeal[] = [];
-		const forProfileIds = this.state.profiles.map((p) => p.id);
-
-		for (let d = 0; d < 7; d++) {
-			const date = addDaysISO(start, d);
-			for (const meal of PLANNED_MEALS) {
-				const pick = pickRecipe(usable, meal, d, used);
-				// A catalog with no recipe at all for this meal leaves the slot empty
-				// rather than crashing the week.
-				if (!pick) continue;
-				used[pick.id] = (used[pick.id] ?? 0) + 1;
-				plan.push({ date, meal, recipeId: pick.id, forProfileIds });
-			}
-		}
-		this.state.weekPlan = plan;
+		this.state.weekPlan = buildWeekPlan({ profiles: this.state.profiles, today: todayISO() });
 		this.persist();
 	}
 
 	swapPlanned(date: string, meal: PlannedMealSlot) {
 		const current = this.state.weekPlan.find((p) => p.date === date && p.meal === meal);
-		const restrictions = householdRestrictions(this.state.profiles);
-		const fits = RECIPES.filter((r) => r.meal === meal && recipeFits(r, restrictions));
+		const pool = mealPool(this.state.profiles, meal);
 		// Step to the next recipe in the pool rather than to its head: always
 		// taking the first fit would make Swap alternate between two dinners.
-		const pool = fits.length ? fits : RECIPES.filter((r) => r.meal === meal);
 		const pick = pool[(pool.findIndex((r) => r.id === current?.recipeId) + 1) % pool.length];
 		if (!pick || pick.id === current?.recipeId) return;
 		this.state.weekPlan = this.state.weekPlan.map((p) =>
