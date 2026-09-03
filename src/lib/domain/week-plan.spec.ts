@@ -66,6 +66,10 @@ describe('the pool for one meal', () => {
 		const vegan = person({ restrictions: ['vegan'] });
 		expect(mealPool([vegan], 'dinner').every((r) => recipeFits(r, ['vegan']))).toBe(true);
 	});
+
+	it('has nothing to offer from a catalog with no recipe for the meal', () => {
+		expect(mealPool([person()], 'dinner', [])).toEqual([]);
+	});
 });
 
 describe('picking one recipe', () => {
@@ -139,6 +143,17 @@ describe('building a week', () => {
 			today: MONDAY
 		});
 		expect(plan).toHaveLength(21);
+	});
+
+	it('leaves a slot empty rather than crashing on a catalog that cannot fill it', () => {
+		expect(buildWeekPlan({ profiles: [person()], today: MONDAY, catalog: [] })).toEqual([]);
+	});
+
+	it('fills the meals the catalog does cover and skips the rest', () => {
+		const dinners = RECIPES.filter((r) => r.meal === 'dinner');
+		const plan = buildWeekPlan({ profiles: [person()], today: MONDAY, catalog: dinners });
+		expect(plan).toHaveLength(7);
+		expect(plan.every((p) => p.meal === 'dinner')).toBe(true);
 	});
 
 	it('is repeatable for the same household and week', () => {

@@ -181,7 +181,9 @@ export class TendStore {
 
 	completeOnboarding(args: { profile: Profile; household: boolean; useSample: boolean }) {
 		const { profile, household, useSample } = args;
-		let profiles: Profile[];
+		// A non-empty tuple: onboarding always produces the person doing it, so the
+		// active profile below is a member rather than a maybe.
+		let profiles: [Profile, ...Profile[]];
 		if (useSample) {
 			const seeded = buildAlexProfile();
 			profiles = [
@@ -208,7 +210,7 @@ export class TendStore {
 		}
 		this.state.onboarded = true;
 		this.state.profiles = profiles;
-		this.state.activeProfileId = profiles[0]?.id ?? '';
+		this.state.activeProfileId = profiles[0].id;
 		this.state.weekPlan = [];
 		// `generatePlan` persists too; saying so here as well keeps onboarding
 		// from silently depending on that to be written down at all.
