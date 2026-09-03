@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * The offline page decides, on its own, whether to navigate somewhere the URL
@@ -126,6 +126,70 @@ function render(hostname: string, hash: string): Rendered {
 		reconnect: () => windowListeners.get('online')?.()
 	};
 }
+
+const SERVER_URL_VARIABLE = 'FIT_CAPACITOR_SERVER_URL';
+
+/**
+ * The Capacitor config as a build with a development server resolves it.
+ *
+ * Imported rather than described, because the page and the config hold one
+ * contract between them and nothing else checks it. The config decides where
+ * the error page is reached and what it is told; the page decides what it will
+ * believe. Restating either here would test the restatement.
+ */
+async function capacitorConfig(serverUrl: string) {
+	process.env[SERVER_URL_VARIABLE] = serverUrl;
+	vi.resetModules();
+	return (await import('../../capacitor.config')).default;
+}
+
+afterEach(() => {
+	delete process.env[SERVER_URL_VARIABLE];
+	vi.resetModules();
+});
+
+describe('the config and the page agree on how a retry is reached', () => {
+	it('hands the page the server URL, and the page follows it back', async () => {
+		const config = await capacitorConfig(SERVER);
+		const errorPath = config.server?.errorPath;
+		if (errorPath === undefined) throw new Error('the development shell set no errorPath.');
+		// Split the way Capacitor's `getErrorUrl` leaves it: the local server is
+		// asked for the path, and the fragment rides along to the page untouched.
+		const [path, fragment] = errorPath.split('#');
+		expect(path).toBe('server-offline.html');
+		const rendered = render('localhost', `#${fragment ?? ''}`);
+		rendered.press();
+		// Not an assertion about the encoding, which is the config's business, but
+		// about the round trip: what the config wrote, the page arrived at.
+		expect(rendered.navigated()).toBe(`${SERVER}/`);
+	});
+
+	it('encodes the server URL so that one fragment stays one fragment', async () => {
+		// A loopback URL cannot contain a `#` -- the config's own check forbids a
+		// path on one -- so the encoding looks redundant until the server is a
+		// real origin, which may carry one legitimately. Unencoded, that `#` ends
+		// the fragment early and the page navigates to a truncated address.
+		const config = await capacitorConfig('https://fit.example/#start');
+		expect(config.server?.errorPath?.split('#')).toHaveLength(2);
+	});
+
+	it('serves the app from the host the page is willing to trust', async () => {
+		// The page believes its fragment only on `localhost`, because that is the
+		// host Capacitor serves the app from. `server.hostname` can move it, and
+		// nothing about that change would look like it touched the error page --
+		// the retry button would simply stop being offered, silently and for the
+		// first time on someone's phone. It is a default, so it is absent here;
+		// setting it means updating the guard the page applies.
+		const config = await capacitorConfig(SERVER);
+		expect(config.server?.hostname).toBeUndefined();
+	});
+
+	it('points the error page at a file the build actually ships', async () => {
+		const config = await capacitorConfig(SERVER);
+		const [path] = (config.server?.errorPath ?? '').split('#');
+		expect(existsSync(new URL(`../../static/${path}`, import.meta.url))).toBe(true);
+	});
+});
 
 const HOSTILE = `#${encodeURIComponent('https://elsewhere.example')}`;
 const SERVER = 'http://localhost:5173';
