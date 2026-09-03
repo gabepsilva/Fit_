@@ -1,14 +1,46 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import { signIn, type AuthFailure } from '$lib/auth/api';
+	import { returnPath } from '$lib/components/auth/auth-routes';
 	import { placeFailure, waitWording, type FormProblem } from '$lib/auth/wording';
 	import { session } from '$lib/state/session.svelte';
 	import AuthField from '$lib/components/auth/AuthField.svelte';
 	import AuthNotice from '$lib/components/auth/AuthNotice.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import Button from '$lib/ui/Button.svelte';
+
+	/**
+	 * The page the gate turned away, or the front one when it sent nobody.
+	 *
+	 * The origin comes from the address this page was loaded at rather than from
+	 * a constant, because it is what `returnPath` measures the parameter against
+	 * and there is exactly one right answer for it: wherever this app is being
+	 * served from now.
+	 */
+	const target = $derived(
+		returnPath(page.url?.searchParams.get('next') ?? null, page.url?.origin ?? '')
+	);
+
+	/**
+	 * A session this device has but cannot see.
+	 *
+	 * The credential is an `HttpOnly` cookie, so a browser whose `localStorage`
+	 * was cleared — or a Capacitor build reinstalled over a live session — has no
+	 * record to show the gate and is sent here holding a perfectly good one. The
+	 * server is the only thing that can say so, and this is the one screen where
+	 * asking is worth a request: everywhere else the gate has already decided.
+	 */
+	onMount(() => {
+		void reconcile();
+	});
+
+	async function reconcile() {
+		if (session.signedIn || (await session.refresh())) await goto(target);
+	}
 
 	let username = $state('');
 	let password = $state('');
@@ -82,7 +114,7 @@
 		held = null;
 		session.begin(result.value);
 		toast(`Signed in as ${result.value.account.displayName}.`);
-		await goto(resolve('/'));
+		await goto(target);
 	}
 </script>
 
@@ -90,10 +122,10 @@
 	<title>Sign in · Fit_</title>
 </svelte:head>
 
-<div class="flex flex-col gap-6 pb-10">
-	<PageHeader kicker="Account" title="Sign in">
-		Your journal stays on this device either way. An account is what will let it follow you to
-		another one.
+<div class="flex w-full flex-col gap-6">
+	<PageHeader kicker="Fit_" title="Sign in">
+		Fit_ opens once you are signed in. Your journal is kept on this device, and the account is what
+		will let it follow you to another one.
 	</PageHeader>
 
 	<form class="flex flex-col gap-4" onsubmit={submit}>

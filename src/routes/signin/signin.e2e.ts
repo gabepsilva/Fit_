@@ -1,23 +1,16 @@
-import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { clearRegistrationThrottle } from '../../../tests/e2e-support';
+import { clearRegistrationThrottle, freshUsername } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
- * Signing in on a device that already has a journal. The account is added to
- * what is there rather than unlocking it, so every assertion below is about
- * the form and the drawer, never about a page that was gated.
+ * Signing in is how the app opens. The form is the first screen an
+ * unauthenticated visitor sees, so it is reached by asking for the app rather
+ * than by finding a link in a drawer that is itself behind the gate.
+ *
+ * The journal is still this device's. Signing in opens the app rather than
+ * fetching anything, which is why a device that already has one comes back to
+ * exactly the journal it had.
  */
-
-/**
- * A name no other run has used, for the same reason the sign-up flow needs
- * one: the preview server's database is a file that outlives the suite. The
- * throttle also counts failures per username, so a name of its own keeps a
- * test that fails a sign-in on purpose from locking out the next one.
- */
-function freshUsername(): string {
-	return `e2e-${randomUUID().slice(0, 13)}`;
-}
 
 const PASSWORD = 'salt-and-pepper-mill';
 const DISPLAY_NAME = 'Robin';
@@ -50,14 +43,27 @@ async function axeViolations(page: Page) {
 	return results.violations;
 }
 
-/** Onboard, then reach the form the way the drawer offers it. */
-async function reachSignIn(page: Page) {
-	await page.goto('/');
+/**
+ * Ask for the app, and be handed the form. No link is clicked to get here:
+ * there is no screen with a link on it before this one.
+ */
+async function reachSignIn(page: Page, path = '/') {
+	await page.goto(path);
+	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+}
+
+/** Take the sample journal, so there is something on the device to come back to. */
+async function openSampleJournal(page: Page) {
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Open the sample journal' }).click();
+	await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+}
+
+/** End the session from the drawer, which is the only place that offers it. */
+async function signOut(page: Page) {
 	await page.getByRole('button', { name: 'Open menu' }).click();
-	await page.getByRole('link', { name: 'Sign in' }).click();
+	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
 }
 
@@ -75,7 +81,7 @@ test.describe('the sign-in form', () => {
 	});
 
 	test('says what an account is for, and offers to create one', async ({ page }) => {
-		await expect(page.getByText('Your journal stays on this device either way.')).toBeVisible();
+		await expect(page.getByText('Fit_ opens once you are signed in.')).toBeVisible();
 		await expect(page.getByRole('link', { name: 'Create one' })).toBeVisible();
 	});
 
@@ -112,21 +118,40 @@ test.describe('with an account already registered', () => {
 		await reachSignIn(page);
 	});
 
-	test('signs in and comes back to the journal it left', async ({ page }) => {
+	test('signs in and opens the app', async ({ page }) => {
 		await attempt(page, username, PASSWORD);
 
 		await expect(page.getByText(`Signed in as ${DISPLAY_NAME}.`)).toBeVisible();
-		await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+		// This device has no journal yet, so what it opens on is the first run.
+		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
+	});
 
+	test('names the account and the household in the drawer', async ({ page }) => {
+		await attempt(page, username, PASSWORD);
+		await openSampleJournal(page);
 		await page.getByRole('button', { name: 'Open menu' }).click();
 		await expect(page.getByText(`@${username} · Kitchen`)).toBeVisible();
 	});
 
 	test('leaves the journal exactly where it was', async ({ page }) => {
 		await attempt(page, username, PASSWORD);
-		// The sample journal is still the one on screen: an account is added to a
-		// journal here, it does not fetch one.
+		await openSampleJournal(page);
+		await signOut(page);
+
+		// Signing out closes the app; it does not empty the device. The same
+		// journal is behind the form, waiting for the same account.
+		await attempt(page, username, PASSWORD);
 		await expect(page.getByRole('heading', { name: 'breakfast' })).toBeVisible();
+	});
+
+	test('returns to the destination it turned away', async ({ page }) => {
+		await attempt(page, username, PASSWORD);
+		await openSampleJournal(page);
+		await signOut(page);
+
+		await reachSignIn(page, '/progress');
+		await attempt(page, username, PASSWORD);
+		await expect(page.getByRole('heading', { name: 'Progress', level: 1 })).toBeVisible();
 	});
 
 	test('says the same thing to a wrong password as to a wrong name', async ({ page }) => {
@@ -137,12 +162,12 @@ test.describe('with an account already registered', () => {
 		// rejection rather than a form that has stopped submitting.
 		await page.getByLabel('Password').fill(PASSWORD);
 		await page.getByRole('button', { name: 'Sign in' }).click();
-		await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 	});
 
 	test('has no detectable accessibility violations once signed in', async ({ page }) => {
 		await attempt(page, username, PASSWORD);
-		await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+		await openSampleJournal(page);
 		await page.getByRole('button', { name: 'Open menu' }).click();
 		await expect(page.getByRole('dialog')).toBeVisible();
 		expect(await axeViolations(page)).toEqual([]);

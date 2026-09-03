@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { expect, type Page } from '@playwright/test';
 import { E2E_DATABASE_PATH } from '../playwright.config';
 
 /**
@@ -49,4 +51,80 @@ export function clearRegistrationThrottle(): void {
 	} finally {
 		database.close();
 	}
+}
+
+/**
+ * Where the browser keeps what the server last told it about its session.
+ *
+ * Spelled out rather than imported from `state/session.svelte.ts`: that module
+ * is compiled Svelte and this file runs in plain Node under the Playwright
+ * runner. A spec beside that module asserts the same string, so a rename cannot
+ * pass silently.
+ */
+const SESSION_STORAGE_KEY = 'fit.session.v1';
+
+const PASSWORD = 'salt-and-pepper-mill';
+
+/**
+ * A name no other run has used.
+ *
+ * The database behind the preview server is a file that survives the suite, so
+ * a fixed name would pass once and then meet its own leftover row; a random one
+ * would make the failure intermittent instead of impossible. A UUID is neither
+ * — it is unique by construction, and its hex and hyphens are inside the
+ * `. _ -` the server accepts.
+ *
+ * The sign-in throttle also counts failures per username, so a name of its own
+ * keeps a test that fails a sign-in on purpose from locking out the next one.
+ */
+export function freshUsername(): string {
+	return `e2e-${randomUUID().slice(0, 13)}`;
+}
+
+/**
+ * Get past the gate, so a suite about something else can start where it means to.
+ *
+ * Registration goes through the endpoint rather than the form, for the reason a
+ * seeded account always does: a second flow inside the setup would make every
+ * failure below ambiguous. `page.request` shares the context's cookie jar, so
+ * the session cookie the endpoint sets is the one the page then sends.
+ *
+ * The record in `localStorage` is the other half. The credential is `HttpOnly`,
+ * so the shell cannot read it and decides what to draw from that record alone —
+ * without it the page would be gated while holding a perfectly good session.
+ * `addInitScript` writes it before any document script runs, which is what keeps
+ * the sign-in form from appearing for a frame first.
+ *
+ * The `origin` header is the one thing an API context has to say for itself:
+ * `hooks.server.ts` refuses an unsafe request that does not declare where it
+ * came from, because a browser always declares it.
+ */
+export async function signInThroughApi(
+	page: Page,
+	baseURL: string,
+	username = freshUsername()
+): Promise<string> {
+	const response = await page.request.post('/api/accounts', {
+		headers: { origin: new URL(baseURL).origin },
+		data: { username, displayName: 'Robin', password: PASSWORD, householdName: 'Kitchen' }
+	});
+	expect(response.status()).toBe(201);
+	const record = JSON.stringify(await response.json());
+	// Seeded once for the context, not on every document.
+	//
+	// `addInitScript` runs before the scripts of *each* page load, so writing the
+	// record unconditionally would put it back after any reload — including one
+	// that follows a sign-out through the drawer, which resurrects the session
+	// the test had just ended and fails it somewhere that looks unrelated. The
+	// flag in `sessionStorage` survives reloads within the tab and nothing else,
+	// so the seed happens on the first document and never again.
+	await page.addInitScript(
+		([key, value, flag]) => {
+			if (globalThis.sessionStorage.getItem(flag ?? '') !== null) return;
+			globalThis.sessionStorage.setItem(flag ?? '', '1');
+			globalThis.localStorage.setItem(key ?? '', value ?? '');
+		},
+		[SESSION_STORAGE_KEY, record, 'fit.e2e.seeded']
+	);
+	return username;
 }

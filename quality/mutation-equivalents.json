@@ -408,15 +408,15 @@
 			"location": {
 				"end": {
 					"column": 11,
-					"line": 101
+					"line": 109
 				},
 				"start": {
 					"column": 7,
-					"line": 101
+					"line": 109
 				}
 			},
-			"sourceHash": "3eee06a4418f16c1f54783867035c7f32c5a9da28732cc71d46bb661edd3afd3",
-			"fingerprint": "78db7ddf2d2a3577f9d7e2cbb48d916cca709777fcad148124a574e973ff5d3b",
+			"sourceHash": "4912423565da42d5df39c9e6569dbf32ec88fc6513f90120779026e50e97f33a",
+			"fingerprint": "3bb06c683a23c192a0c9f100484bf3a246a8b449b773d3114a37144ea91ea062",
 			"classification": "equivalent",
 			"rationale": "The guard is a short circuit, not a decision. Without it an absent record reaches `JSON.parse`, where `null`, `undefined` and `‘’` either parse to a value `isSession` rejects or throw into the catch beside it — every path returns the same `null`, and nothing is written.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"

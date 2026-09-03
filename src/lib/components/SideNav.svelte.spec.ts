@@ -84,8 +84,12 @@ describe('SideNav', () => {
 	});
 
 	it('carries the account block, which is where signing out lives', async () => {
+		// The drawer is inside the gate, so there is always somebody signed in to
+		// name here: a visitor without a session never reaches a screen with a
+		// drawer on it.
+		session.begin(SESSION);
 		await render(SideNav, { props: { open: true, pathname: '/' } });
-		await expect.element(page.getByRole('link', { name: 'Sign in' })).toBeInTheDocument();
+		await expect.element(page.getByText('@robin · Home')).toBeInTheDocument();
 	});
 
 	it('offers the sign-out to someone who is signed in', async () => {
