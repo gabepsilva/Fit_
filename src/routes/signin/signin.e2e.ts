@@ -145,6 +145,25 @@ test.describe('with an account already registered', () => {
 		await expect(page.getByRole('heading', { name: 'Progress', level: 1 })).toBeVisible();
 	});
 
+	/**
+	 * The regression the toaster's placement exists for.
+	 *
+	 * `AccountMenu` raises this after `session.forget()`, which has already
+	 * swapped the branch that menu was rendered in — so a toaster mounted
+	 * inside that branch is unmounted mid-announcement and the sentence never
+	 * arrives. Signing in used to cover this by announcing itself over the app
+	 * it opened; it no longer says anything, and this is the case that is left.
+	 */
+	test('still says the session ended, after the screen has already changed', async ({ page }) => {
+		await attempt(page, username, PASSWORD);
+		await openSampleJournal(page);
+		await page.getByRole('button', { name: 'Open menu' }).click();
+		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+
+		await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+		await expect(page.getByText('Signed out.')).toBeVisible();
+	});
+
 	test('says the same thing to a wrong password as to a wrong name', async ({ page }) => {
 		await attempt(page, username, 'not-the-password');
 		await expect(page.getByRole('alert')).toHaveText('That username and password don’t match.');
