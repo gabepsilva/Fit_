@@ -1,10 +1,6 @@
 #!/usr/bin/env python
-"""Exercise the built database the way the application would.
-
-Three access patterns cover essentially everything a food logger does: scan a
-barcode, search by name, and scale a food to a serving. If those are fast and
-return sensible rows against the shipped artifact, the database is usable.
-"""
+"""Exercise the built database the way the app does: barcode scan, name search,
+and serving scaling, against the shipped artifact."""
 
 from __future__ import annotations
 
@@ -33,8 +29,7 @@ def main() -> int:
     db = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     db.row_factory = sqlite3.Row
 
-    # 1. Barcode scan — the single most common action, and the one that has to
-    #    feel instant. Nothing to disambiguate: a GTIN resolves to one food.
+    # 1. Barcode scan: a GTIN resolves to exactly one food.
     for gtin in ("00016000275867", "00028400090971", "0000110003908"):
         padded = gtin.zfill(14)
         rows = timed(db, f"barcode {padded}", f"""
@@ -48,8 +43,7 @@ def main() -> int:
             print(f"      {r['license']} · quality {r['quality']} · "
                   f"{r['n_distinct_sources']} source(s) · kcal spread {r['kcal_spread']}")
 
-    # 2. Text search — FTS5 over name, brand and the aliases that came from the
-    #    duplicate records. Ranked by quality so the good rows surface first.
+    # 2. Text search: FTS5 over name, brand and aliases, ranked by quality.
     for query in ("greek yogurt", "cheerios", "chicken breast raw", "clif bar"):
         rows = timed(db, f"search {query!r}", f"""
             SELECT f.name, f.brand, f.kind, f.region, f.quality, f.license, f.{MACROS.replace(', ', ', f.')}
@@ -63,8 +57,7 @@ def main() -> int:
                   f"{(r['brand'] or '-')[:16]:<16} {r['kcal']:>6.0f} kcal  "
                   f"{r['kind']}/{r['region']}")
 
-    # 3. Serving scaling — everything is stored per 100 g, so the app multiplies.
-    #    This is the query behind "1 cup of X".
+    # 3. Serving scaling: everything is stored per 100 g, so the app multiplies.
     rows = timed(db, "servings for a high-quality generic food", f"""
         SELECT f.name, s.label, s.grams, f.kcal,
                round(f.kcal * s.grams / 100.0, 0) AS kcal_serving,
@@ -79,9 +72,7 @@ def main() -> int:
               f"{r['grams']:>7.1f} g -> {r['kcal_serving']:>5.0f} kcal, "
               f"{r['protein_serving']:>5.1f} g protein")
 
-    # 4. The cross-source disagreement signal. Where two independent sources
-    #    describe the same barcode and give different calories, that gap is a
-    #    direct measure of how much to trust the row.
+    # 4. Cross-source disagreement: kcal_spread is the trust signal.
     rows = timed(db, "widest cross-source calorie disagreements", f"""
         SELECT name, brand, kcal, kcal_spread, n_distinct_sources, value_source
         FROM food

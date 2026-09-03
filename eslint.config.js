@@ -12,9 +12,7 @@ const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
 
 export default defineConfig(
 	includeIgnoreFile(gitignorePath),
-	// The generated native project holds a copy of the built web assets, which
-	// are minified and not ours to lint. `android/.gitignore` hides them from
-	// git, but `includeIgnoreFile` above only reads the root one.
+	// Built web assets in the Android project; root `.gitignore` doesn't cover them.
 	{ ignores: ['android/**'] },
 	js.configs.recommended,
 	ts.configs.recommendedTypeChecked,
@@ -28,9 +26,7 @@ export default defineConfig(
 		},
 		languageOptions: {
 			globals: { ...globals.browser, ...globals.node },
-			// `capacitor.config.ts` is read by the Capacitor CLI rather than by
-			// the app, and `vitest-setup-client-node.ts` by the test runner, so
-			// no tsconfig owns either; both still get type-aware linting.
+			// No tsconfig owns these; `allowDefaultProject` still gets them type-aware linting.
 			parserOptions: {
 				projectService: {
 					allowDefaultProject: ['capacitor.config.ts', 'vitest-setup-client-node.ts']

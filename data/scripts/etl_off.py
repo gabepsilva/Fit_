@@ -1,17 +1,9 @@
 #!/usr/bin/env python
 """Flatten the Open Food Facts export into one row per product.
 
-OFF is crowd-sourced, so unlike USDA it is wide, sparse and frequently wrong.
-This stage does not try to fix it — it normalises the shape, records the signals
-that later let us judge a row (scan count, completeness, OFF's own data-quality
-error tags), and keeps everything. Judgement happens in the scoring stage where
-it can be tuned without re-reading 1.3 GB.
-
-Scope: every row is kept, but `region` marks whether the product is sold in the
-US or Canada. Two independent signals feed it — the `countries_tags` the
-contributors set, and the GS1 prefix of the barcode itself, since GS1 assigns
-000–139 to the US and Canada. Barcodes do not lie about their prefix; country
-tags are often just missing.
+Crowd-sourced, so wide, sparse and often wrong; keep every row and judge it in
+the scoring stage instead. Region comes from countries_tags, falling back to
+the GS1 prefix (000-139 is US/CA).
 """
 
 from __future__ import annotations

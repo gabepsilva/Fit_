@@ -67,14 +67,8 @@ export interface CaptureResult {
 }
 
 /**
- * Runs a command to completion, collecting stdout and stderr instead of failing
- * on a non-zero exit. Callers decide what a non-zero status means.
- */
-/**
- * Signal the child's whole process group. A gate step is a `bun run` wrapper
- * around the real tool, so killing the wrapper alone orphans the tool: an
- * abandoned ESLint keeps eight workers busy and still writes its report over
- * the next run's. `detached` above put the pair in their own group.
+ * Signal the child's whole process group: a gate step is a `bun run` wrapper
+ * around the real tool, and killing the wrapper alone orphans the tool.
  */
 function killTree(child: ChildProcess): void {
 	if (child.pid === undefined) return;
@@ -85,6 +79,7 @@ function killTree(child: ChildProcess): void {
 	}
 }
 
+/** Runs the command to completion without failing on a non-zero exit; callers decide what a failure means. */
 export async function captureStatus(
 	command: string,
 	args: string[],
@@ -105,8 +100,7 @@ export async function captureStatus(
 			cwd: options.cwd ?? projectRoot,
 			env: options.env ?? process.env,
 			stdio: ['ignore', 'pipe', 'pipe'],
-			// Own process group, so cancelling can signal the whole tree. Only when
-			// a caller asks for it: nothing else here needs detaching.
+			// Own process group so cancel can kill the whole tree; only when the caller asks.
 			detached: cancellable
 		});
 		let cancelled = false;

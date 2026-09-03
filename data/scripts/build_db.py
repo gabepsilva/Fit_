@@ -1,36 +1,9 @@
 #!/usr/bin/env python
 """Unify, score, deduplicate and emit the food database.
 
-The pipeline is deliberately three layers, and the middle one is where the value
-is:
-
-1. **source_food** — every published record, verbatim, one row each. USDA ships
-   about 4.3 rows per barcode because it keeps a new record every time a label
-   changes; Open Food Facts has its own duplicates. None of that is corrected
-   here. This layer is a faithful copy so any later decision can be re-derived
-   without re-downloading 1.8 GB.
-
-2. **clustering** — records that describe the same real-world food are grouped.
-   The join key is the barcode normalised to GTIN-14, because UPC-12, EAN-13 and
-   GTIN-14 are the same number with different amounts of leading zero, and
-   treating them as distinct is the single largest source of false duplicates.
-   Foods with no barcode — whole foods, restaurant dishes, CNF and USDA
-   reference entries — cluster on a normalised brand+name fingerprint instead.
-
-3. **food** — one row per cluster, with the numbers taken *wholesale* from a
-   single winning record rather than averaged across the cluster.
-
-That last point is the important one. Averaging protein from a USDA record and
-sodium from an Open Food Facts record produces a row that is a derivative of an
-ODbL database, which drags share-alike obligations across the entire table. It
-also produces a nutrition profile that never existed on any real package. So a
-cluster elects one value-bearing record, `food.value_ref` names it, and
-`food.license` is that record's license and nothing else.
-
-The duplicates are not thrown away. Every distinct name in a cluster becomes a
-search alias, which turns the duplication problem into better recall, and the
-disagreement between sources on the same barcode is retained as `kcal_spread` —
-a direct, measurable trust signal.
+A cluster's values are taken wholesale from one winning record, never averaged
+across sources: an average is a derivative of an ODbL row and would drag
+share-alike obligations across the whole table.
 """
 
 from __future__ import annotations
@@ -72,8 +45,7 @@ SOURCES = [
      "ODbL-1.0", 1, "https://world.openfoodfacts.org/data"),
 ]
 
-# Trust ranking. Lab-analysed reference data outranks a manufacturer label,
-# which outranks whatever a contributor typed into a phone.
+# Trust ranking: lab reference data > manufacturer label > crowd input.
 SOURCE_RANK = {
     "fdc_foundation": 100, "cnf": 95, "fdc_sr_legacy": 90, "fdc_survey": 85,
     "fdc_branded": 70, "fdc_other": 60, "off": 40,
@@ -162,12 +134,7 @@ def unify(con: duckdb.DuckDBPyConnection) -> None:
 
 
 def score(con: duckdb.DuckDBPyConnection) -> None:
-    """Attach a 0-100 usability score and a human-readable flag list.
-
-    The score exists to pick a winner inside a cluster and to rank search
-    results. The flags exist so a bad row can be explained rather than just
-    silently demoted.
-    """
+    """Attach a 0-100 usability score and a human-readable flag list."""
     log("scoring rows")
     con.execute(f"""
       CREATE TABLE scored AS
@@ -251,12 +218,8 @@ def cluster(con: duckdb.DuckDBPyConnection) -> None:
     dropped = con.execute("SELECT count(*) FROM keyed WHERE cluster_key IS NULL").fetchone()[0]
     log(f"  unclusterable (no barcode and no name): {dropped:,}")
 
-    # Elect the value-bearing record: quality first, then source trust, then the
-    # most recent label. Ties break on source_ref so the build is reproducible.
-    #
-    # The ranking runs over only the six columns the ORDER BY reads, not the
-    # whole row. Sorting 6.6 million wide rows spills many gigabytes to disk and
-    # dominates the build; sorting the keys and joining the winner back does not.
+    # Rank over only the columns the ORDER BY reads: sorting 6.6M wide rows
+    # spills gigabytes to disk and dominates the build.
     con.execute("""
       CREATE TABLE winner AS
       SELECT cluster_key, source_ref FROM (
@@ -280,7 +243,6 @@ def cluster(con: duckdb.DuckDBPyConnection) -> None:
       SELECT k.* FROM keyed k JOIN winner w USING (cluster_key, source_ref)
     """)
 
-    # Cluster-level agreement statistics, computed across every member.
     con.execute("""
       CREATE TABLE agreement AS
       SELECT cluster_key,
@@ -327,8 +289,6 @@ def resolve(con: duckdb.DuckDBPyConnection, min_quality: int) -> None:
     kept = con.execute("SELECT count(*) FROM food").fetchone()[0]
     log(f"  food rows: {kept:,}")
 
-    # Every distinct name across a cluster becomes an alias. The duplicates that
-    # were the problem become the recall that makes search work.
     log("building aliases from cluster members")
     con.execute("""
       CREATE TABLE food_alias AS
@@ -396,9 +356,8 @@ def export_sqlite(con: duckdb.DuckDBPyConnection, path: Path, where: str, label:
     con.execute("DETACH out")
 
     db = sqlite3.connect(path)
-    # The file is rebuilt from scratch on every run, so durability during the
-    # build is worth nothing; a crash means re-running, not losing data. These
-    # turn a multi-minute fsync-bound FTS load into a memory-bound one.
+    # Rebuilt from scratch on every run, so durability is worth nothing here;
+    # these turn a fsync-bound FTS load into a memory-bound one.
     db.executescript("""
       PRAGMA synchronous=OFF;
       PRAGMA journal_mode=MEMORY;
@@ -460,9 +419,8 @@ def main() -> int:
     con.execute(f"COPY food_serving TO '{CLEAN / 'food_serving.parquet'}' (FORMAT parquet, COMPRESSION zstd)")
     con.execute(f"COPY keyed TO '{CLEAN / 'source_food.parquet'}' (FORMAT parquet, COMPRESSION zstd)")
 
-    # Two artifacts, because they answer different questions. The full database
-    # is the server's; the core is small enough and permissive enough to ship
-    # inside the Android bundle without carrying share-alike obligations.
+    # Two artifacts: full is the server's; core is public-domain only so the
+    # Android bundle carries no share-alike obligations.
     export_sqlite(con, DB / "fit-food-full.sqlite", "TRUE", "full")
     export_sqlite(
         con, DB / "fit-food-core.sqlite",

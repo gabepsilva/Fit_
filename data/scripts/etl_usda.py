@@ -1,21 +1,9 @@
 #!/usr/bin/env python
 """Flatten USDA FoodData Central into one row per source record.
 
-FDC ships normalised: `food` holds the identity, `branded_food` the label data,
-and `food_nutrient` a 90-million-row long table of every measured value. This
-pivots the nutrients we care about into a wide row and writes Parquet to
-``data/interim/``. It resolves nothing and merges nothing — deduplication is a
-later stage, on purpose, so the source layer stays a faithful copy.
-
-Two subtleties the pivot has to get right:
-
-* **Energy has three competing nutrient ids.** 1008 is the value off the label,
-  2048 is computed with Atwater specific factors, 2047 with general factors. For
-  a branded product the label is the truth the user is holding; for a lab-analysed
-  foundation food there is no label, so the computed value is all there is. The
-  coalesce order below prefers the label and falls back to computed, then to kJ.
-* **Carbohydrate, sugar and fibre each have two ids**, one legacy and one used by
-  the branded pipeline. Taking only one silently drops half the corpus.
+No resolution or merging: the source layer stays a faithful copy. Energy has
+three competing nutrient ids, and carbs, sugar and fibre each have a legacy and
+a branded id; NUTRIENT_COLUMNS fixes the coalesce order for each.
 """
 
 from __future__ import annotations
