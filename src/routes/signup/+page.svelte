@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { register } from '$lib/auth/api';
@@ -51,7 +50,6 @@
 		}
 		problem = null;
 		session.begin(result.value);
-		toast(`Welcome, ${result.value.account.displayName}.`);
 		await goto(resolve('/'));
 	}
 </script>
