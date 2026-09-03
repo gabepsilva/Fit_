@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { clearRegistrationThrottle, freshUsername, toastCleared } from '../../../tests/e2e-support';
+import { clearRegistrationThrottle, freshUsername } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -37,12 +37,6 @@ async function reachSignIn(page: Page, path = '/') {
 
 /** Take the sample journal, so there is something on the device to come back to. */
 async function openSampleJournal(page: Page) {
-	// Signing in toasts, and the toast lands on the button below. Waited for by
-	// name before it is waited out, because this runs a moment after the submit
-	// that raises it and an empty toaster here would mean "not yet" rather than
-	// "gone". See `toastCleared`.
-	await expect(page.getByText(`Signed in as ${DISPLAY_NAME}.`)).toBeVisible();
-	await toastCleared(page);
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Open the sample journal' }).click();
@@ -102,7 +96,6 @@ test.describe('with an account already registered', () => {
 	test('signs in and opens the app', async ({ page }) => {
 		await attempt(page, username, PASSWORD);
 
-		await expect(page.getByText(`Signed in as ${DISPLAY_NAME}.`)).toBeVisible();
 		// This device has no journal yet, so what it opens on is the first run.
 		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 	});
@@ -132,6 +125,25 @@ test.describe('with an account already registered', () => {
 		await reachSignIn(page, '/progress');
 		await attempt(page, username, PASSWORD);
 		await expect(page.getByRole('heading', { name: 'Progress', level: 1 })).toBeVisible();
+	});
+
+	/**
+	 * The regression the toaster's placement exists for.
+	 *
+	 * `AccountMenu` raises this after `session.forget()`, which has already
+	 * swapped the branch that menu was rendered in — so a toaster mounted
+	 * inside that branch is unmounted mid-announcement and the sentence never
+	 * arrives. Signing in used to cover this by announcing itself over the app
+	 * it opened; it no longer says anything, and this is the case that is left.
+	 */
+	test('still says the session ended, after the screen has already changed', async ({ page }) => {
+		await attempt(page, username, PASSWORD);
+		await openSampleJournal(page);
+		await page.getByRole('button', { name: 'Open menu' }).click();
+		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+
+		await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+		await expect(page.getByText('Signed out.')).toBeVisible();
 	});
 
 	test('says the same thing to a wrong password as to a wrong name', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { clearRegistrationThrottle, freshUsername, toastCleared } from '../../../tests/e2e-support';
+import { clearRegistrationThrottle, freshUsername } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -53,16 +53,11 @@ test.describe('creating an account', () => {
 		const username = freshUsername();
 		await submitAccount(page, username);
 
-		await expect(page.getByText('Welcome, Robin.')).toBeVisible();
 		// A new account on a new device opens on the first run rather than on a
 		// journal: registering creates the account, not the journal.
 		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 
 		// And the drawer, once there is one, names who is signed in.
-		//
-		// The welcome toast lands on the button below, and was asserted above
-		// before it is waited out here. See `toastCleared`.
-		await toastCleared(page);
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await page.getByRole('button', { name: 'Open the sample journal' }).click();
