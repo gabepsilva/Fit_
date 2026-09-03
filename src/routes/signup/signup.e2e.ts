@@ -1,5 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { clearRegistrationThrottle, freshUsername } from '../../../tests/e2e-support';
+import {
+	clearRegistrationThrottle,
+	freshUsername,
+	toastsCleared
+} from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -67,6 +71,9 @@ test.describe('creating an account', () => {
 		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 
 		// And the drawer, once there is one, names who is signed in.
+		//
+		// The welcome toast lands on the button below. See `toastsCleared`.
+		await toastsCleared(page);
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await page.getByRole('button', { name: 'Open the sample journal' }).click();

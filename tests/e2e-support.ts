@@ -66,6 +66,24 @@ const SESSION_STORAGE_KEY = 'fit.session.v1';
 const PASSWORD = 'salt-and-pepper-mill';
 
 /**
+ * Wait for a toast to go before driving what is underneath it.
+ *
+ * `<Toaster />` takes svelte-sonner's default corner, which on a phone viewport
+ * is over the button onboarding puts at the bottom of the screen — Playwright's
+ * own log names the toast as the element that intercepted the click. Retrying
+ * does not wait it out, it keeps it alive: every retry moves the pointer onto
+ * the toaster, `mouseenter` sets `expanded`, and an expanded toast pauses its
+ * dismiss timer. So a four-second toast was still there when the test timed out
+ * thirty seconds later.
+ *
+ * Waiting first is what makes the click land on the thing it names. Nothing
+ * here hovers, so the countdown runs.
+ */
+export async function toastsCleared(page: Page): Promise<void> {
+	await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 10_000 });
+}
+
+/**
  * A name no other run has used.
  *
  * The database behind the preview server is a file that survives the suite, so
