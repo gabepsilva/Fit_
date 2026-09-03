@@ -250,8 +250,7 @@ function isDeclarationOnly(statement: ts.Statement): boolean {
 
 function hasMutationCandidate(source: string, file: string): boolean {
 	const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
-	// Fail closed: omission is safe only when every top-level statement is
-	// provably erased/type-only or an import/re-export Stryker cannot mutate.
+	// Fail closed: an omitted file is safe only when it has no statements Stryker can mutate.
 	return parsed.statements.some((statement) => !isDeclarationOnly(statement));
 }
 

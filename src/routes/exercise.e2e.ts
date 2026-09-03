@@ -4,11 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 test.beforeEach(clearRegistrationThrottle);
 
-/**
- * The exercise tab from the outside: pick a starting point, train, and see what
- * was filed. Onboarding seeds meals but no training, so every run starts from
- * the same empty rotation and the journey below is the one a new user takes.
- */
+/** Onboarding seeds meals but no training, so every run starts from an empty rotation. */
 async function onboard(page: Page, baseURL: string) {
 	// The tab is behind the gate like everything else, so the account comes first.
 	await signInThroughApi(page, baseURL);
@@ -21,11 +17,7 @@ async function onboard(page: Page, baseURL: string) {
 	await expect(page.getByRole('heading', { name: 'Nothing here yet', level: 1 })).toBeVisible();
 }
 
-/**
- * Every screen of the tab is scanned rather than only the two obvious ones: the
- * palette is reused at different tints across the planner, the sheets and the
- * session, and contrast is exactly what that quietly breaks.
- */
+/** Scan every screen, not just two — the palette is reused at different tints, and contrast is what breaks. */
 async function axeViolations(page: Page) {
 	const results = await new AxeBuilder({ page })
 		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -169,14 +161,10 @@ test.describe('once a routine is in the rotation', () => {
 });
 
 /**
- * Turning up and logging nothing. The session is filed rather than dropped, so
- * the summary has something to say about it — and it is still not a session the
- * week asked for, which is a different question answered on a different screen.
- *
- * The clock is pinned to a Tuesday so that question can be asked at all: the
- * today-card only reports what the week already holds on a rest day, and the
- * `Full body` template trains Mondays and Thursdays. Left to the real date the
- * assertion would be vacuous five days in seven.
+ * A session with no ticks is still filed, so the summary renders — but it is
+ * not counted as this week's training. The clock is pinned to a Tuesday, a rest
+ * day for the Mon/Thu `Full body` template, so "not counted" is the real
+ * assertion; on a training day it would be vacuous.
  */
 test.describe('a session where nothing was ticked', () => {
 	/** Tuesday, week 1 of 2026 — a rest day under the two-day template. */
@@ -214,15 +202,12 @@ test.describe('a session where nothing was ticked', () => {
 		await expect(page.getByText('Session done', { exact: true })).toBeVisible();
 		await page.getByRole('link', { name: 'Done', exact: true }).click();
 
-		// Home, on a rest day, with the week reported as empty: showing up earns
-		// the sentence on the summary, not a session on the count.
 		await expect(page.getByRole('heading', { name: 'Rest day', level: 2 })).toBeVisible();
 		await expect(page.getByText('The calendar has nothing scheduled.')).toBeVisible();
 		await expect(page.getByText(/done this week already/)).toHaveCount(0);
 		await expect(page.getByRole('link', { name: /trained$/ })).toHaveCount(0);
 
-		// The same screen, one ticked set later, does count it — so the absence
-		// above is the rule at work rather than a card that never counts at all.
+		// One set ticked later the same screen counts it — a rule at work, not a dead card.
 		await page.getByRole('button', { name: 'Start Full body' }).click();
 		await page.getByRole('button', { name: 'Set 1 done' }).click();
 		await page.getByRole('button', { name: 'Finish' }).click();

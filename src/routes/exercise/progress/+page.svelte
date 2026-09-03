@@ -12,9 +12,8 @@
 
 	const home = resolve('/exercise');
 	const workouts = $derived(tend.state.workouts);
-	// Not "is there a session on file": a session walked out of with nothing
-	// ticked is filed too, and it would clear this screen's empty state to draw
-	// four charts with nothing in them.
+	// A session walked out of with nothing ticked is still filed, so this checks
+	// for one that actually trained, not just one on file.
 	const trained = $derived(workouts.some(countsAsTraining));
 </script>
 

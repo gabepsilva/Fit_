@@ -10,11 +10,7 @@
 		type ButtonVariant
 	} from '$lib/ui/button-variants';
 
-	/**
-	 * A link that has to look like a button, because it navigates rather than
-	 * acts. Same three tokens as `Button` so the two cannot drift: a screen's
-	 * "Save" and its "Back" are the same control to a thumb.
-	 */
+	/** Shares `Button`'s tokens so the two controls cannot drift. */
 	let {
 		variant = 'default',
 		size = 'default',

@@ -3,17 +3,12 @@
 	import { ROUTINE_TEMPLATES } from '$lib/domain/exercise-catalog';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 
-	/**
-	 * The whole Exercise screen until there is a routine to show: a shelf of
-	 * starting points rather than an empty page with a plus button. Picking one
-	 * is a shortcut, not a commitment, which is what the copy says.
-	 */
 	let {
 		onpick,
 		onopen
 	}: {
 		onpick: (templateId: string) => void;
-		/** Leaves the templates behind and opens the routine builder instead. */
+		/** Opens the routine builder instead of a template. */
 		onopen: () => void;
 	} = $props();
 </script>

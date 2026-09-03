@@ -6,8 +6,8 @@
 	import type { PlanOption } from './plan-options';
 
 	/**
-	 * What one week of the year is for. A week names a single routine rather than
-	 * a day-by-day schedule, so the choice is one tap and the sheet closes on it.
+	 * A week names one routine, not a day-by-day schedule, so the pick is a
+	 * single tap.
 	 */
 	let {
 		open = $bindable(false),

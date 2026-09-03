@@ -46,8 +46,7 @@ describe('RestTimer', () => {
 		await expect.element(page.getByText('1:30')).toBeInTheDocument();
 	});
 
-	// Real time, because what is under test is a reading taken against the wall
-	// clock: the rest is deliberately short so the wait stays under three seconds.
+	// Real time on purpose: the reading is against the wall clock, and the wait stays under three seconds.
 	it('resumes what the pause was holding, even after outlasting the rest', async () => {
 		await render(RestTimer, { props: { startedAt: Date.now() - 1000, seconds: 3 } });
 		await page.getByRole('button', { name: 'Pause rest' }).click();
@@ -55,8 +54,7 @@ describe('RestTimer', () => {
 		await new Promise((resolve) => setTimeout(resolve, 2500));
 		await page.getByRole('button', { name: 'Start rest' }).click();
 		await expect.element(page.getByText('Resting')).toBeInTheDocument();
-		// Read once, not retried: a rest that wrongly restarted at its full length
-		// would tick down through the right reading a second later and pass anyway.
+		// Read once, not retried: a wrong restart at full length would tick through this reading and pass anyway.
 		expect(page.getByText('0:03').elements()).toHaveLength(0);
 		expect(page.getByText('0:02').elements()).toHaveLength(1);
 	});

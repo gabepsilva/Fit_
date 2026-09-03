@@ -44,9 +44,8 @@ describe('usernameProblem', () => {
 	});
 
 	it('rejects raw input beyond the normalization limit', () => {
-		// Trimming would make this valid, so this specifically proves that the raw
-		// allocation bound runs before normalization rather than being redundant
-		// with the normalized 32-character limit.
+		// Trimming would make this valid, so this proves the raw allocation bound
+		// runs before normalization, not redundantly with the normalized limit.
 		expect(usernameProblem(`${' '.repeat(126)}abc`)).toBe('too-long');
 	});
 

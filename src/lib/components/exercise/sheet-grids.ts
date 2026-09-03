@@ -1,12 +1,9 @@
 /**
- * The column tracks of the two tables in the exercise tab, each shared by a
- * header and the rows beneath it. A header that drifts from its rows stops
- * being a table and starts being four lists, and the drift is invisible until
- * a column is added.
+ * The two tables' column tracks, shared by each header and its rows so they
+ * cannot drift apart.
  *
- * These live in a module rather than in either component's `<script module>`
- * because the typed lint rules cannot see exports across `.svelte` files, and
- * an untyped class string is exactly what this is meant to prevent.
+ * A `.ts` module, not a `<script module>`, because the typed lint rules cannot
+ * see exports across `.svelte` files.
  */
 
 /** The routine sheet: movement, sets, reps, load. */

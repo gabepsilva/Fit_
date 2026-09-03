@@ -4,8 +4,7 @@ export type StoredTextProblem = {
 	code: 'too-long' | 'unsafe-characters';
 };
 
-// C0/C1 controls can alter logs and protocols; directional controls can make
-// an identity label render as different text without changing its stored form.
+// C0/C1 controls alter logs and protocols; directional controls change how a label renders.
 const UNSAFE_STORED_TEXT = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 
 export function storedTextProblem(

@@ -23,8 +23,7 @@
 		})
 	);
 
-	// A week the plan left empty has nothing to fall short of, so it reports what
-	// happened rather than a ratio against zero.
+	// A week the plan left empty has nothing to fall short of, so report the count, not a ratio.
 	const rows = $derived(
 		weeks.map((w) => ({
 			...w,
@@ -34,8 +33,6 @@
 		}))
 	);
 
-	// Weeks that asked for nothing and saw nothing draw a row of empty cells and
-	// say less than a sentence does.
 	const quiet = $derived(rows.every((r) => r.planned === 0 && r.done === 0));
 </script>
 

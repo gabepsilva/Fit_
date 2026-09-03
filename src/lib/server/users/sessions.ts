@@ -19,24 +19,18 @@ export const LAST_SEEN_UPDATE_INTERVAL_MS = 5 * 60 * 1000;
 const MAX_DEVICE_LABEL_LENGTH = 100;
 
 /**
- * Sessions are rows, not signed tokens.
- *
- * A JWT cannot be withdrawn before it expires, and this application is used on
- * a phone that gets lost — "sign out my other devices" has to mean something.
- * A row also survives the thing a refresh-token scheme cannot: a workout logged
- * in a basement gym with no signal, where nothing can be refreshed and the
- * client still has to work.
+ * Sessions are rows, not signed tokens: a JWT cannot be withdrawn before it
+ * expires, and a row still works offline where a refresh-token scheme cannot.
  */
 function hashToken(token: string): string {
-	// SHA-256, not scrypt. The token is 256 bits straight from the CSPRNG, so
-	// there is no low-entropy secret to slow an attacker down over; spending
-	// 350 ms on every authenticated request would buy exactly nothing.
+	// SHA-256, not scrypt: the token is 256 random bits, so there is no
+	// low-entropy secret to slow an attacker over, and 350 ms per request buys nothing.
 	return createHash('sha256').update(token).digest('hex');
 }
 
 /**
  * Start a session and return the token once. Only its hash is stored, so a
- * database that leaks does not hand over live sessions with it.
+ * leaked database does not hand over live sessions.
  */
 export function createSession(
 	db: DatabaseSync,
@@ -79,16 +73,14 @@ export function resolveSession(db: DatabaseSync, token: string, now = new Date()
 	if (!row) return null;
 	const expiresAt = text(row, 'expires_at');
 	const stamp = now.toISOString();
-	// Both sides are UTC ISO-8601 of the same width, where lexical order is
-	// chronological order — so this is a string comparison on purpose.
+	// Both sides are same-width UTC ISO-8601, so lexical order is chronological; string compare on purpose.
 	if (expiresAt <= stamp) {
-		// Deleted on sight rather than swept on a timer: the row is worthless and
-		// this is the one moment we are certainly holding it.
+		// Deleted on sight rather than swept on a timer: this is the one moment we certainly hold it.
 		db.prepare('delete from session where token_hash = ?').run(tokenHash);
 		return null;
 	}
-	// Keep authenticated reads read-only in the common case. The predicate makes
-	// the throttle atomic when several requests resolve the same session together.
+	// Keep reads read-only in the common case; the predicate makes the throttle
+	// atomic when several requests resolve the same session together.
 	const refreshBefore = new Date(now.getTime() - LAST_SEEN_UPDATE_INTERVAL_MS).toISOString();
 	if (text(row, 'last_seen_at') <= refreshBefore) {
 		db.prepare(

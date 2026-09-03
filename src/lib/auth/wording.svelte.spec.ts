@@ -139,9 +139,7 @@ describe('placeFailure', () => {
 
 	it('still says a username is taken when the server names the field too', () => {
 		// The endpoint answers `username-taken` with `field: 'username'`, so the
-		// field alone does not decide the branch: reading it first would send this
-		// through the rejected-input wording and lose the one sentence that says
-		// what actually happened.
+		// code, not the field, must decide the branch.
 		expect(placeFailure({ code: 'username-taken', field: 'username' })).toEqual({
 			field: 'username',
 			message: 'That username is taken.'

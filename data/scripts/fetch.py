@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 """Download raw nutrition sources, resumably, and record what arrived.
 
-Every byte this project ingests lands in ``data/raw/`` and gets an entry in
-``data/raw/MANIFEST.json``: url, size, sha256, and when it was fetched. Nothing
-downstream reads a file that is not in the manifest, so a rebuild can always be
-traced back to the exact bytes it came from.
+Every fetched file gets a MANIFEST.json entry (url, size, sha256, time);
+nothing downstream reads a file that is not in the manifest.
 
 Usage:
     fetch.py sources.json              # fetch everything not already complete

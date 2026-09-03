@@ -1,10 +1,6 @@
 import type { LibraryExercise, RoutineExercise } from '$lib/domain/types';
 
-/**
- * The movements the app knows about, and the three cues it can offer for each.
- * Data only: everything that reads or reshapes it lives in `exercises.ts`, the
- * same split the food catalog uses.
- */
+/** The movements the app knows about. Data only; the reshaping lives in `exercises.ts`. */
 export const EXERCISE_LIBRARY: readonly LibraryExercise[] = [
 	{ name: 'Bench Press', group: 'Chest' },
 	{ name: 'Incline Bench Press', group: 'Chest' },
@@ -36,9 +32,8 @@ export const EXERCISE_LIBRARY: readonly LibraryExercise[] = [
 ];
 
 /**
- * What to watch on the way down, for the movements where getting it wrong hurts.
- * A movement with nothing written for it falls back to `DEFAULT_FORM_CUES`
- * rather than showing an empty panel.
+ * Form cues per movement. A movement with none falls back to
+ * `DEFAULT_FORM_CUES` rather than showing an empty panel.
  */
 export const FORM_CUES: Readonly<Record<string, readonly string[]>> = {
 	'Bench Press': [
@@ -79,7 +74,7 @@ export const DEFAULT_FORM_CUES: readonly string[] = [
 	'Two seconds down, one second up.'
 ];
 
-/** A routine as a template ships it, before it has an id of its own. */
+/** A routine row as it appears within a template. */
 type TemplateRoutine = {
 	id: string;
 	name: string;
@@ -98,9 +93,8 @@ export type RoutineTemplate = {
 };
 
 /**
- * Somewhere to start on the first run. The loads are a beginner's opening
- * offer, not a prescription — every one of them is editable afterwards, which
- * is the point of showing them rather than asking for them up front.
+ * First-run starting points. The loads are a beginner's opening offer, not a
+ * prescription — every value is editable afterwards.
  */
 export const ROUTINE_TEMPLATES: readonly RoutineTemplate[] = [
 	{

@@ -1,15 +1,14 @@
 import type { Food, Micros, Provenance } from './types';
 import { ZERO_MICROS } from './types';
 
-// `aliases` is required: every entry declares one, and a silent default would
-// let a food slip in that is findable only by its exact name.
+// `aliases` is required on every entry, so a food can't slip in findable only by its exact name.
 function f(partial: Omit<Food, 'micros'> & { micros?: Partial<Micros> }): Food {
 	return { ...partial, micros: { ...ZERO_MICROS, ...partial.micros } };
 }
 
 /**
- * Seed catalog. Each row carries a single provenance so USDA (public domain)
- * and Open Food Facts (ODbL) never mix inside one entry.
+ * Seed catalog. Each row carries a single provenance so the USDA and Open Food
+ * Facts licenses never mix inside one entry.
  */
 export const FOODS: Food[] = [
 	f({

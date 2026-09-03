@@ -4,10 +4,8 @@ import path from 'node:path';
 import process from 'node:process';
 
 /**
- * A percentage threshold alone is a weakening gate: 5% of a small project is a
- * few lines, but 5% of a large one is hundreds. The percentage stays as a
- * ceiling; this adds an absolute clone ratchet that does not soften with growth.
- * Reads the report written by the preceding jscpd run.
+ * The percentage threshold weakens as the tree grows, so this adds an absolute
+ * clone ratchet on top. Reads the report written by the preceding jscpd run.
  */
 
 interface JscpdReport {

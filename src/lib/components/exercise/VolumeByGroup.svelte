@@ -5,8 +5,8 @@
 	import ProgressBar from '$lib/ui/ProgressBar.svelte';
 
 	/**
-	 * Where the last four weeks of sets went. Bars are drawn against the busiest
-	 * group rather than a target, because the point is the balance between them.
+	 * Bars are scaled to the busiest group, not a target, so the point is the
+	 * balance between groups.
 	 */
 	let { workouts }: { workouts: Workout[] } = $props();
 

@@ -6,14 +6,10 @@ import { tend } from '$lib/state/tend.svelte';
 import ProgressPage from './+page.svelte';
 
 /**
- * The one rule this screen owns: whether there is anything to chart at all.
- * A session can be walked out of with nothing ticked and is still filed, so
- * "are there any workouts?" is not the same question — four blank charts is a
- * worse answer than saying there is nothing yet.
- *
- * Named `page.svelte.spec.ts` rather than `+page.svelte.spec.ts` for the reason
- * given in `src/routes/exercise/page.svelte.spec.ts`: SvelteKit reserves the
- * `+` prefix inside a route directory.
+ * The one rule here: whether there is anything to chart. A session filed with
+ * nothing ticked must not clear the empty state into four blank charts. Named
+ * `page.svelte.spec.ts`, not `+page.svelte.spec.ts`, because SvelteKit reserves
+ * the `+` prefix in a route directory.
  */
 
 function filed(done: boolean): Workout {
@@ -37,9 +33,8 @@ function nothingYet() {
 }
 
 /**
- * One of the four charts, standing for all of them: its heading is drawn
- * whether or not it has anything in it, so its absence means the charts were
- * not reached rather than that this one had no data.
+ * One of the four charts, standing for all: its heading renders even with no
+ * data, so its absence means the charts were not reached, not that it was empty.
  */
 function charts() {
 	return page.getByRole('heading', { name: 'Volume by muscle group', level: 2 });
@@ -57,9 +52,8 @@ describe('the training progress screen', () => {
 		expect(charts().elements()).toHaveLength(0);
 	});
 
-	// The discriminating case: the session was filed, so a rule that read
-	// `workouts.length === 0` would clear the empty state and draw four charts
-	// with nothing in them.
+	// The discriminating case: the session was filed, so a rule keyed on
+	// `workouts.length === 0` would clear the empty state into four blank charts.
 	it('says so still when the only session filed logged nothing', async () => {
 		tend.state.workouts = [filed(false)];
 		await render(ProgressPage);

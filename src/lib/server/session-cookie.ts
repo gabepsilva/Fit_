@@ -1,16 +1,11 @@
 import type { Cookies } from '@sveltejs/kit';
 
 /**
- * The one place the session cookie is written, and the one place it is removed.
+ * The only place the session cookie is written and removed.
  *
- * Every attribute here is load-bearing, and a cookie set with a different set
- * of them somewhere else would be a second, weaker cookie of the same name that
- * the browser cannot tell apart. Sign-in, sign-out and session rotation all go
- * through these two functions for that reason.
- *
- * The Android build never sees any of this: it holds the same token and sends
- * it as `Authorization: Bearer`, which is why `request-auth.ts` gives an
- * explicit header precedence over an ambient cookie.
+ * Write and removal attributes must stay identical, or the browser keeps a
+ * second, weaker same-named cookie. The Android build never uses this: it
+ * sends the same token as `Authorization: Bearer`.
  */
 
 /** The cookie the web build carries its session token in. */
@@ -28,24 +23,18 @@ const COOKIE_PATH = '/';
 /**
  * `Lax`, not `Strict`.
  *
- * `Strict` withholds the cookie on a top-level navigation from anywhere else,
- * so following a link to a plan or opening a bookmark from a message would land
- * signed out and look like a lost session. `Lax` still withholds it from every
- * cross-site POST, and the state-changing requests it does not cover are the
- * ones the origin policy is there to refuse — the pairing that makes `Lax`
- * safe rather than merely convenient.
+ * `Strict` drops the cookie when a link from elsewhere opens the site, which
+ * looks like a lost session. `Lax` still withholds it on cross-site POSTs; the
+ * origin policy covers what it does not.
  */
 const SAME_SITE = 'lax' as const;
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /**
- * `Secure` everywhere except loopback HTTP.
- *
- * `vite dev` serves plain HTTP on localhost, where a `Secure` cookie is dropped
- * and nobody could sign in. Every other host gets `Secure` whatever its scheme,
- * so an accidental plain-HTTP deployment fails visibly at sign-in instead of
- * quietly handing session tokens to the network.
+ * `Secure` everywhere except loopback HTTP, where `vite dev` cannot serve TLS.
+ * A non-loopback host in plain HTTP still gets `Secure`, so a misconfigured
+ * deployment fails visibly at sign-in.
  */
 function isSecureContext(url: URL): boolean {
 	return url.protocol === 'https:' || !LOOPBACK_HOSTS.has(url.hostname);
@@ -54,8 +43,7 @@ function isSecureContext(url: URL): boolean {
 function cookieAttributes(url: URL, maxAge: number) {
 	return {
 		path: COOKIE_PATH,
-		// No route may read the token from script: an XSS then cannot exfiltrate
-		// the session, only ride it while the page is open.
+		// `HttpOnly`: an XSS cannot exfiltrate the token, only ride the session.
 		httpOnly: true,
 		secure: isSecureContext(url),
 		sameSite: SAME_SITE,
@@ -66,9 +54,8 @@ function cookieAttributes(url: URL, maxAge: number) {
 /**
  * Write the session cookie so it dies with the row behind it.
  *
- * `maxAge` is derived from the session's own expiry rather than being a second
- * lifetime that could outlast it, which would leave the browser sending a token
- * the server deleted months ago.
+ * `maxAge` is derived from the session's own expiry, so the cookie never
+ * outlives the row it carries.
  */
 export function setSessionCookie(
 	cookies: SessionCookieWriter,
@@ -84,9 +71,8 @@ export function setSessionCookie(
 /**
  * Remove the session cookie.
  *
- * The attributes have to match the ones it was written with: a browser matches
- * a removal on name, path and domain, so a `path` that differs leaves the
- * original cookie in place and signs nobody out.
+ * Attributes must match the write: the browser matches a removal on name,
+ * path and domain, and a mismatched `path` signs nobody out.
  */
 export function clearSessionCookie(cookies: SessionCookieWriter, url: URL): void {
 	cookies.delete(SESSION_COOKIE, cookieAttributes(url, 0));

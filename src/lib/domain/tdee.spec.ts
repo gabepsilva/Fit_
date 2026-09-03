@@ -44,10 +44,8 @@ function entry(date: string, foodId: string, servings: number, meal: Meal = 'lun
 }
 
 /**
- * An entry whose numbers are chosen here rather than read out of the catalog.
- * Totals and averages can then be checked against arithmetic done by hand,
- * and an edit to a food's nutrition can never quietly move the expectation.
- * One portion is 100 kcal and carries every micronutrient the day totals track.
+ * An entry whose numbers are set here, not read from the catalog, so the
+ * arithmetic is hand-checkable and a nutrition edit can't move the expectation.
  */
 function portions(date: string, count: number, meal: Meal = 'lunch'): LogItem {
 	return {
@@ -244,10 +242,8 @@ describe('loggedDatesSet', () => {
 
 describe('adaptiveTdee', () => {
 	/**
-	 * The reference history: fourteen days logged at 500 kcal, and four
-	 * weigh-ins five days apart falling exactly 0.1 kg a day. Every number
-	 * asserted below is arithmetic on those two facts, so a changed operator
-	 * anywhere in the fit has somewhere to show up.
+	 * Reference history: fourteen days at 500 kcal, four weigh-ins five days
+	 * apart at 0.1 kg a day; every number asserted below is arithmetic on those.
 	 */
 	function adaptiveProfile() {
 		return profileWith({

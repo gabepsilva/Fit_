@@ -16,11 +16,7 @@ function stubMediaDevices(value: unknown) {
 	Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value });
 }
 
-/**
- * A stream carrying real frames, so the viewfinder reports a size and the
- * shutter unlocks exactly as it would with a camera. The canvas is repainted on
- * a timer because a still canvas need not emit anything.
- */
+/** A still canvas emits no frames, so it repaints on a timer. */
 function paintingStream() {
 	const canvas = document.createElement('canvas');
 	canvas.width = 320;
@@ -74,10 +70,7 @@ async function pictureFile(width = 320, height = 240) {
 	return new File([blob], 'plate.png', { type: 'image/png' });
 }
 
-/**
- * Stand in for the file picker, which no test can drive: the browser opens it
- * outside the page. Everything after the choice is the component's own.
- */
+/** The browser opens the picker outside the page, so no test can drive it. */
 function choose(file: File) {
 	const input = document.querySelector('input[type="file"]');
 	if (!(input instanceof HTMLInputElement)) throw new Error('no file input was rendered');

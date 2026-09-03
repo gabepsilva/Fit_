@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DatabaseSync } from 'node:sqlite';
 import type { RequestEvent } from './$types';
 
-/** See `../accounts/server.spec.ts`: the wiring is the whole of a route file. */
 const database = { name: 'application database' } as unknown as DatabaseSync;
 const signIn = vi.fn(() => Promise.resolve(new Response(null, { status: 200 })));
 const signOutEverywhere = vi.fn(() => new Response(null, { status: 204 }));

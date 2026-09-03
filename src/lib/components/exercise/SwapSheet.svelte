@@ -3,9 +3,8 @@
 	import Sheet from '$lib/ui/Sheet.svelte';
 
 	/**
-	 * The machine is taken, or the shoulder disagrees. Offers the rest of the
-	 * same muscle group, so the session keeps its shape while one movement
-	 * changes.
+	 * Offers another movement from the same muscle group, so the session keeps
+	 * its shape while one movement changes.
 	 */
 	let {
 		open = $bindable(false),

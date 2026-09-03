@@ -1,15 +1,9 @@
 import { MUTATE_PATTERNS } from '../../quality/mutate-patterns.mjs';
 
 /**
- * `quality/mutate-patterns.mjs` is what Stryker is handed for a full run, and
- * the changed lanes have to select the same files before they can narrow to the
- * changed ones. That means matching the patterns here rather than restating
- * them, so a file excluded for the full lane cannot reappear in a changed one.
- *
- * The patterns use `**`, `*` and `{a,b}` and nothing else. A general glob engine
- * would be a dependency and a second dialect to keep in step with Stryker's;
- * anything outside that subset fails loudly rather than matching something
- * unintended.
+ * Patterns are matched here rather than restated, so a file excluded for the
+ * full lane cannot reappear in a changed one. Only `**`, `*` and `{a,b}` are
+ * supported; anything outside that subset fails loudly, not matches loosely.
  */
 function patternToRegExp(pattern: string): RegExp {
 	let source = '^';
@@ -50,14 +44,10 @@ const excludes = MUTATE_PATTERNS.filter((pattern) => pattern.startsWith('!')).ma
 );
 
 /**
- * Whether a repository-relative path is excluded from mutation.
- *
- * Only the exclusions are asked about outside the full lane, and deliberately.
- * Every lane hands Stryker an explicit file list, which replaces the include
- * globs outright — so those describe the default and the `!` entries are the
- * half that has to hold everywhere. Applying the includes to a changed lane
- * would silently narrow it to `src/lib`, dropping the routes and hooks it
- * mutates today.
+ * Whether a repository-relative path is excluded from mutation. Only the `!`
+ * exclusions hold everywhere: every lane hands Stryker an explicit file list,
+ * so the include globs describe only the default lane; applying them to a
+ * changed lane would silently narrow it to `src/lib`.
  */
 export function isExcludedFromMutation(file: string): boolean {
 	return excludes.some((pattern) => pattern.test(file));

@@ -7,9 +7,8 @@ export type PasswordProblem = 'too-short' | 'too-long';
 export type ScryptCost = { n: number; r: number; p: number };
 
 /**
- * OWASP's scrypt baseline. Passed explicitly rather than read from a global so
- * that tests, which hash on nearly every case, can run a cheap cost while the
- * server runs this one — roughly 350 ms per hash on a workstation.
+ * OWASP's scrypt baseline, roughly 350 ms per hash.
+ * Passed explicitly rather than read from a global so tests can run a cheaper cost.
  */
 export const OWASP_SCRYPT: ScryptCost = { n: 2 ** 17, r: 8, p: 1 };
 
@@ -23,11 +22,8 @@ const MAX_MEMORY = 512 * 1024 * 1024;
 const MAX_WORK = 2 ** 22;
 
 /**
- * The password is the only factor — no second factor, and with no email on file
- * no reset link either — so the floor sits above the NIST minimum of 8. There
- * are no composition rules, which NIST also advises against: a demand for one
- * capital, one digit and one symbol pushes people towards a short password
- * decorated to satisfy it, and away from a long one.
+ * The password is the only factor, so the floor sits above the NIST minimum of 8.
+ * No composition rules: they push people to a short password decorated to satisfy them.
  */
 const MIN_LENGTH = 10;
 
@@ -41,9 +37,8 @@ const MAX_R = 32;
 const MAX_P = 16;
 
 /**
- * The fixed-width grammar rejects a hostile database value without splitting
- * or allocating substrings proportional to its size. Canonical base64 is
- * checked after the match.
+ * The fixed-width grammar rejects a hostile database value without allocating
+ * substrings proportional to its size; canonical base64 is checked after the match.
  */
 const SERIALIZED_HASH =
 	/^scrypt\$([0-9]{1,6})\$([0-9]{1,2})\$([0-9]{1,2})\$([^$]{24})\$([^$]{44})$/;
@@ -83,10 +78,8 @@ function assertHashablePassword(password: unknown): asserts password is string {
 
 /**
  * A self-describing hash: `scrypt$n$r$p$salt$key`, both binary fields base64.
- *
- * The parameters travel with the hash so raising the cost — or moving to
- * argon2id, which would add a native dependency this build does not have — is a
- * new prefix and a rehash on next sign-in, never a migration over stored rows.
+ * Parameters travel with the hash, so raising the cost is a rehash on next
+ * sign-in, never a migration over stored rows.
  */
 export async function hashPassword(password: string, cost = OWASP_SCRYPT): Promise<string> {
 	assertHashablePassword(password);
@@ -116,8 +109,7 @@ function costFitsResources(cost: ScryptCost): boolean {
 	const { n, r, p } = cost;
 	const memory = 128 * n * r;
 	const work = n * r * p;
-	// `costShape` already bounds each integer tightly enough that neither product
-	// can approach Number.MAX_SAFE_INTEGER.
+	// `costShape` already bounds each integer; neither product can overflow a safe integer.
 	return memory < MAX_MEMORY && work <= MAX_WORK;
 }
 
@@ -135,8 +127,7 @@ function parseInteger(value: string): number | null {
 }
 
 function decodeCanonicalBase64(value: string, expectedBytes: number): Buffer | null {
-	// Buffer.from accepts whitespace, missing padding, and other non-canonical spellings.
-	// Stored credentials must have exactly one textual representation.
+	// `Buffer.from` accepts non-canonical spellings; a stored credential must have exactly one form.
 	const decoded = Buffer.from(value, 'base64');
 	if (decoded.length !== expectedBytes || decoded.toString('base64') !== value) return null;
 	return decoded;
@@ -184,11 +175,9 @@ function verificationWork(stored: string | null, target: ScryptCost): PasswordVe
 	if (current.n === target.n && current.r === target.r && current.p === target.p) {
 		return { verifyStored: true, deriveTarget: false, upgradeStored: false, derivations: 1 };
 	}
-	// Policy only ratchets upward. Requiring every parameter to be no greater
-	// than the target makes the resource bound explicit: an upgrade attempt can
-	// consume no more than two target-policy derivations in aggregate. A hash
-	// above the target on any axis is stronger or incomparable and is rejected
-	// without ever deriving at its database-controlled cost.
+	// Policy ratchets upward: every parameter must be no greater than the target,
+	// so an upgrade attempt spends at most two target derivations. A hash above the
+	// target on any axis is stronger or incomparable and is rejected without deriving.
 	if (current.n <= target.n && current.r <= target.r && current.p <= target.p) {
 		return { verifyStored: true, deriveTarget: true, upgradeStored: true, derivations: 2 };
 	}
@@ -229,9 +218,8 @@ export async function verifyPasswordAtPolicy(
 	const verification = work.verifyStored
 		? verifyPassword(password, stored as string)
 		: Promise.resolve(false);
-	// A valid submitted password produces the candidate that authentication can
-	// persist directly after successful legacy verification. Invalid creation
-	// input still receives target-policy timing work, but is never persisted.
+	// A valid submitted password produces the candidate authentication can persist
+	// after legacy verification; invalid input still gets the timing work, but is never persisted.
 	const canUpgrade = work.upgradeStored && passwordProblem(password) === null;
 	const targetPassword = canUpgrade ? password : UNKNOWN_USERNAME_PASSWORD;
 	const targetDerivation = work.deriveTarget

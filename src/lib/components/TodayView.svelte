@@ -34,8 +34,7 @@
 	{@const week = rollingAverages(profile.log, 7)}
 	{@const logged = loggedDatesSet(profile.log)}
 	{@const items = profile.log.filter((i) => i.date === day)}
-	<!-- GLP-1 users are steered by protein rather than energy, so the ring
-	     layout changes rather than merely reordering. -->
+	<!-- GLP-1 users are steered by protein, so the layout changes, not just the order. -->
 	{@const primaryProtein = isGlp1(profile)}
 	<div class="flex flex-col gap-6 pb-8">
 		<PageHeader kicker={weekdayLong(day)} title="Today">

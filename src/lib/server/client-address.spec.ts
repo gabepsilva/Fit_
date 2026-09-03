@@ -8,7 +8,7 @@ function request(headers: Record<string, string> = {}): Request {
 	return new Request('https://fit.example/api/sessions', { method: 'POST', headers });
 }
 
-/** Set the deployment's variable for one assertion, the way `origin-policy.spec.ts` does. */
+/** Set the deployment's variable for one assertion. */
 function withSource<T>(value: string, run: () => T): T {
 	const previous = process.env[ADDRESS_SOURCE_VARIABLE];
 	process.env[ADDRESS_SOURCE_VARIABLE] = value;
@@ -40,8 +40,8 @@ describe('addressSource', () => {
 	});
 
 	it('refuses a forwarded declaration with no header to read it from', () => {
-		// Without ADDRESS_HEADER the adapter still returns the proxy's own
-		// address, which is the single shared bucket this module exists to avoid.
+		// Without `ADDRESS_HEADER` the adapter would report the proxy itself,
+		// one shared bucket for every caller.
 		expect(() => addressSource({ [ADDRESS_SOURCE_VARIABLE]: 'forwarded' })).toThrow(
 			'ADDRESS_HEADER'
 		);
@@ -54,8 +54,6 @@ describe('addressSource', () => {
 	});
 
 	it('names every source it would have accepted, so the fix is in the failure', () => {
-		// A security setting that stops the server has to say what to set it to,
-		// or the next attempt is another guess.
 		expect(() => addressSource({ [ADDRESS_SOURCE_VARIABLE]: 'trusted' })).toThrow(
 			'socket, forwarded, none'
 		);
@@ -96,8 +94,7 @@ describe('clientAddressFor', () => {
 	it.each(['x-forwarded-for', 'forwarded'])(
 		'drops the socket address when %s says an undeclared proxy rewrote the connection',
 		(header) => {
-			// The peer would be the proxy, and counting against it would put every
-			// caller of the deployment into one bucket.
+			// The peer would be the proxy, so every caller would share one bucket.
 			expect(clientAddressFor(request({ [header]: PEER }), () => PROXY, 'socket')).toBeNull();
 		}
 	);

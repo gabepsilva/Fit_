@@ -102,11 +102,9 @@ async function runStep(
 }
 
 /**
- * How many `concurrent` steps run at once. Sized well under the core count on
- * purpose: a step is not one process. `lint` alone peaks near 5 GB across its
- * own ESLint workers, and four static steps side by side measured 6.4 GB here,
- * so a two-core hosted runner stays sequential and only a workstation spends
- * the cores. `--stream` interleaves child output, so it forces one at a time.
+ * A step is not one process — `lint` alone peaks near 5 GB — so width stays
+ * well under the core count. `--stream` forces one at a time to keep child
+ * output readable.
  */
 function poolWidth(stream: boolean): number {
 	if (stream) return 1;
@@ -114,10 +112,9 @@ function poolWidth(stream: boolean): number {
 }
 
 /**
- * `check` runs `svelte-kit sync` inside its own script, rewriting `.svelte-kit/`
- * while `lint`, `knip` and `check:scripts` read the generated types beside it.
- * Syncing once up front removes that race; the step's own sync then finds the
- * output current and does nothing.
+ * `check` syncs `.svelte-kit/` while concurrent steps read its generated
+ * types; syncing once up front removes the race, and the step's own sync then
+ * no-ops.
  */
 async function syncGeneratedTypes(): Promise<void> {
 	const { exitCode } = await captureStatus(
@@ -167,16 +164,14 @@ const runs = new Map<string, StepRun>();
 const width = poolWidth(options.stream);
 const concurrentSteps = selected.filter((step) => step.concurrent === true);
 const serialSteps = selected.filter((step) => step.concurrent !== true);
-// `--bail` has to mean the same thing in a pool as it did in a loop: stop at the
-// first failure. Nothing new is scheduled, and the steps already in flight are
-// killed rather than waited out -- without that, a hook that used to fail on
-// formatting in a second would sit through the type-aware lint beside it.
+// `--bail` in a pool means what it did in a loop: stop at the first failure.
+// In-flight steps are killed rather than waited out.
 const cancellation = new AbortController();
 let bailed = false;
 
 /**
- * Printed on completion rather than in plan order, so a slow step never hides
- * the ones that already finished. The report below restores the plan order.
+ * Printed on completion, not in plan order, so a slow step never hides the
+ * ones already done; the report restores plan order.
  */
 async function execute(step: GateStep): Promise<void> {
 	if (bailed) return;
@@ -200,10 +195,9 @@ async function execute(step: GateStep): Promise<void> {
 	}
 }
 
-// Steps run in their own process group so that cancelling one kills the tool
-// under the `bun run` wrapper rather than orphaning it. That group does not
-// receive the terminal's Ctrl-C, so the runner forwards it: without this, an
-// interrupted gate leaves ESLint and the test runners behind.
+// Each step runs in its own process group, so cancelling it kills the tool
+// under `bun run` rather than orphaning it. The group misses the terminal's
+// Ctrl-C, so the runner forwards it.
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 	process.on(signal, () => {
 		if (bailed) return;

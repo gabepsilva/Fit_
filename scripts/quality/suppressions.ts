@@ -35,8 +35,8 @@ interface Occurrence {
 	text: string;
 }
 
-// The literals are split so that this scanner never matches its own source.
-// Excluding the file by path instead would leave an unwatched place to hide them.
+// The literals are split so this scanner never matches its own source;
+// a path exclusion would leave an unwatched place to hide suppressions.
 const patterns: { kind: string; pattern: RegExp }[] = [
 	{ kind: 'eslint', pattern: new RegExp(`eslint-${'disable'}`) },
 	{ kind: 'typescript', pattern: new RegExp(`@ts-${'(?:ignore|expect-error|nocheck)'}`) },

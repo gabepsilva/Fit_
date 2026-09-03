@@ -2,8 +2,7 @@
 	import Button from './Button.svelte';
 	import type { ButtonSize, ButtonVariant } from './button-variants';
 
-	// Buttons take their content as a snippet, which a props-only render cannot
-	// supply; this harness exists purely so the tests can pass one.
+	// Button takes its content as a snippet, which a props-only render cannot supply.
 	let {
 		label,
 		variant,

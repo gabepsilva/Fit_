@@ -1,16 +1,9 @@
 #!/usr/bin/env python
 """Flatten the Canadian Nutrient File into one row per food.
 
-CNF is small — about six thousand foods — but it is lab-analysed rather than
-crowd-sourced, so it carries far more weight per row than Open Food Facts does.
-It is also the only openly licensed Canadian source: Health Canada publishes no
-branded or barcode data at all, so Canadian *packaged* goods can only come from
-Open Food Facts.
-
-Two format details the 2026 release changed and that a 2015-era parser gets
-wrong: every CSV is UTF-8 with a BOM, and the old CONVERSION FACTOR file is gone
-— serving weights now live in Measure_Weight_Conversion, mixed in with refuse
-and yield rows and separable only by Measure_Type_Code.
+Lab-analysed reference data, weighted above crowd-sourced rows. 2026 format:
+UTF-8 with BOM; serving weights live in Measure_Weight_Conversion, separable
+from refuse/yield rows only by Measure_Type_Code.
 """
 
 from __future__ import annotations

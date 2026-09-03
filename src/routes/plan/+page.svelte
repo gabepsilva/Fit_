@@ -23,10 +23,7 @@
 	const profiles = $derived(tend.state.profiles);
 	const restrictions = $derived([...new Set(profiles.flatMap((p) => p.restrictions))]);
 
-	/**
-	 * Group the flat grocery list by aisle. `buildGrocery` already sorts by
-	 * aisle, so consecutive runs are enough — no lookup structure needed.
-	 */
+	// Consecutive runs suffice: buildGrocery already sorts by aisle.
 	const aisles = $derived.by(() => {
 		const out: { aisle: string; items: GroceryItem[] }[] = [];
 		for (const item of grocery) {
@@ -40,7 +37,6 @@
 	function logRecipe(recipeId: string, date: string, meal: PlannedMealSlot) {
 		const recipe = RECIPE_BY_ID[recipeId];
 		if (!recipe) return;
-		// One person's share of the pot, not the whole recipe.
 		const items = recipe.ingredients
 			.filter((ing) => FOOD_BY_ID[ing.foodId])
 			.map((ing) =>

@@ -3,15 +3,10 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 /**
- * Schema versions, oldest first. The count of applied entries is kept in
- * SQLite's own `user_version`, so a database only ever runs what it has not
- * seen. Append to this list; never edit a shipped entry, because every database
- * that already ran it will skip the edit.
- *
- * `household_id` sits on every table that will ever hold a member's data, from
- * the first version, even though today one account means one household. Adding
- * a tenancy column to a table that already holds live health records is the
- * migration this column exists to avoid.
+ * Schema versions, oldest first; the applied count is `user_version`.
+ * Append-only: a shipped entry is skipped by every database that ran it.
+ * `household_id` is on every data table from v1, so tenancy is never added
+ * to a table that already holds live rows.
  */
 const MIGRATIONS = [
 	`
@@ -19,15 +14,11 @@ const MIGRATIONS = [
 		id            text primary key,
 		username      text not null unique,
 		display_name  text not null,
-		-- Nullable on purpose rather than absent: sign-up asks for a username and
-		-- nothing else today, and there is no verification flow. Carrying the
-		-- column from the start makes adding email later a feature rather than a
-		-- migration over a table full of credentials.
+		-- Nullable: no verification flow yet, and carrying it avoids a later
+		-- migration over live credentials.
 		email         text,
 		password_hash text not null,
-		-- Hash of the one-time recovery code. With no email there is no reset
-		-- link, so this is the only thing standing between a forgotten password
-		-- and a lost account.
+		-- Hashed one-time recovery code; with no email, the only reset path.
 		recovery_hash text,
 		created_at    text not null,
 		updated_at    text not null
@@ -50,14 +41,13 @@ const MIGRATIONS = [
 	create table profile (
 		id           text primary key,
 		household_id text not null references household (id) on delete cascade,
-		-- Null for the people who are tracked but never sign in: a partner, a
-		-- child. This column is the entire reason account and profile are two
-		-- tables rather than one.
+		-- Null for tracked people without an account (partner, child); this is
+		-- why account and profile are two tables.
 		account_id   text references account (id) on delete set null,
 		name         text not null,
 		created_at   text not null,
-		-- A signed-in profile belongs to a membership, not merely to an account
-		-- and an unrelated household that each happen to exist.
+		-- A signed-in profile must match a membership, not just any account and
+		-- household that happen to exist.
 		foreign key (household_id, account_id)
 			references membership (household_id, account_id),
 		unique (household_id, account_id)
@@ -65,8 +55,8 @@ const MIGRATIONS = [
 
 	create index profile_by_household on profile (household_id);
 
-	-- Removing login access does not delete the person or their health history.
-	-- Unlink the profile before the composite membership foreign key is checked.
+	-- Removing login access keeps the profile and its history; must run before
+	-- the composite membership FK is checked.
 	create trigger membership_unlink_profile_before_delete
 	before delete on membership
 	begin
@@ -88,10 +78,8 @@ const MIGRATIONS = [
 	create index session_by_account on session (account_id);
 	`,
 	`
-	-- Failed sign-in attempts, counted per scope. Rows here are written for
-	-- unauthenticated input, so they hold no attacker-supplied text and never
-	-- reference the account table: the count exists whether or not the username
-	-- does, which is what keeps a lockout from answering "does this person exist".
+	-- Failed sign-in attempts per scope. Rows never reference the account
+	-- table, so a lockout cannot answer "does this username exist".
 	create table sign_in_throttle (
 		scope          text not null check (scope in ('username', 'address')),
 		key_hash       text not null,
@@ -104,11 +92,9 @@ const MIGRATIONS = [
 	create index sign_in_throttle_expiry on sign_in_throttle (window_ends_at);
 	`,
 	`
-	-- Registration is throttled in the same table, in a scope of its own, so the
-	-- one place that answers "this username exists" is not also the cheapest way
-	-- to ask. SQLite cannot widen a check constraint in place, so the table is
-	-- rebuilt around it; the rows are carried over rather than dropped, because
-	-- discarding them would hand every locked-out caller a reset on deploy.
+	-- Add the registration scope. SQLite cannot widen a check in place, so
+	-- the table is rebuilt; rows are carried over, because dropping them would
+	-- reset every lockout on deploy.
 	create table sign_in_throttle_next (
 		scope          text not null check (scope in ('username', 'address', 'registration')),
 		key_hash       text not null,
@@ -125,7 +111,7 @@ const MIGRATIONS = [
 
 	alter table sign_in_throttle_next rename to sign_in_throttle;
 
-	-- The index went with the table it was on.
+	-- The expiry index was rebuilt with its table.
 	create index sign_in_throttle_expiry on sign_in_throttle (window_ends_at);
 	`
 ];
@@ -145,8 +131,7 @@ export function migrate(db: DatabaseSync): number {
 		db.exec('begin');
 		try {
 			db.exec(sql);
-			// `pragma` accepts no bound parameters. The value is an index into a
-			// literal array in this file, so no caller can reach it.
+			// `pragma` takes no bound parameters; the value is a literal array index in this file.
 			db.exec(`pragma user_version = ${index + 1}`);
 			db.exec('commit');
 		} catch (error) {
@@ -171,8 +156,7 @@ function prepareDatabaseFile(path: string): void {
 	) {
 		throw new Error(`database directory must be private (0700): ${directory}`);
 	}
-	// Pre-existing journals may contain newer credential data than the main file;
-	// secure every known file before SQLite reads migrations or recovery state.
+	// Journals may hold credential data; harden every sidecar before SQLite reads them.
 	const descriptor = openSync(path, 'a', PRIVATE_FILE_MODE);
 	closeSync(descriptor);
 	secureSQLiteFiles(path);
@@ -188,9 +172,8 @@ function secureSQLiteFiles(path: string): void {
 /**
  * Open the application database and bring its schema up to date.
  *
- * This is deliberately not the food database. `data/db/fit-food-full.sqlite` is
- * regenerated wholesale by the ETL pipeline, so user rows kept in it would be
- * destroyed by the next rebuild.
+ * Deliberately not the food database: `fit-food-full.sqlite` is rebuilt
+ * wholesale by ETL and would destroy user rows kept in it.
  */
 export function openDatabase(
 	path: string,
@@ -200,8 +183,8 @@ export function openDatabase(
 	let db: DatabaseSync | undefined;
 	try {
 		db = create(path);
-		// SQLite defaults foreign keys off, and the setting is ignored inside a
-		// transaction — so it has to happen here, before the first migration runs.
+		// `foreign_keys` is off by default and ignored inside transactions; set
+		// it before the first migration runs.
 		db.exec('pragma foreign_keys = on');
 		db.exec('pragma journal_mode = wal');
 		// Wait rather than fail when another connection holds the write lock.

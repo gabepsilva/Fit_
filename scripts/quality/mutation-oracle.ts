@@ -12,31 +12,18 @@ import {
 } from './mutation-scope';
 
 /**
- * The browser project is not part of a mutation run: mutation testing needs
- * thousands of cheap isolated runs and Chromium gives expensive stateful ones,
- * so `vite.config.ts` hands the client lane to the jsdom project alone.
- *
- * That makes `DOM_FREE_CLIENT_SPECS` load-bearing in a way a list of file names
- * does not look. A client module reachable only from a component spec is no
- * longer measured by anything, and it does not fail loudly — it is reported as
- * NoCoverage, which reads as "no tests yet" rather than "the gate cannot see
- * this". The two lists drift silently and the score stays green.
- *
- * So this check closes the loop: every client file Stryker is told to mutate
- * must be reachable from a spec the jsdom project runs. A file that genuinely
- * belongs to the browser is excluded from `mutate` in `stryker.config.mjs`,
- * next to the seed-data exclusions, where the reason is written down and
- * reviewed rather than inferred from a silent zero.
+ * Mutation runs are jsdom-only, so a client file Stryker mutates must be
+ * reachable from a `DOM_FREE_CLIENT_SPECS` spec; otherwise it reports NoCoverage
+ * and the drift stays silent. Browser-bound files are excluded from `mutate`
+ * in `stryker.config.mjs` instead.
  */
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 /**
- * Every lane hands Stryker an explicit file list rather than the glob, so the
- * question this check has to ask is which client files a *lane* would mutate —
- * production TypeScript that no `!` pattern excludes — not which files the
- * unscoped glob selects. Asking the narrower question would let a route or a
- * hook be mutated while nothing measured it.
+ * Every lane hands Stryker an explicit file list, so this asks which files a
+ * lane would mutate — production TypeScript no `!` pattern excludes — not what
+ * the unscoped glob selects, which would miss a mutated-but-unmeasured route.
  */
 async function mutatedClientFiles(): Promise<string[]> {
 	const all = (await walk(path.join(projectRoot, 'src'))).map((file) =>

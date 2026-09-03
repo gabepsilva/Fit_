@@ -55,7 +55,7 @@ const TEMPLATES: DayPlan[] = [
 	]
 ];
 
-/** Vary how a seeded entry was logged, so the journal looks lived-in. */
+/** Vary the logged source per entry so the seeded journal looks real. */
 function seedSource(meal: Meal, dayIndex: number): LogItem['source'] {
 	if (meal === 'breakfast' && dayIndex % 4 === 0) return 'text';
 	if (meal === 'lunch' && dayIndex % 5 === 1) return 'photo';
@@ -64,8 +64,7 @@ function seedSource(meal: Meal, dayIndex: number): LogItem['source'] {
 
 function seedDay(date: string, dayIndex: number): LogItem[] {
 	const plan = TEMPLATES[dayIndex % TEMPLATES.length] ?? [];
-	// Portions wobble day to day; a perfectly repeated week would make the
-	// adaptive-TDEE regression look unnaturally clean.
+	// Portions jitter day to day so the adaptive-TDEE regression looks natural.
 	const jitter = 0.9 + ((dayIndex * 17) % 7) * 0.02;
 	return plan.map(([meal, foodId, servings]) =>
 		logFromFood({
@@ -82,7 +81,7 @@ export function buildAlexProfile(): Profile {
 	const end = todayISO();
 	const log: LogItem[] = [];
 	const weights: WeightEntry[] = [];
-	// Three missed days, because the app's whole point is that a miss is fine.
+	// A few days are skipped on purpose; a real journal is not continuous.
 	const skipped = new Set([3, 9, 16]);
 
 	for (let ago = 20; ago >= 0; ago--) {
@@ -117,10 +116,7 @@ export function buildAlexProfile(): Profile {
 	});
 }
 
-/**
- * The second plate in the household, seeded or empty. Both entry points state
- * the same person, so the demographics live in one place.
- */
+/** Jordan's demographics, shared by both seeding paths. */
 export const HOUSEHOLD_PARTNER = {
 	name: 'Jordan',
 	goal: 'maintain',
@@ -131,7 +127,6 @@ export const HOUSEHOLD_PARTNER = {
 	restrictions: ['vegetarian']
 } as const satisfies Partial<Profile> & { name: string };
 
-/** Jordan eats the same vegetarian rotation every day — that is the point. */
 const JORDAN_DAY: [Meal, string, number, LogItem['source']][] = [
 	['breakfast', 'oats', 1, 'text'],
 	['breakfast', 'oatly', 1, 'text'],

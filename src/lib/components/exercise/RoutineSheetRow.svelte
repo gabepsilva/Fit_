@@ -8,9 +8,8 @@
 	import { SHEET_GRID } from './sheet-grids';
 
 	/**
-	 * One movement on the routine sheet, and the load editor it opens into. Sets
-	 * and reps belong to the plan and are changed in the builder; the load is the
-	 * number that drifts week to week, so it is the one this row edits in place.
+	 * Sets and reps belong to the plan and change in the builder; the load drifts
+	 * week to week, so it is the one this row edits in place.
 	 */
 	let {
 		exercise,

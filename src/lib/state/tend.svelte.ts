@@ -33,11 +33,7 @@ import { buildWeekPlan, mealPool } from '$lib/domain/week-plan';
 
 export const STORAGE_KEY = 'tend.v1';
 
-/**
- * How long a burst of writes is allowed to share one save, in milliseconds.
- * Long enough that a held-down stepper writes once, short enough that the tab
- * can be closed a moment after the last tap without losing it.
- */
+// A held stepper shares one save; a tab closed a moment later still makes it.
 const PERSIST_WINDOW_MS = 200;
 
 function emptyState(): TendState {
@@ -56,11 +52,6 @@ function emptyState(): TendState {
 	};
 }
 
-/**
- * Re-derive an entry's nutrition for a new serving count. Entries backed by a
- * known food are recomputed from the source food; free-text entries (no
- * `foodId`, or a food that has since disappeared) can only be scaled by ratio.
- */
 function rescale(item: LogItem, servings: number): LogItem {
 	const source = item.foodId ? FOOD_BY_ID[item.foodId] : undefined;
 	if (!source) {
@@ -81,21 +72,14 @@ function rescale(item: LogItem, servings: number): LogItem {
 }
 
 /**
- * The whole application state, as a rune-backed singleton.
- *
- * Persistence is deliberately explicit rather than automatic: `hydrate()` runs
- * once on the client, so a server render never touches `localStorage` and never
- * ships a half-restored state to the browser. Until then `hydrated` is false and
- * the shell can hold back rendering that would flash the wrong screen.
- *
- * This is the interim home for the data. When the SQLite backend lands, these
- * methods become the call sites that talk to it.
+ * The whole application state, as a rune-backed singleton. `hydrate()` is
+ * explicit so a server render never touches `localStorage`; `hydrated` stays
+ * false until it runs. Interim home for the data until the SQLite backend lands.
  */
 export class TendStore {
 	state = $state<TendState>(emptyState());
 	hydrated = $state(false);
 
-	/** The timer of a save that has been asked for but not made yet. */
 	private pendingWrite: ReturnType<typeof setTimeout> | null = null;
 	private lifecycleFlushBound = false;
 
@@ -105,36 +89,26 @@ export class TendStore {
 
 	// -- persistence ---------------------------------------------------------
 
-	/** Restore from `localStorage`. Safe to call more than once; a no-op after the first. */
 	hydrate() {
 		if (this.hydrated) return;
 		const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
 		if (raw) {
 			try {
-				// Persisted state is merged over a fresh empty state so a payload
-				// written by an older version cannot leave a key undefined.
+				// Merge over `emptyState()` so an older payload cannot leave a key undefined.
 				this.state = { ...emptyState(), ...(JSON.parse(raw) as Partial<TendState>) };
 			} catch {
-				// Corrupt payload: start clean rather than crash on every load.
 				this.state = emptyState();
 			}
 		}
 		this.hydrated = true;
 	}
 
-	/** Write the current state back to `localStorage`, now. */
 	persist() {
 		this.cancelPendingWrite();
 		this.write();
 	}
 
-	/**
-	 * Ask for a save, and let a burst of them share one. Ticking a set and holding
-	 * a stepper fire faster than anyone can read, and every save serializes the
-	 * whole state; doing that on each tap puts the cost in the tap handler. The
-	 * window is a ceiling rather than a reset, so a stepper held down still
-	 * reaches storage while it is held, instead of only when it is let go.
-	 */
+	// A ceiling, not a reset: a held stepper still reaches storage while held.
 	private persistSoon() {
 		if (!this.hydrated) return;
 		this.bindLifecycleFlush();
@@ -145,7 +119,6 @@ export class TendStore {
 		}, PERSIST_WINDOW_MS);
 	}
 
-	/** Make a save the debounce is still holding. A no-op when nothing is waiting. */
 	flushPersist() {
 		if (this.pendingWrite === null) return;
 		this.persist();
@@ -162,11 +135,7 @@ export class TendStore {
 		this.pendingWrite = null;
 	}
 
-	/**
-	 * A phone can close, or background and then kill, a tab inside the save
-	 * window. `pagehide` and a hidden document are the last moments a mobile
-	 * browser reliably gives us; `beforeunload` is not one of them.
-	 */
+	// `pagehide` and `visibilitychange` are the last reliable moments before a mobile browser kills a tab.
 	private bindLifecycleFlush() {
 		if (this.lifecycleFlushBound) return;
 		if (typeof globalThis.addEventListener !== 'function') return;
@@ -212,8 +181,7 @@ export class TendStore {
 		this.state.profiles = profiles;
 		this.state.activeProfileId = profiles[0].id;
 		this.state.weekPlan = [];
-		// `generatePlan` persists too; saying so here as well keeps onboarding
-		// from silently depending on that to be written down at all.
+		// `persist()` is explicit here so onboarding does not silently depend on `generatePlan` doing it.
 		this.generatePlan();
 		this.persist();
 	}
@@ -250,9 +218,7 @@ export class TendStore {
 		active.log = active.log.map((item) => {
 			if (item.id !== id) return item;
 			const current: LogItem = $state.snapshot(item);
-			// Rescale from the *current* entry: applying the patch first would make
-			// the old and new serving counts identical, so the ratio would be 1 and
-			// a custom entry's nutrition would never move.
+			// Rescale from the current entry: patching first would make the ratio 1 and a custom entry would never move.
 			if (patch.servings != null && patch.servings !== current.servings) {
 				return { ...rescale(current, patch.servings), ...patch };
 			}
@@ -275,8 +241,7 @@ export class TendStore {
 		if (!active) return;
 		const d = date ?? todayISO();
 		const entry: WeightEntry = { id: uid('w-'), date: d, kg };
-		// One reading per day: a re-weigh replaces rather than appends, so the
-		// adaptive-TDEE regression is not skewed by a single noisy morning.
+		// One reading per day: a re-weigh replaces so the TDEE regression is not skewed by a noisy morning.
 		active.weights = [...active.weights.filter((w) => w.date !== d), entry].sort((a, b) =>
 			a.date.localeCompare(b.date)
 		);
@@ -300,8 +265,7 @@ export class TendStore {
 	swapPlanned(date: string, meal: PlannedMealSlot) {
 		const current = this.state.weekPlan.find((p) => p.date === date && p.meal === meal);
 		const pool = mealPool(this.state.profiles, meal);
-		// Step to the next recipe in the pool rather than to its head: always
-		// taking the first fit would make Swap alternate between two dinners.
+		// Step to the next fit, not the head: always taking the first would alternate between two.
 		const pick = pool[(pool.findIndex((r) => r.id === current?.recipeId) + 1) % pool.length];
 		if (!pick || pick.id === current?.recipeId) return;
 		this.state.weekPlan = this.state.weekPlan.map((p) =>
@@ -323,11 +287,7 @@ export class TendStore {
 		return this.state.routines.find((r) => r.id === id);
 	}
 
-	/**
-	 * Take a starter routine set, and a plan to put it on. A template without a
-	 * plan would leave the calendar — and so the home screen — empty on the day
-	 * someone decides to begin, which is the worst possible day for that.
-	 */
+	// Seeds a training plan too, so the calendar is not empty the day someone starts.
 	useTemplate(templateId: string) {
 		const template = ROUTINE_TEMPLATES.find((t) => t.id === templateId);
 		if (!template) return;
@@ -349,20 +309,13 @@ export class TendStore {
 		this.persist();
 	}
 
-	/** Removing a routine also clears the weeks that pointed at it, so the planner cannot name a routine that is gone. */
 	removeRoutine(id: string) {
 		this.state.routines = this.state.routines.filter((r) => r.id !== id);
 		this.state.trainingPlan = this.state.trainingPlan.filter((p) => p.routineId !== id);
 		this.persist();
 	}
 
-	/**
-	 * One tap on a stepper against a routine row. `direction` is +1 or -1.
-	 *
-	 * The one field is written where it lives, rather than through a rebuilt
-	 * routine: every other section and row of the sheet is looking at the same
-	 * objects, and rebuilding would tell all of them that they had changed.
-	 */
+	// Write the field in place: rebuilding would give every row a new identity and rerender the whole sheet.
 	bumpRoutineExercise(id: string, index: number, field: BumpField, direction: number) {
 		const exercise = this.routine(id)?.exercises[index];
 		if (!exercise) return;
@@ -385,7 +338,6 @@ export class TendStore {
 		this.persist();
 	}
 
-	/** Reordering is one step at a time; the first row has nowhere to go. */
 	moveExerciseUp(id: string, index: number) {
 		if (index <= 0) return;
 		const exercises = this.routine(id)?.exercises;
@@ -397,7 +349,6 @@ export class TendStore {
 
 	// -- training plan -------------------------------------------------------
 
-	/** Assign one routine to a set of weeks. An empty list of weeks is a no-op, not a wipe. */
 	planWeeks(year: number, weeks: number[], routineId: string) {
 		if (weeks.length === 0) return;
 		const untouched = this.state.trainingPlan.filter(
@@ -412,22 +363,13 @@ export class TendStore {
 
 	// -- training settings ---------------------------------------------------
 
-	/**
-	 * Which unit every load is read in. Nothing already logged is touched: a load
-	 * is the number that was on the bar, and 60 under a `lb` label is the same
-	 * row of the log as 60 under `kg`. Converting instead would rewrite history
-	 * every time somebody looked at the other unit.
-	 */
+	// The unit is a label, not a conversion: converting would rewrite the log on every look.
 	setLoadUnit(unit: LoadUnit) {
 		this.state.loadUnit = unit;
 		this.persist();
 	}
 
-	/**
-	 * How long the rest between sets runs. Held to the range the control offers,
-	 * so a stored value from elsewhere cannot open a session on a rest of zero.
-	 * Saved through the debounce, because this is moved on a stepper.
-	 */
+	// Clamped to the control's range; saved through the debounce because it is a stepper.
 	setRestSeconds(seconds: number) {
 		this.state.restSeconds = Math.min(
 			MAX_REST_SECONDS,
@@ -438,17 +380,9 @@ export class TendStore {
 
 	// -- workouts ------------------------------------------------------------
 
-	/**
-	 * Begin a session. The routine is copied in rather than referenced, and an
-	 * unfinished session is replaced rather than queued: two live sessions would
-	 * both claim to be "the workout", and neither would be right.
-	 */
 	startWorkout(routineId: string): Workout | null {
 		const routine = this.routine(routineId);
 		if (!routine) return null;
-		// A routine with no movements opens a session with nothing to tick, no way
-		// to reach a finish, and a clock counting nothing. There is no session to
-		// start here; the caller is told so rather than shown an empty one.
 		if (routine.exercises.length === 0) return null;
 		const workout = workoutFromRoutine(routine, {
 			id: uid('w-'),
@@ -460,19 +394,13 @@ export class TendStore {
 		return workout;
 	}
 
-	/**
-	 * The exercise the session is on, as the live object rather than a copy, so a
-	 * change to one set is a change to that set and to nothing else. Rebuilding
-	 * the workout instead would hand every exercise and every set a new identity
-	 * on each tick, and the whole session screen would rerender for one checkbox.
-	 */
+	// Returns the live object, not a copy: a rebuild would give every set a new identity on each tick.
 	private get liveExercise(): Workout['exercises'][number] | null {
 		const workout = this.state.activeWorkout;
 		if (!workout) return null;
 		return workout.exercises[workout.exerciseIndex] ?? null;
 	}
 
-	/** Tick or untick a set of the exercise on screen. */
 	toggleSet(index: number) {
 		const set = this.liveExercise?.sets[index];
 		if (!set) return;
@@ -487,7 +415,6 @@ export class TendStore {
 		this.persistSoon();
 	}
 
-	/** One more set than the routine asked for, opened at the last set's numbers. */
 	addSet() {
 		const exercise = this.liveExercise;
 		if (!exercise) return;
@@ -503,7 +430,6 @@ export class TendStore {
 		this.persistSoon();
 	}
 
-	/** Machine taken: the movement changes, the sets already logged do not. */
 	swapExercise(name: string) {
 		const replacement = exercisesFromLibrary([name])[0];
 		const exercise = this.liveExercise;
@@ -520,17 +446,7 @@ export class TendStore {
 		this.persist();
 	}
 
-	/**
-	 * File the session, whether or not anything was ticked. Turning up and
-	 * logging nothing is still a thing that happened, and the summary has words
-	 * for it; dropping it silently would send someone back to the home screen as
-	 * though they had never opened the door.
-	 *
-	 * Every aggregate reads through the sets that were ticked rather than
-	 * through the count of filed sessions, so an empty one sets no record, draws
-	 * no point on the trend, adds no volume, and does not count as a session the
-	 * plan asked for.
-	 */
+	// An empty session is still filed; aggregates read through ticked sets, so it draws no point.
 	finishWorkout(): Workout | null {
 		const current = this.state.activeWorkout;
 		if (!current) return null;
@@ -546,7 +462,6 @@ export class TendStore {
 		this.persist();
 	}
 
-	/** The exercise the session screen is on, or nothing when no session is running. */
 	get currentExercise() {
 		const workout = this.state.activeWorkout;
 		return workout ? (currentExercise(workout) ?? null) : null;

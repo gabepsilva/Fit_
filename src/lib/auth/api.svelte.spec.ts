@@ -30,11 +30,7 @@ function contentTypeOf(headers: HeadersInit | undefined): string | undefined {
 		: (new Headers(headers).get('content-type') ?? undefined);
 }
 
-/**
- * `fetch` is stubbed rather than pointed at a running server: what these
- * functions own is the shape of the request and the reading of the answer, and
- * a real endpoint would test the endpoint instead.
- */
+// `fetch` is stubbed: these own the shape of the request and the reading of the answer, not the endpoint.
 function stub(response: Response | Error): Call[] {
 	const calls: Call[] = [];
 	vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
@@ -135,8 +131,7 @@ describe('signIn', () => {
 	});
 
 	it('reads a failure body with no error in it as a malformed one', async () => {
-		// A proxy, a WAF or a stray 400 from something that is not this server all
-		// answer JSON without the `error` object the endpoints always send.
+		// A 400 from a proxy or WAF is JSON without the `error` object this server sends.
 		stub(jsonResponse({}, { status: 400 }));
 		const result = await signIn(CREDENTIALS);
 		expect(result).toMatchObject({ ok: false, failure: { code: 'invalid-body' } });
@@ -149,9 +144,7 @@ describe('signIn', () => {
 	});
 
 	it('reads a failure body whose error is null as a malformed one, rather than throwing', async () => {
-		// `typeof null` is 'object', so the null check beside it is the only thing
-		// standing between a JSON `null` and a TypeError thrown out of a caller
-		// that had merely asked why its request was refused.
+		// `typeof null` is 'object', so the null check is what keeps a JSON `null` from throwing.
 		stub(jsonResponse({ error: null }, { status: 400 }));
 		await expect(signIn(CREDENTIALS)).resolves.toMatchObject({
 			ok: false,
@@ -160,8 +153,7 @@ describe('signIn', () => {
 	});
 
 	it('refuses an empty code, which names no failure', async () => {
-		// The recognized codes are matched by exact string, and '' is not one of
-		// them: an empty code is a malformed body, not a code to hand onwards.
+		// Codes match by exact string; `''` is not one, so an empty code is a malformed body.
 		stub(jsonResponse({ error: { code: '' } }, { status: 400 }));
 		const result = await signIn(CREDENTIALS);
 		expect(result).toMatchObject({ failure: { code: 'invalid-body' } });
@@ -188,8 +180,7 @@ describe('signIn', () => {
 	});
 
 	it('refuses a 200 whose body is not a session object', async () => {
-		// A captive portal answers 200 with something that parses and is not a
-		// session. Believing it would sign someone in against nothing.
+		// A captive portal answers 200 with non-session JSON; believing it signs in against nothing.
 		stub(jsonResponse(5));
 		const result = await signIn(CREDENTIALS);
 		expect(result).toEqual({ ok: false, failure: { code: 'unreachable' } });
@@ -240,10 +231,9 @@ describe('register', () => {
 	});
 
 	it('calls a dropped connection unreachable rather than a created account', async () => {
-		// The one failure where the request may still have been carried out: the
-		// caller has to be able to tell "no account" from "no answer", because
-		// retrying the first is right and retrying the second can collide with an
-		// account that now exists.
+		// The one failure where the request may still have landed: the caller must
+		// tell "no account" from "no answer", because retrying the second can
+		// collide with an account that now exists.
 		stub(new TypeError('Failed to fetch'));
 		await expect(register(REGISTRATION)).resolves.toEqual({
 			ok: false,
@@ -316,8 +306,7 @@ describe('currentSession', () => {
 	});
 
 	it('reads a refusal with no body at all as a malformed one, rather than throwing', async () => {
-		// Not every 401 comes from this application: a proxy in front of it can
-		// answer one with nothing in it, and the caller still needs a failure.
+		// A proxy in front of the app can answer 401 with no body; the caller still needs a failure.
 		stub(new Response(null, { status: 401 }));
 		await expect(currentSession()).resolves.toEqual({
 			ok: false,

@@ -5,12 +5,8 @@
 	import { formatClock } from '$lib/domain/workout';
 	import { cn } from '$lib/ui/cn';
 
-	/**
-	 * The rest between sets. What is left is the distance to an end timestamp
-	 * rather than a counter being decremented, so a phone that stopped firing
-	 * intervals in a pocket comes back with the right time left rather than the
-	 * time it went away at.
-	 */
+	// Time left is read from an end timestamp, not a decremented counter, so a
+	// phone whose intervals stopped in a pocket comes back with the right time left.
 	let {
 		startedAt = null,
 		seconds = DEFAULT_REST_SECONDS
@@ -23,20 +19,15 @@
 
 	let now = $state(Date.now());
 
-	/**
-	 * The paused rest: which start it belongs to, and what was left of it. Tying
-	 * it to `startedAt` is what lets a newly ticked set cancel the pause without
-	 * an effect reaching in to clear it.
-	 */
+	// The paused rest, tagged with the `startedAt` it belongs to: a newly ticked set
+	// changes `startedAt` and the pause stops applying without ever being cleared.
 	let paused = $state<{ startedAt: number | null; left: number } | null>(null);
 
-	// Reassigned when the countdown is resumed, and recomputed whenever another
-	// set is ticked — so a fresh rest always wins over a resumed one.
+	// Recomputed per ticked set and reassigned on resume, so a fresh rest always wins over a resumed one.
 	let endsAt = $derived(startedAt === null ? null : startedAt + seconds * 1000);
 
 	const held = $derived(paused !== null && paused.startedAt === startedAt ? paused.left : null);
-	// Clamped to the full rest so a reading taken before the first tick of the
-	// interval cannot show more time than the rest has.
+	// Clamped to the full rest: a reading before the first tick must not show more time than the rest has.
 	const left = $derived(
 		held ??
 			(endsAt === null ? seconds : Math.min(seconds, Math.max(0, Math.ceil((endsAt - now) / 1000))))
@@ -68,9 +59,8 @@
 			paused = { startedAt, left };
 			return;
 		}
-		// Read what the pause was holding *before* dropping it: `paused` is what
-		// `left` reads while held, so once it is null `left` recomputes against an
-		// `endsAt` the wall clock has already passed. A pause longer than the rest
+		// Read what the pause was holding before dropping it: once `paused` is null, `left` computes
+		// against an `endsAt` the wall clock has already passed, and a pause longer than the rest
 		// that was left would then resume at the full rest instead of the rest of it.
 		const remaining = held ?? (over ? seconds : left);
 		paused = null;
@@ -87,8 +77,7 @@
 >
 	<span class="min-w-0">
 		<span class="text-primary block text-sm">{label}</span>
-		<!-- Not `text-muted-foreground`: on the timer's tinted card it falls to a
-		     4.3:1 contrast ratio, which axe fails and a gym floor makes worse. -->
+		<!-- text-foreground/70, not muted-foreground: 4.3:1 on this tinted card, which axe fails. -->
 		<span class="text-foreground/70 block text-xs">{sub}</span>
 	</span>
 	<span class="flex items-center gap-2">

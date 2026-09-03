@@ -25,8 +25,7 @@ const proxyPort = process.env.ZAP_PROXY_PORT ?? '8090';
 if (!/^\d+$/.test(proxyPort)) throw new Error('ZAP_PROXY_PORT must be numeric.');
 
 const proxyUrl = `http://127.0.0.1:${proxyPort}`;
-// Follows the same variable Playwright binds the preview to, so a tree with its own
-// port still scans its own application rather than a neighbor's.
+// Tracks the port Playwright binds the preview to, so each tree scans its own app.
 const previewPort = process.env.FIT_PREVIEW_PORT ?? '4173';
 if (!/^\d+$/.test(previewPort)) throw new Error('FIT_PREVIEW_PORT must be numeric.');
 const targetUrl = `http://host.docker.internal:${previewPort}`;

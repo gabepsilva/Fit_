@@ -8,15 +8,10 @@ import { STORAGE_KEY, tend } from '$lib/state/tend.svelte';
 import AppShellHarness from './AppShellHarness.svelte';
 
 const goto = vi.hoisted(() => vi.fn());
-// `afterNavigate` is mocked beside it because the shell imports both from the
-// same module, and a partial mock would leave the other undefined.
+// `afterNavigate` is mocked beside it: same module, and a partial mock leaves the other undefined.
 vi.mock('$app/navigation', () => ({ goto, afterNavigate: () => {} }));
 
-/**
- * Where the shell thinks it is. Mocked rather than read from the runner's own
- * URL, because the gate's two decisions — whether this is an auth route, and
- * what to send along as the page to come back to — are both functions of it.
- */
+/** Where the shell thinks it is; both of the gate's decisions are functions of it. */
 const location = vi.hoisted(() => ({ current: new URL('http://localhost/') }));
 vi.mock('$app/state', () => ({
 	page: {
@@ -56,7 +51,7 @@ function seedReturningVisit() {
 	seedSessionStorage();
 }
 
-/** The shell must not reach a real endpoint from a test, signed in or not. */
+/** Keep a test from reaching a real endpoint. */
 function stubFetch() {
 	return vi
 		.spyOn(globalThis, 'fetch')
@@ -222,8 +217,7 @@ describe('AppShell, signed in', () => {
 		await expect.element(page.getByRole('dialog')).not.toBeInTheDocument();
 	});
 
-	// Which destination reads as current depends on real routing, so that is
-	// asserted end to end rather than here.
+	// Current-destination highlighting depends on real routing, so it is asserted end to end.
 
 	it('opens the log sheet from the top bar', async () => {
 		seedReturningVisit();
@@ -294,8 +288,7 @@ describe('AppShell, signed in', () => {
 	});
 
 	it('reconciles a restored session against the server it was issued by', async () => {
-		// The record is what signing in answered, and the session behind it may
-		// have been revoked from another device since. Only the server knows.
+		// The restored session may have been revoked elsewhere; only the server knows.
 		seedReturningVisit();
 		const fetched = stubFetch();
 		await render(AppShellHarness, { props: { body: 'Page body' } });

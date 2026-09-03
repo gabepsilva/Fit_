@@ -15,8 +15,7 @@
 		const last = points.at(-1);
 		if (!first || !last || points.length < 2) return null;
 		const values = points.map((p) => p.kg);
-		// Pad the domain so a flat-ish trend does not render as a line hugging
-		// the top or bottom edge of the plot.
+		// Pad the domain so a flat trend does not hug the top or bottom edge.
 		const min = Math.min(...values) - 0.6;
 		const max = Math.max(...values) + 0.6;
 		const span = max - min || 1;

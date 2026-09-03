@@ -28,18 +28,16 @@ const state: TendState = {
 };
 
 /**
- * The export is the user's escape hatch, so the column list is stated here
- * rather than derived from the module: a heading that moves, disappears or
- * changes spelling has to be a deliberate edit in two places.
+ * Stated here, not derived from the module, so a heading that moves, disappears
+ * or changes spelling is a deliberate edit in two places.
  */
 const CSV_HEADER =
 	'date,meal,name,brand,servings,serving_label,kcal,protein_g,carbs_g,fat_g,fiber_g,sodium_mg,potassium_mg,iron_mg,b12_mcg,provenance,source';
 
 /**
- * One entry with a different, memorable value in every exported column. Each
- * column is stated here — the entry starts from a catalog food only for its id
- * and shape — so the expected row below can be read against it field by field,
- * and a column that reads the wrong property shows up as a swapped value.
+ * One entry with a distinct, memorable value in every exported column, so the
+ * expected row reads field by field and a column reading the wrong property
+ * shows up as a swapped value.
  */
 function pinnedEntry(overrides: Partial<LogItem> = {}): LogItem {
 	return {
@@ -146,8 +144,7 @@ describe('exportCsv', () => {
 		expect(csvRows(profileWith(awkward))[0]).toContain('"Dave\'s ""Killer"" Bread, sliced"');
 	});
 
-	// The two halves of the escape hatch have to agree: whatever the exporter
-	// quotes, the importer has to give back unchanged.
+	// The exporter and importer are two halves of one escape hatch and must agree.
 	it('writes an awkward name that reads back through the importer unchanged', () => {
 		const awkward = pinnedEntry({ name: 'Dave\'s "Killer" Bread, sliced' });
 		expect(parseMfpCsv(exportCsv(profileWith(awkward)))[0]).toEqual({
@@ -196,8 +193,7 @@ describe('parseMfpCsv', () => {
 		expect(parseMfpCsv(withSummary).map((row) => row.name)).toEqual(['Oatmeal', 'Chicken salad']);
 	});
 
-	// Only a name that opens with a summary word is a summary row. "Fage Total 0%"
-	// is a food someone actually logs.
+	// Only a name that opens with a summary word is a summary row; "Fage Total 0%" is a real food.
 	it('keeps a food whose name merely contains a summary word', () => {
 		const brandName = 'Date,Name,Calories\n2026-06-01,Fage Total 0%,120';
 		expect(parseMfpCsv(brandName).map((row) => row.name)).toEqual(['Fage Total 0%']);

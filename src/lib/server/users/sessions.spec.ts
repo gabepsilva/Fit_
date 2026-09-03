@@ -37,11 +37,8 @@ beforeEach(async () => {
 });
 
 /**
- * Every case opens its own in-memory database; closing it is not tidiness. A
- * mutation run puts one vitest inside every worker and replays this suite
- * hundreds of times, and hundreds of live `node:sqlite` handles left for the
- * collector took the worker down with SIGSEGV -- which Stryker records as a
- * timeout against whichever mutant happened to be running.
+ * Each case opens its own database; close it. Under a mutation run, hundreds of
+ * live `node:sqlite` handles crash the worker, which Stryker records as a timeout.
  */
 afterEach(() => {
 	db.close();

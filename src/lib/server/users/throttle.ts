@@ -4,27 +4,13 @@ import { integer, text } from './rows';
 import { normalizeUsername } from './username';
 
 /**
- * Throttling for failed sign-ins.
- *
- * The password is the only factor and the username is the only identifier, so
- * an attacker who can spend attempts freely needs nothing else. Two scopes are
- * counted apart because they answer different attacks: `username` stops one
- * account being ground down, and `address` stops one client spraying a
- * common password across many names, which the username counter never sees.
- *
- * Nothing here reads the account table. The count is keyed on the username as
- * it was submitted, existing or not, so a lockout cannot be used to enumerate
- * accounts — the same care `authenticate` takes to make an unknown username
- * cost the same as a wrong password.
- *
- * Registration is counted here too, in a scope of its own: it is the other
- * endpoint that spends the derivation before it knows who is asking, and the
- * only one that ever says a username exists. See `REGISTRATION_POLICY`.
- *
- * The state is rows rather than a process map. A restart is not a reset an
- * attacker gets for free, a lockout is visible to whoever administers the
- * server, and the module already owns a database whose writes are cheaper than
- * the scrypt derivation this saves.
+ * Throttling for failed sign-ins and registrations. `username` and `address`
+ * scopes are counted apart because they answer different attacks.
+ * Counts are keyed on the submitted username, existing or not, so a lockout
+ * cannot enumerate accounts; nothing here reads the account table.
+ * Registration gets its own scope: it is the only endpoint that says a
+ * username exists. State is rows, not a process map, so a restart is not a
+ * free reset for an attacker.
  */
 
 export type ThrottleScope = 'username' | 'address' | 'registration';
@@ -43,11 +29,9 @@ export type ThrottlePolicy = {
 const MINUTE_MS = 60 * 1000;
 
 /**
- * Five wrong passwords is a person who has forgotten theirs; the sixth starts a
- * minute of waiting that doubles to a quarter of an hour. That is roughly 30
- * guesses a day against one account, against a ten-character minimum — while a
- * person locked out by somebody else's guessing is inconvenienced for minutes,
- * not signed out or asked to reset a password nobody has stolen.
+ * Five wrong passwords is a person who forgot theirs; the sixth starts a minute
+ * of waiting that doubles to a quarter of an hour — roughly 30 guesses a day per
+ * account, while a locked-out person is inconvenienced, not signed out.
  */
 export const USERNAME_POLICY: ThrottlePolicy = {
 	limit: 5,
@@ -57,10 +41,9 @@ export const USERNAME_POLICY: ThrottlePolicy = {
 };
 
 /**
- * The address ceiling is high on purpose: a household shares one public
- * address, and the phone, the laptop and a partner all failing at once must not
- * lock the front door. It is sized to catch spraying, which needs hundreds of
- * attempts to be worth doing, rather than to catch forgetfulness.
+ * The address ceiling is high on purpose: a household shares one public address,
+ * so several devices failing at once must not lock the front door. It is sized
+ * to catch spraying (hundreds of attempts), not forgetfulness.
  */
 export const ADDRESS_POLICY: ThrottlePolicy = {
 	limit: 50,
@@ -70,22 +53,11 @@ export const ADDRESS_POLICY: ThrottlePolicy = {
 };
 
 /**
- * Registration counts every attempt from one address, not only the failures.
- *
- * Sign-in counts failures because a success proves the caller owned the account
- * it just used. Registration proves nothing of the sort: every attempt spends
- * the same 350 ms of scrypt whether the name was free or taken, and `taken` is
- * the one thing this system ever says out loud about who exists. So the counter
- * is on attempts, and the address is the only identity an unregistered caller
- * has to count against.
- *
- * Ten in an hour is more accounts than a household has. A household is one
- * tenancy: a partner or a child is a profile, and only someone who signs in on
- * their own needs an account of their own, so several sign-ups from one address
- * in one sitting are ordinary and ten are not. The eleventh waits a minute,
- * doubling to a quarter of an hour, which leaves a determined caller about four
- * attempts an hour — a second and a half of derivation, and far too slow to
- * walk a list of names — while a family signing up together never reaches it.
+ * Registration counts every attempt from one address, not only the failures:
+ * every attempt spends the same scrypt derivation, and `taken` is the only thing
+ * this system says about who exists. The address is the only identity an
+ * unregistered caller has. Ten in an hour is more accounts than a household
+ * has, so the eleventh waits a minute, doubling to a quarter of an hour.
  */
 export const REGISTRATION_POLICY: ThrottlePolicy = {
 	limit: 10,
@@ -112,14 +84,13 @@ type Lock = { scope: ThrottleScope; remainingMs: number };
 const MAX_KEY_LENGTH = 128;
 
 /**
- * The key is hashed, so the table cannot become a list of the usernames people
- * have tried, and one hostile address cannot store a megabyte by claiming a
- * long name. The scope is inside the hash so the two counters cannot collide.
+ * The key is hashed, so the table is not a list of tried usernames and one
+ * hostile address cannot store a megabyte. The scope is inside the hash so the
+ * counters cannot collide.
  */
 function keyHash(scope: ThrottleScope, value: string): string {
-	// The separator is written as an escape rather than as a literal NUL byte:
-	// one in the source makes Git treat this file as binary, and a security
-	// file with no textual diff is one the changed-line lanes cannot see.
+	// The separator is an escape, not a literal NUL byte: one in the source makes
+	// Git treat this file as binary, hiding it from the changed-line lanes.
 	return createHash('sha256').update(`${scope}\u0000${value}`).digest('hex');
 }
 
@@ -168,17 +139,14 @@ function writeState(db: DatabaseSync, bucket: Bucket, state: BucketState): void 
 }
 
 /**
- * The state one more failure leaves behind.
- *
- * Because `maxLockMs` never exceeds `windowMs`, a lock always ends no later
- * than the window that produced it. That is what lets an expired window reset
- * the count without ever cutting a live lock short, and what lets `prune`
- * delete a row on the strength of its window alone.
+ * The state one more failure leaves behind. Because `maxLockMs` never exceeds
+ * `windowMs`, a lock always ends no later than its window, so `prune` can drop a
+ * row on its window alone and an expired window resets the count without ever
+ * cutting a live lock short.
  */
 function advance(state: BucketState | null, policy: ThrottlePolicy, now: Date): BucketState {
 	const stamp = now.toISOString();
-	// Both sides are UTC ISO-8601 of the same width, so this is a string
-	// comparison on purpose — the same trick `resolveSession` uses on expiry.
+	// Both sides are same-width UTC ISO-8601, so this is a string comparison on purpose.
 	const carried = state !== null && state.windowEndsAt > stamp ? state.failures : 0;
 	const failures = carried + 1;
 	const excess = failures - policy.limit;
@@ -208,12 +176,9 @@ function longestLock(locks: Lock[]): ThrottleDecision {
 }
 
 /**
- * Whether this attempt may be verified at all.
- *
- * Called before the password is checked, which is the point: a locked attempt
- * costs a hash lookup instead of 350 ms of scrypt. It reveals nothing, because
- * the lock is a function of the caller's own previous attempts and of nothing
- * on the server.
+ * Whether this attempt may be verified at all. Called before the password is
+ * checked, so a locked attempt costs a hash lookup, not a derivation. The lock
+ * is a function of the caller's own previous attempts, so it reveals nothing.
  */
 export function checkSignIn(
 	db: DatabaseSync,
@@ -238,18 +203,15 @@ export function recordFailedSignIn(
 		writeState(db, bucket, state);
 		return { scope: bucket.scope, remainingMs: remainingLockMs(state, now) };
 	});
-	// Swept here rather than on a timer: writing is the only moment this table
-	// grows, so it is the moment to pay for what has expired.
+	// Swept here rather than on a timer: writing is the only moment this table grows.
 	pruneSignInThrottle(db, now);
 	return longestLock(locks);
 }
 
 /**
- * Forget an account's failures after it has proved the password.
- *
- * Only the username scope is cleared. Signing in successfully from an address
- * that is halfway to a spray lockout must not hand the attacker a reset, and
- * one valid account is all that would take.
+ * Forget an account's failures after it has proved the password. Only the
+ * username scope is cleared: a successful sign-in must not let an attacker reset
+ * an address that is halfway to a spray lockout.
  */
 export function clearSignInFailures(db: DatabaseSync, username: string): void {
 	db.prepare('delete from sign_in_throttle where scope = ? and key_hash = ?').run(
@@ -259,13 +221,10 @@ export function clearSignInFailures(db: DatabaseSync, username: string): void {
 }
 
 /**
- * The bucket a registration attempt is counted in, or `null` when the
- * deployment declares it cannot determine an address.
- *
- * There is no second scope to fall back to. Counting against the submitted
- * username would let one caller hold a name it does not own out of ever being
- * registered, and would answer "is this name taken" from the throttle instead
- * of from the endpoint that is allowed to.
+ * The bucket a registration attempt is counted in, or `null` when the deployment
+ * cannot determine an address. There is no fallback scope: counting against the
+ * submitted username would let a caller hold a name it does not own out of ever
+ * being registered, and answer "is this name taken" from the throttle.
  */
 function registrationBucket(clientAddress: string | null): Bucket | null {
 	const address = clientAddress?.slice(0, MAX_KEY_LENGTH);
@@ -278,11 +237,9 @@ function registrationBucket(clientAddress: string | null): Bucket | null {
 }
 
 /**
- * Whether this address may pay for another registration's derivation.
- *
- * Called before the account is created, for the same reason `checkSignIn` runs
- * before `authenticate`: a refused attempt has to cost a hash lookup rather
- * than the derivation it was trying to spend.
+ * Whether this address may pay for another registration's derivation. Called
+ * before the account is created, so a refused attempt costs a hash lookup, not a
+ * derivation.
  */
 export function checkRegistration(
 	db: DatabaseSync,
@@ -297,11 +254,9 @@ export function checkRegistration(
 }
 
 /**
- * Count one registration attempt, whatever it goes on to answer.
- *
- * Recorded before the account is created rather than after, so an attempt that
- * ends in `username-taken` — the enumeration answer — costs the caller exactly
- * as much of its allowance as one that ends in an account.
+ * Count one registration attempt, whatever it goes on to answer. Recorded before
+ * the account is created, so an attempt that ends in `username-taken` costs the
+ * caller as much of its allowance as one that ends in an account.
  */
 export function recordRegistration(
 	db: DatabaseSync,
@@ -312,8 +267,7 @@ export function recordRegistration(
 	if (bucket === null) return { allowed: true };
 	const state = advance(readState(db, bucket), bucket.policy, now);
 	writeState(db, bucket, state);
-	// Swept on the write, the same as a failed sign-in: this is the only moment
-	// the table grows, so it is the moment to pay for what has expired.
+	// Swept on the write, the same as a failed sign-in: this is the only moment the table grows.
 	pruneSignInThrottle(db, now);
 	return longestLock([{ scope: bucket.scope, remainingMs: remainingLockMs(state, now) }]);
 }

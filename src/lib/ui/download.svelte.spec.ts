@@ -3,11 +3,7 @@ import { download } from './download';
 
 type Clicked = { filename: string; href: string; connected: boolean };
 
-/**
- * Clicking for real would ask the browser to save a file, so the click is
- * stubbed and reports what the anchor looked like at that moment — which is
- * the only moment its state matters.
- */
+// A real click would save a file, so the stub snapshots the anchor at click time.
 function captureClick() {
 	const seen: Clicked[] = [];
 	vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (

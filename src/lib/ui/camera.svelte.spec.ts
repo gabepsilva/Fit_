@@ -3,10 +3,7 @@ import { CAPTURE_MAX_EDGE, captureFrame, readImageFile, startCamera } from './ca
 
 type GetUserMedia = (constraints: MediaStreamConstraints) => Promise<MediaStream>;
 
-/**
- * `navigator.mediaDevices` is a prototype getter, so an own property shadows it
- * for the length of a test and `delete` puts the real one back.
- */
+// `mediaDevices` is a prototype getter, so an own property shadows it until deleted.
 function stubMediaDevices(value: unknown) {
 	Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value });
 }

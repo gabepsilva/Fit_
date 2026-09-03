@@ -25,9 +25,8 @@
 	const onLastExercise = $derived(
 		workout !== null && workout.exerciseIndex + 1 >= workout.exercises.length
 	);
-	// The set the button will actually tick: the first one still open, which is
-	// not "however many are done, plus one" once a later set has been ticked out
-	// of order.
+	// The set the button ticks is the first still-open one, not "done + one",
+	// once a later set has been ticked out of order.
 	const nextSetIndex = $derived(exercise ? exercise.sets.findIndex((s) => !s.done) : -1);
 	const setNumber = $derived(Math.min(nextSetIndex === -1 ? planned : nextSetIndex + 1, planned));
 	const nextLabel = $derived(
@@ -38,10 +37,9 @@
 				: 'Next exercise'
 	);
 
-	// The clock is read from `startedAt`, never counted, so this only has to keep
-	// the reading fresh. It hangs off whether a session is running rather than off
-	// the workout itself: a tick or a stepper must not tear the interval down and
-	// start the second over.
+	// Elapsed is computed from `startedAt`, so this only refreshes `now`. It
+	// hangs off "a session is running", not the workout object, so a tick or
+	// stepper does not restart the interval and reset the second.
 	const live = $derived(workout !== null);
 	$effect(() => {
 		if (!live) return;
@@ -50,8 +48,8 @@
 	});
 
 	function finish() {
-		// Every session that was running gets filed, ticked or not, and the summary
-		// has words for an empty one. Only "no session at all" has nothing to show.
+		// Every running session is filed, ticked or not — the summary has words
+		// for an empty one. Only "no session at all" has nothing to show.
 		const filed = tend.finishWorkout();
 		void goto(resolve(filed ? '/exercise/session/summary' : '/exercise'));
 	}

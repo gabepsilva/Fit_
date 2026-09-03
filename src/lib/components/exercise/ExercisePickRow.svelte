@@ -3,10 +3,7 @@
 	import CirclePlay from '@lucide/svelte/icons/circle-play';
 	import { cn } from '$lib/ui/cn';
 
-	/**
-	 * One movement offered from the library while building a routine. Picking is
-	 * a selection that accumulates, so the row is a checkbox and stays ticked.
-	 */
+	// Picking accumulates, so the row is a checkbox that stays ticked.
 	let {
 		name,
 		note,
@@ -18,7 +15,6 @@
 		note: string;
 		selected: boolean;
 		onpick: () => void;
-		/** Shows the form-check control when provided. */
 		onplay?: (() => void) | undefined;
 	} = $props();
 </script>

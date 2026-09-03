@@ -35,11 +35,9 @@ export const MONTHS_LONG = [
 export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
 /**
- * A training year is 52 whole weeks from the first Monday of January. It is not
- * ISO-8601 week numbering: the planner draws weeks as rows, so every row has to
- * be seven days long and belong to exactly one year, which a part week at
- * either end would break. The few days between the last week and New Year fall
- * into week 52.
+ * 52 whole weeks from the first Monday of January, not ISO-8601 numbering.
+ * The planner draws each week as a full seven-day row in one year, so a part
+ * week at either end is not allowed; the days after week 52 fall into week 52.
  */
 export const WEEKS_IN_YEAR = 52;
 
@@ -83,9 +81,9 @@ export function calendarWeeks(year: number): CalendarWeek[] {
 }
 
 /**
- * Which planned week a date falls in. Days before the year's first Monday
- * belong to the last week of the year before, and the stray days after week 52
- * stay in week 52 rather than inventing a week 53.
+ * Which week of the training year a date falls in. Days before the year's first
+ * Monday belong to the last week of the year before; the stray days after
+ * week 52 stay in week 52.
  */
 export function weekOf(iso: string): { year: number; week: number } {
 	const year = parseISODate(iso).getFullYear();
@@ -95,10 +93,8 @@ export function weekOf(iso: string): { year: number; week: number } {
 }
 
 /**
- * Whole days from one date to another. Both dates are local midnights, and
- * subtracting them as instants loses the hour a daylight-saving change moves —
- * enough for the day count, and so the week, to fall one short for the whole
- * rest of the year. Comparing the calendar dates themselves cannot drift.
+ * Whole days between two dates, computed from UTC calendar dates rather than
+ * instants, so a daylight-saving shift cannot cost the count an hour.
  */
 function daysBetween(fromISO: string, toISO: string): number {
 	const from = parseISODate(fromISO);
@@ -115,8 +111,8 @@ export function weekdayIndex(iso: string): number {
 }
 
 /**
- * Which days of the week a routine lands on. Sessions are spread evenly rather
- * than stacked at the front, so three a week means Monday, Wednesday, Friday.
+ * Which weekdays a routine lands on. Sessions are spread evenly rather than
+ * stacked at the front, so three a week means Mon, Wed, Fri.
  */
 export function trainingDays(freq: number): number[] {
 	const count = Math.max(0, Math.min(7, Math.floor(freq)));
@@ -136,15 +132,9 @@ export function plannedWeekCount(plan: PlannedWeek[], year: number): number {
 }
 
 /**
- * A plan for the rest of the year, so a routine picked on day one has somewhere
- * to appear. Each routine gets two weeks before the next one, and every seventh
- * planned week is a rest week — the deload that a plan drawn by hand tends to
- * leave out.
- *
- * The days between New Year and the first Monday belong to week 52 of the year
- * before, the way an ISO week-year runs past the calendar one. A plan drawn on
- * one of those days still has to say what happens on them, so it opens with
- * that trailing week and then runs the requested year from week 1.
+ * A plan for the rest of the year. Routines cycle in order with a rest week
+ * every seventh week. Days between New Year and the first Monday belong to the
+ * previous year's week 52, so a plan drawn there opens with that trailing week.
  */
 export function seedTrainingPlan(
 	routineIds: string[],

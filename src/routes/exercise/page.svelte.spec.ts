@@ -6,20 +6,12 @@ import { tend } from '$lib/state/tend.svelte';
 import ExercisePage from './+page.svelte';
 
 /**
- * The one rule this screen owns: which of its two openings it shows. The
- * template shelf belongs to an app that has never been used; the today-card's
- * "No routines yet" belongs to one whose routines were deleted. Both halves are
- * tested where they live — the shelf in `FirstRunTemplates`, the empty card in
- * `TodaySessionCard` — and nothing until now asked which of them the screen
- * picks, which is where the two states are actually told apart.
+ * The one rule here: which of the two openings shows — the never-used shelf or
+ * the deleted-rotation empty card. Each half is tested where it lives.
  *
- * The first route-level spec in the repository; there was no precedent to
- * follow, so it keeps to the component-spec conventions beside it. It is named
- * `page.svelte.spec.ts` rather than `+page.svelte.spec.ts` because SvelteKit
- * reserves the `+` prefix: a `+page.svelte.spec.ts` in a route directory is
- * rejected by the route manifest, and the browser test harness then loses its
- * input plumbing — every click resolves without reaching the page, so the
- * suite fails in a way that looks like a component bug.
+ * Named `page.svelte.spec.ts`, not `+page.svelte.spec.ts`: SvelteKit reserves
+ * the `+` prefix, so a `+`-prefixed spec in a route dir is rejected by the
+ * route manifest and silently breaks the harness's input plumbing.
  */
 
 function pushA(): Routine {
@@ -74,9 +66,8 @@ describe('the exercise screen', () => {
 		expect(home().elements()).toHaveLength(0);
 	});
 
-	// The discriminating case: routines are empty here too, so a rule that read
-	// `routines.length === 0` alone would show the shelf and bury the history
-	// behind it.
+	// The discriminating case: routines are empty too, so a rule keyed only on
+	// `routines.length === 0` would show the shelf and bury the history.
 	it('keeps the home screen when the routines are gone but the history is not', async () => {
 		tend.state.workouts = [filed()];
 		await render(ExercisePage);

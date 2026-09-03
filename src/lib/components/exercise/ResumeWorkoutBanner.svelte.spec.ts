@@ -57,8 +57,7 @@ describe('ResumeWorkoutBanner', () => {
 	});
 
 	it('says how long ago the session was left', async () => {
-		// Half a second past the whole second, so the reading cannot flip while it
-		// is being taken.
+		// Half a second past the whole second, so the reading cannot flip while it is taken.
 		await render(ResumeWorkoutBanner, { props: { workout: workout(2, Date.now() - 3_725_500) } });
 		await expect
 			.element(page.getByText('2 sets logged · 1:02:05 ago', { exact: true }))

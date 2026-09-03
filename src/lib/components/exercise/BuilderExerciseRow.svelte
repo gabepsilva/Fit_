@@ -4,11 +4,7 @@
 	import type { RoutineExercise } from '$lib/domain/types';
 	import Stepper from '$lib/ui/Stepper.svelte';
 
-	/**
-	 * One movement while the routine is being built: where it sits, what it
-	 * prescribes, and the two ways to change its place in the list. Loads are
-	 * absent on purpose — they are a record of last week, not part of the plan.
-	 */
+	// No loads here on purpose: a load is a record of last week, not part of the plan.
 	let {
 		index,
 		exercise,
@@ -26,8 +22,7 @@
 	const ICON_BUTTON =
 		'text-muted-foreground hover:bg-secondary hover:text-foreground flex size-9 shrink-0 items-center justify-center rounded-xl disabled:opacity-40';
 
-	// Several rows carry the same two steppers, so every control names its
-	// movement: "Increase reps" alone would be ambiguous to a screen reader.
+	// Every control names the movement: bare "Increase reps" is ambiguous across rows.
 	const moveLabel = $derived(`Move ${exercise.name} up`);
 	const removeLabel = $derived(`Remove ${exercise.name}`);
 	const setsLabel = $derived(`${exercise.name} sets`);

@@ -73,8 +73,7 @@ describe('setSessionCookie', () => {
 	});
 
 	it('marks the cookie secure on a plain-HTTP host that is not loopback', () => {
-		// An accidental HTTP deployment should fail visibly at sign-in rather
-		// than put a session token on the wire.
+		// A plain-HTTP deployment must fail visibly at sign-in, not send tokens in clear.
 		expect(setOn('http://fit.example/sign-in')).toMatchObject({ secure: true });
 	});
 
@@ -100,8 +99,7 @@ describe('setSessionCookie', () => {
 			token: TOKEN,
 			expiresAt: new Date(Date.now() + 60_000).toISOString()
 		});
-		// A minute out, rounded down: the exact second depends on how long the
-		// call itself took, and a cookie is never allowed to outlive its row.
+		// Rounded down: a cookie is never allowed to outlive its row.
 		const maxAge = Number(written[0]?.['maxAge']);
 		expect(maxAge).toBeGreaterThan(50);
 		expect(maxAge).toBeLessThanOrEqual(60);

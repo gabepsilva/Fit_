@@ -16,7 +16,7 @@ function request(options: RequestOptions = {}): Request {
 const url = new URL(`${SITE}/api/sessions`);
 const STAGING = 'https://staging.fit.example';
 
-/** Set the deployment's variable for one assertion, the way `db.spec.ts` does. */
+/** Set the deployment's variable for one assertion. */
 function withAllowedOrigins<T>(value: string, run: () => T): T {
 	const previous = process.env[ALLOWED_ORIGINS_VARIABLE];
 	process.env[ALLOWED_ORIGINS_VARIABLE] = value;
@@ -55,9 +55,7 @@ describe('configuredOrigins', () => {
 	});
 
 	it('drops the empty entry a trailing comma leaves rather than refusing to start', () => {
-		// The value is trimmed before it is weighed, so a list written across
-		// lines or with a trailing separator configures the origins it names and
-		// nothing else -- an untrimmed blank would reach `new URL` and throw.
+		// Values are trimmed first, so an untrimmed blank would reach `new URL` and throw.
 		expect(configuredOrigins({ [ALLOWED_ORIGINS_VARIABLE]: `${SITE}, ` })).toEqual([SITE]);
 	});
 
@@ -80,8 +78,8 @@ describe('configuredOrigins', () => {
 	});
 
 	it('refuses a scheme with no origin, which would allow every sandboxed frame', () => {
-		// `new URL('capacitor://localhost').origin` is the literal "null", the
-		// same Origin a sandboxed iframe sends.
+		// `new URL('capacitor://localhost').origin` is the literal "null", what
+		// sandboxed iframes send.
 		expect(() =>
 			configuredOrigins({ [ALLOWED_ORIGINS_VARIABLE]: 'capacitor://localhost' })
 		).toThrow('has not');
@@ -148,8 +146,7 @@ describe('checkOrigin', () => {
 	});
 
 	it('exempts a bearer request, whose credential no other site can make it send', () => {
-		// The Android build's Origin is a WebView's, which is exactly the origin
-		// the cookie policy must not trust.
+		// The Android build's `Origin` is a WebView's, which the cookie policy must not trust.
 		expect(
 			checkOrigin(request({ authorization: `Bearer ${TOKEN}`, origin: 'http://localhost' }), url, [
 				SITE
@@ -194,8 +191,7 @@ describe('checkOrigin', () => {
 	});
 
 	it('does not allow the configured origin to be widened by the request itself', () => {
-		// The header is compared against configuration; a request cannot vouch
-		// for itself by arriving under a name the server does not answer to.
+		// Only configuration allows an origin; a request cannot vouch for itself.
 		const served = new URL('https://internal.fit.example/api/sessions');
 		expect(checkOrigin(request({ origin: served.origin }), served, [SITE])).toEqual({
 			allowed: false,

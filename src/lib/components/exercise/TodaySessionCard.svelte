@@ -10,10 +10,9 @@
 	import Button from '$lib/ui/Button.svelte';
 
 	/**
-	 * What today asks for, decided by the plan rather than by a picker: the week
-	 * names a routine, and the routine's frequency decides which days of that
-	 * week it lands on. Every other day is a rest day, said plainly — and with
-	 * no routines at all, the card says that instead of inventing a rest day.
+	 * What today asks for is decided by the plan, not a picker: the week names a
+	 * routine and its frequency decides which days it lands on. Days it skips are
+	 * rest days; with no routines at all the card says so.
 	 */
 	let {
 		routines,
@@ -37,12 +36,9 @@
 	} = $props();
 
 	/**
-	 * Someone with history but no routines left. The design calls for this card,
-	 * and it is built and tested, but no user can reach it yet: emptying the list
-	 * needs `tend.removeRoutine`, which nothing in the UI calls today. Deleting a
-	 * routine is a backend concern, so this stays here deliberately, ready for the
-	 * affordance that lands with it. First run — no routines AND no history — is a
-	 * different state and shows the template shelf instead.
+	 * "Has history, no routines left" — unreachable until `tend.removeRoutine`
+	 * exists and something calls it. First run (no routines, no history) is a
+	 * different branch and shows the template shelf instead.
 	 */
 	const nothingYet = $derived(routines.length === 0);
 
@@ -59,18 +55,16 @@
 	const anyway = $derived(planned ?? routines[0]);
 
 	/**
-	 * A routine with no movements has no session in it — `tend.startWorkout`
-	 * refuses one — so the control that would run it is dead rather than
-	 * looking live and doing nothing, exactly as the routine rows behave.
+	 * `startWorkout` refuses a routine with no movements, so its run control is
+	 * disabled rather than left looking live.
 	 */
 	function runnable(r: Routine | undefined) {
 		return r !== undefined && r.exercises.length > 0;
 	}
 
 	/**
-	 * Sessions this week that were actually trained. A session walked out of with
-	 * nothing ticked is filed so the summary has something kind to say about it,
-	 * but a week is not met by walking in and out again.
+	 * Sessions actually trained this week; one walked out of with nothing ticked
+	 * doesn't count.
 	 */
 	const doneThisWeek = $derived(
 		workouts.filter((w) => w.date >= startOfWeek(today) && w.date <= today && countsAsTraining(w))
@@ -113,9 +107,7 @@
 		</div>
 	{:else if routine}
 		<div class="mt-3.5 flex flex-wrap gap-1.5">
-			<!-- Keyed by position, not by name: the same movement may appear twice in
-			     a routine, and two chips keyed alike is a runtime error. Nothing
-			     reorders this preview, so position is a stable identity. -->
+			<!-- Keyed by position, not name: the same movement can appear twice, and duplicate keys are a runtime error. -->
 			{#each routine.exercises.slice(0, 4) as exercise, index (index)}
 				<span class="bg-secondary text-foreground/70 rounded-full px-2.5 py-1 text-xs">
 					{exercise.name}

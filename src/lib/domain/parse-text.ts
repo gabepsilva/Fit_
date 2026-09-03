@@ -19,10 +19,8 @@ const NUMBER_WORDS: Record<string, number> = {
 };
 
 /**
- * Words that sit between a quantity and the food itself. They are dropped
- * before the catalog is searched, because "half an avocado" and "a cup of
- * coffee" are avocado and coffee — leaving the filler in drags a real match
- * below the threshold and sends the item back to be corrected by hand.
+ * Words that sit between a quantity and the food. Dropped before the catalog is
+ * searched — leaving the filler in drags a real match below the threshold.
  */
 const UNIT_HINTS = [
 	'a',
@@ -88,8 +86,8 @@ export function bestFood(query: string) {
 }
 
 /**
- * Leading-quantity patterns, tried in order. Each yields the numeric quantity
- * and the remaining text: "1/2 avocado", "2 x eggs", "150g rice", "two eggs".
+ * Leading-quantity patterns, tried in order. Each yields the quantity and the
+ * remaining text: "1/2 avocado", "150g rice", "two eggs".
  */
 const QUANTITY_PATTERNS: {
 	re: RegExp;
@@ -138,8 +136,8 @@ export function parseLocalText(
 	allMatched: boolean;
 } {
 	const chunks = text
-		// A slash separates items ("eggs / toast") except between digits, where
-		// it is a fraction ("1/2 avocado") and must survive into parseQuantity.
+		// A slash separates items ("eggs / toast") unless between digits, where it
+		// is a fraction ("1/2 avocado") that must survive to parseQuantity.
 		.split(/\s*(?:,|;|\+|(?<!\d)\/(?!\d)|\band\b)\s*/i)
 		.map((c) => c.trim())
 		.filter((c) => c.length > 1);

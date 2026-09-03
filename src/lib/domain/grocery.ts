@@ -2,7 +2,7 @@ import { FOOD_BY_ID } from './foods';
 import { RECIPE_BY_ID } from './recipes';
 import type { PlannedMeal } from './types';
 
-/** The aisles, in the order they are walked. A grocery list sorts by this. */
+/** Aisles in walk order; `buildGrocery` sorts the list by this. */
 const AISLES = [
 	'Produce',
 	'Meat, fish & alternatives',
@@ -27,7 +27,7 @@ const AISLE_BY_CATEGORY: Record<string, Aisle> = {
 	packaged: 'Packaged'
 };
 
-/** A catalog food's category is a kitchen word; an aisle is a shop word. */
+/** Translate a food category into its store aisle. */
 export function groceryAisle(category: string): Aisle {
 	return AISLE_BY_CATEGORY[category] ?? 'Other';
 }

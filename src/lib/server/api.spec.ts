@@ -64,8 +64,7 @@ describe('readTextBody', () => {
 	});
 
 	it('reads the media type past its case and the spacing around it', async () => {
-		// `Content-Type` is case-insensitive and may carry space before its
-		// parameters, so a client that spells it that way is still declaring JSON.
+		// Content-Type is case-insensitive and may carry space before its parameters.
 		const request = jsonRequest('{"username":"jordan"}', {
 			'content-type': 'Application/JSON ; charset=UTF-8'
 		});

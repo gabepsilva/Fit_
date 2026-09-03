@@ -1,11 +1,5 @@
-/**
- * Hand a generated file to the browser. Nothing is uploaded: the bytes are
- * already here, and the object URL points at this tab's own memory.
- *
- * The anchor is put in the document before it is clicked, because not every
- * engine honours a click on a detached one, and the URL is released on a later
- * tick — revoking it in the same one can cancel the download before it starts.
- */
+// The anchor must be in the document when clicked; some engines ignore detached clicks.
+// Revoke on a later tick: revoking in the same tick can cancel the download.
 export function download(filename: string, content: string, type: string) {
 	const url = URL.createObjectURL(new Blob([content], { type }));
 	const anchor = document.createElement('a');

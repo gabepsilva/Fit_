@@ -1,16 +1,10 @@
 import { json } from '@sveltejs/kit';
 
 /**
- * The one shape every endpoint fails in.
- *
- * A code rather than a sentence, for the same reason `usernameProblem` returns
- * one: the interface owns the wording, and a message written here would be
- * translated nowhere and matched on by a client that should be matching on the
- * code. `field` and `reason` carry back what the caller got wrong about its own
- * input, and nothing about what the server holds.
- *
- * The status is derived from the code rather than passed beside it, so two
- * endpoints cannot answer the same failure with different numbers.
+ * `field` and `reason` name what the caller got wrong about its own input, and
+ * nothing about what the server holds. The code, not a sentence, is what
+ * clients match on. The status is derived from the code, so two endpoints
+ * cannot answer the same failure with different numbers.
  */
 const STATUS = {
 	/** The body was not a JSON object of text fields, or was too large to be one. */
@@ -34,7 +28,6 @@ export type ApiErrorCode = keyof typeof STATUS;
 /** What the caller got wrong about its own input. Never anything about stored state. */
 export type ApiErrorDetail = { field?: string; reason?: string };
 
-/** The failure body: `{ "error": { "code": ..., "field": ..., "reason": ... } }`. */
 export function apiError(
 	code: ApiErrorCode,
 	detail: ApiErrorDetail = {},
@@ -44,24 +37,23 @@ export function apiError(
 }
 
 /**
- * A body larger than this is not a sign-in, so it is refused before it is
- * parsed. `adapter-node`'s own `BODY_SIZE_LIMIT` is half a megabyte, which is a
- * sensible ceiling for uploads and a preposterous one for four short strings.
+ * Refused before parsing: four short strings need far less than
+ * `adapter-node`'s `BODY_SIZE_LIMIT`, which is sized for uploads.
  */
 export const MAX_BODY_BYTES = 4096;
 
 const JSON_CONTENT_TYPE = 'application/json';
 
 /**
- * Every value these endpoints read is text, so a body carrying anything else is
- * malformed rather than something to coerce. Refusing to guess is what stops
- * `{"username": {"toString": ...}}` from reaching a query as some other shape.
+ * Every value is text; anything else is malformed, not something to coerce. No
+ * coercion is what stops `{"username": {"toString": ...}}` from reaching a query
+ * as some other shape.
  */
 function textFieldsOf(parsed: unknown): Record<string, string> | null {
 	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
 	const record = parsed as Record<string, unknown>;
-	// Null-prototype, so a `__proto__` key in the body is an ordinary field
-	// rather than an assignment the runtime treats specially.
+	// Null-prototype, so a `__proto__` key is an ordinary field, not a prototype
+	// assignment.
 	const fields = Object.create(null) as Record<string, string>;
 	for (const name of Object.keys(record)) {
 		const value = record[name];
@@ -72,11 +64,10 @@ function textFieldsOf(parsed: unknown): Record<string, string> | null {
 }
 
 /**
- * The request body as text fields, or `null` for anything that is not one.
- *
- * The content type is required rather than sniffed: a request that does not
- * declare JSON is not JSON, and declaring it is also what keeps these endpoints
- * outside the set of content types a cross-site form can produce.
+ * The body as text fields, or `null` for anything that is not one. The content
+ * type is required, not sniffed: a body that does not declare JSON is not JSON.
+ * Requiring it also keeps these endpoints outside the content types a
+ * cross-site form can produce.
  */
 export async function readTextBody(request: Request): Promise<Record<string, string> | null> {
 	const declaredType = request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
@@ -86,7 +77,7 @@ export async function readTextBody(request: Request): Promise<Record<string, str
 	try {
 		parsed = await request.json();
 	} catch {
-		// A truncated or malformed body is the caller's problem, not an incident.
+		// A malformed body is the sender's error, not an error to throw here.
 		return null;
 	}
 	return textFieldsOf(parsed);

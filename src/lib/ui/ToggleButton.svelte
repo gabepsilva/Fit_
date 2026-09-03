@@ -4,12 +4,8 @@
 	import { cn } from '$lib/ui/cn';
 
 	/**
-	 * A button that reports whether it is the chosen one — filters, tabs, meal
-	 * pickers, the week strip. `class` carries the shape and size, which both
-	 * states share; `resting` carries the colors that apply only while
-	 * unselected, and `tone` replaces them while pressed. The two palettes are
-	 * mutually exclusive by construction rather than by a class-merge resolver,
-	 * so exactly one of them ever reaches the element.
+	 * `class` carries the shape and size, shared by both states; `resting` applies
+	 * only while unselected and `tone` only while pressed, so the two never meet.
 	 */
 	let {
 		pressed,

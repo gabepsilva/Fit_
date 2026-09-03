@@ -147,15 +147,13 @@ describe('TodaySessionCard', () => {
 		await expect.element(page.getByText(/2 sessions done this week already/)).toBeInTheDocument();
 	});
 
-	// Turning up and logging nothing is filed, so the summary can say something
-	// kind about it, but the week is not met by walking in and out again.
+	// A walked-out session is filed but doesn't count the week as met.
 	it('does not count a session where nothing was ticked', async () => {
 		await render(TodaySessionCard, {
 			props: { ...base, today: TUESDAY, workouts: [walkedOut(MONDAY)] }
 		});
 		await expect.element(page.getByText('The calendar has nothing scheduled.')).toBeInTheDocument();
-		// Read once rather than retried: the claim is that the sentence never
-		// arrives, and a retried assertion would only prove it was not there yet.
+		// Read once, not retried: the claim is the line never appears.
 		expect(page.getByText(/done this week already/).elements()).toHaveLength(0);
 	});
 

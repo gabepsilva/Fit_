@@ -46,19 +46,14 @@
 	let busy = $state(false);
 	let problem = $state<FormProblem | null>(null);
 
-	/** When the throttle will accept another attempt, as a wall-clock time. */
+	/** Throttle expiry as a wall-clock timestamp, or null. */
 	let held = $state<number | null>(null);
 	let now = $state(Date.now());
 
 	const waitLeft = $derived(held === null ? 0 : Math.max(0, Math.ceil((held - now) / 1000)));
 	const waiting = $derived(waitLeft > 0);
 
-	/**
-	 * The wait is the distance to an end time rather than a number ticked down,
-	 * so a phone that stopped firing intervals in a pocket comes back with the
-	 * time that is actually left. Rendering the sentence once would leave "try
-	 * again in 60 seconds" on screen a minute after it stopped being true.
-	 */
+	// End time, not a countdown: intervals stop in a pocket but wall-clock doesn't.
 	$effect(() => {
 		if (held === null) return;
 		const id = setInterval(() => (now = Date.now()), 1000);
@@ -75,12 +70,7 @@
 		return problem?.field === field ? problem.message : undefined;
 	}
 
-	/**
-	 * A throttled attempt is held against the clock rather than described once,
-	 * but only when `Retry-After` said how long. Without it there is no length to
-	 * count down, and inventing one would tell someone to wait for a number the
-	 * server never promised — so it falls through to the plain sentence.
-	 */
+	// Count down only when Retry-After is present; otherwise show a plain message.
 	function fail(failure: AuthFailure) {
 		const seconds = failure.code === 'too-many-attempts' ? failure.retryAfterSeconds : undefined;
 		if (seconds === undefined) {

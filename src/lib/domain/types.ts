@@ -40,10 +40,7 @@ export type Micros = {
 	folate: number;
 };
 
-/**
- * The zero of `Micros`. Every micronutrient is declared, so adding one to the
- * type fails here until the new key has a value everywhere it is seeded.
- */
+/** Zeroed `Micros`; adding a field to the type fails here until a value is given. */
 export const ZERO_MICROS: Micros = {
 	fiber: 0,
 	sugar: 0,
@@ -167,7 +164,7 @@ export type LoadUnit = 'kg' | 'lb';
 
 export const DEFAULT_LOAD_UNIT: LoadUnit = 'kg';
 
-/** The rest between sets, in seconds: what it opens at, and how far it can be moved. */
+/** Rest between sets, in seconds: the default, and its lower and upper bounds. */
 export const DEFAULT_REST_SECONDS = 90;
 export const MIN_REST_SECONDS = 30;
 export const MAX_REST_SECONDS = 180;
@@ -176,10 +173,7 @@ export const MAX_REST_SECONDS = 180;
 export type RoutineExercise = LibraryExercise & {
 	sets: number;
 	reps: number;
-	/**
-	 * The number on the bar, in whatever `loadUnit` is set to. Zero means
-	 * bodyweight, and reads as an em dash rather than a 0.
-	 */
+	/** The load on the bar, in the current `loadUnit`; zero means bodyweight and reads as an em dash. */
 	load: number;
 };
 
@@ -206,9 +200,8 @@ export type WorkoutExercise = {
 };
 
 /**
- * One trip to the gym. Copied from the routine at the moment it starts rather
- * than referenced: editing a routine afterwards must not rewrite what was
- * lifted last Tuesday.
+ * One trip to the gym, copied from the routine at start rather than referenced,
+ * so editing a routine later does not rewrite what was lifted.
  */
 export type Workout = {
 	id: string;
@@ -240,9 +233,8 @@ export type TendState = {
 	weekPlan: PlannedMeal[];
 	pantry: string[];
 	/**
-	 * Training lives beside the household rather than inside a profile: meals are
-	 * cooked for everyone at the table, but the gym log belongs to whoever holds
-	 * the phone. Split it per profile when a second person starts lifting.
+	 * Training is per-household, not per-profile: the gym log belongs to whoever
+	 * lifts, unlike meals, which are shared.
 	 */
 	routines: Routine[];
 	trainingPlan: PlannedWeek[];
@@ -250,9 +242,8 @@ export type TendState = {
 	workouts: Workout[];
 	activeWorkout: Workout | null;
 	/**
-	 * The label every load is read in. It is a label and nothing else: a load is
-	 * stored as the number that was on the bar, and switching this relabels the
-	 * readouts rather than rewriting what was lifted.
+	 * The unit the labels are read in. It relabels the readouts only — a load is
+	 * stored as the number on the bar, so switching it rewrites nothing.
 	 */
 	loadUnit: LoadUnit;
 	/** How long the rest between sets runs, in seconds. */

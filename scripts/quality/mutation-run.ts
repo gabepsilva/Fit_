@@ -60,11 +60,8 @@ function parseArguments(argv: string[]): Arguments {
 }
 
 /**
- * `cleanTempDir: 'always'` only runs when Stryker exits normally, and a
- * mutation run is long enough that interrupting one is routine. Each abandoned
- * sandbox is a full copy of the checkout, so they accumulate tens of gigabytes
- * inside the tree — where every tool that walks it then has to be told to skip
- * them. The next run owns the directory anyway, so it clears it on the way in.
+ * `cleanTempDir` only runs on a normal exit, so an interrupted run leaves
+ * full-checkout sandboxes behind; the next run clears them on entry.
  */
 async function clearStrykerSandboxes(root: string): Promise<void> {
 	await rm(path.join(root, '.stryker-tmp'), { recursive: true, force: true });

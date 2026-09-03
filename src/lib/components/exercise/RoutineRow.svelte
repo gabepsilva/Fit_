@@ -6,10 +6,7 @@
 	import { routineTone } from '$lib/components/exercise/routine-tone';
 	import { cn } from '$lib/ui/cn';
 
-	/**
-	 * One routine in the rotation. The row opens it; the button beside it starts
-	 * it — two destinations that a single tap target would have to guess between.
-	 */
+	/** The row opens the routine; the button beside it starts it — two actions, so two targets. */
 	let {
 		routine,
 		index,
@@ -17,7 +14,7 @@
 		onstart
 	}: {
 		routine: Routine;
-		/** Position in the rotation, which is also what picks the routine's tone. */
+		/** Position in the rotation; also picks the routine's tone. */
 		index: number;
 		current?: boolean;
 		onstart: (routineId: string) => void;
@@ -31,9 +28,8 @@
 	});
 	const startLabel = $derived(`Start ${routine.name}`);
 	/**
-	 * A routine with nothing on it has no session to run — `tend.startWorkout`
-	 * refuses it — so the control that would run it says so rather than looking
-	 * live and doing nothing.
+	 * `startWorkout` refuses an empty routine, so its start control is disabled
+	 * rather than left looking live.
 	 */
 	const empty = $derived(routine.exercises.length === 0);
 </script>

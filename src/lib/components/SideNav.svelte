@@ -11,10 +11,7 @@
 	import NavLink from './NavLink.svelte';
 	import type { NavRoute } from './nav-routes';
 
-	/**
-	 * The pathname is a prop rather than read from `$app/state` here so the
-	 * active state is a plain input — the shell owns knowing where we are.
-	 */
+	// pathname is a prop, not a $app/state read: the shell owns knowing where we are.
 	let { open = $bindable(false), pathname }: { open?: boolean; pathname: string } = $props();
 
 	type Destination = { route: NavRoute; label: string; icon: typeof Home; active: boolean };

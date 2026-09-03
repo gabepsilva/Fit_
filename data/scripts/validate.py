@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 """Check the built database against things that must be true.
 
-This is not a test suite for the pipeline's code — it is a set of assertions
-about the data itself, run against the artifact that would actually ship. A
-build that passes its own unit tests can still emit a table where half the
-calories are wrong, so the checks here are about plausibility and joins.
+Assertions on the shipped data itself (plausibility, joins), not a test of
+the pipeline's code.
 """
 
 from __future__ import annotations
@@ -72,7 +70,7 @@ def main() -> int:
              "SELECT count(*) FROM (SELECT gtin14 FROM food WHERE gtin14 IS NOT NULL "
              "GROUP BY 1 HAVING count(*) > 1)"),
 
-            # Licensing: the whole point of value_ref is that it is never mixed.
+            # Licensing: the license derives from value_ref and must always exist.
             ("rows with no license",
              "SELECT count(*) FROM food WHERE license IS NULL OR license = ''"),
             ("rows with no value_ref",
@@ -81,7 +79,6 @@ def main() -> int:
         for name, sql in checks:
             ok &= check(db, name, sql)
 
-        # Search has to actually return something.
         ok &= check(db, "FTS returns hits for 'chicken'",
                     "SELECT count(*) FROM food_fts WHERE food_fts MATCH 'chicken'", expect_zero=False)
 

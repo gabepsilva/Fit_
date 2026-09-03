@@ -13,15 +13,13 @@
 	import SwapSheet from './SwapSheet.svelte';
 
 	/**
-	 * The exercise the session is on: what it is, what it went at last time, the
-	 * sets to tick off, and somewhere to write down why today was different.
-	 * Everything it changes goes straight to the store, so the session survives
-	 * a reload mid-set.
+	 * The exercise the session is on. Every change goes straight to the store,
+	 * so the session survives a reload mid-set.
 	 */
 	let {
 		onlog
 	}: {
-		/** Fires when a set is ticked on — the moment the rest between sets begins. */
+		/** Fires when a set is ticked on, starting its rest. */
 		onlog?: (() => void) | undefined;
 	} = $props();
 
@@ -33,8 +31,7 @@
 
 	function toggle(index: number, wasDone: boolean) {
 		tend.toggleSet(index);
-		// Taking a tick back corrects a mistake rather than ending a set, so it
-		// starts no rest.
+		// Ticking back corrects a set rather than ending one, so it starts no rest.
 		if (!wasDone) onlog?.();
 	}
 </script>

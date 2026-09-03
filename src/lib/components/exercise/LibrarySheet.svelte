@@ -7,11 +7,7 @@
 	import Sheet from '$lib/ui/Sheet.svelte';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
-	/**
-	 * The whole library, filtered by muscle group, picked several at a time.
-	 * Selection accumulates rather than adding on each tap, so building a
-	 * push day is one trip through the list instead of six.
-	 */
+	// Selection accumulates: building a push day is one trip through the list, not six.
 	let {
 		open = $bindable(false),
 		routineName,

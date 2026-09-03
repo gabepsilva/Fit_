@@ -1,11 +1,7 @@
 <script lang="ts">
 	import { cn } from '$lib/ui/cn';
 
-	/**
-	 * How far along a value is toward its target. Decoration for the reading
-	 * beside it, so it carries no label of its own and stays out of the
-	 * accessibility tree.
-	 */
+	/** Decorative: the reading beside it carries the value, so it stays out of the accessibility tree. */
 	let {
 		value,
 		target,
