@@ -38,7 +38,7 @@ jobs:
           bun-version-file: .tool-versions
 
       - name: Restore Bun package cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -48,7 +48,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Restore scanner image and rule cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Semgrep's hash-verified rule pack lives here, not in ~/.cache, and the
           # pinned scanner images are saved here too: a `docker pull` per run
@@ -100,7 +100,7 @@ jobs:
           bun-version-file: .tool-versions
 
       - name: Restore Bun package cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -110,7 +110,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Restore Playwright browser cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ hashFiles('bun.lock') }}
@@ -181,7 +181,7 @@ jobs:
           bun-version-file: .tool-versions
 
       - name: Restore Bun package cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -199,7 +199,7 @@ jobs:
 
       - name: Restore Chromium cache
         if: matrix.browser && steps.mutation-scope.outputs.needed == 'true'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ hashFiles('bun.lock') }}
@@ -209,7 +209,7 @@ jobs:
         run: bunx playwright install --with-deps chromium
 
       - name: Restore validated mutation cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             reports/mutation/${{ matrix.lane }}/incremental.json
@@ -253,7 +253,7 @@ jobs:
           bun-version-file: .tool-versions
 
       - name: Restore Bun package cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -299,7 +299,7 @@ jobs:
           bun-version-file: .tool-versions
 
       - name: Restore Bun package cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -309,7 +309,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Restore Playwright browser cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-firefox-webkit-${{ hashFiles('bun.lock') }}
@@ -354,7 +354,7 @@ jobs:
           bun-version-file: .tool-versions
 
       - name: Restore Bun package cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -364,7 +364,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Restore scanner image and rule cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Semgrep's hash-verified rule pack lives here, not in ~/.cache, and the
           # pinned scanner images are saved here too: a `docker pull` per run
@@ -420,7 +420,7 @@ jobs:
           bun-version-file: .tool-versions
 
       - name: Restore Bun package cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
@@ -430,7 +430,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Restore scanner image and rule cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Scoped to what this job populates: the pinned scanner images and
           # Semgrep's rule pack. Trivy's database is not here -- see nightly.yml.
@@ -444,7 +444,7 @@ jobs:
         run: bun run security:images actionlint gitleaks semgrep
 
       - name: Restore Playwright browser cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ hashFiles('bun.lock') }}
