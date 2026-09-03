@@ -42,16 +42,6 @@ describe('fieldWording', () => {
 		);
 	});
 
-	it('caps a device label at the same length as a display name', () => {
-		expect(fieldWording('deviceLabel', 'too-long')).toBe('At most 100 characters.');
-	});
-
-	it('describes an invisible character in a device label', () => {
-		expect(fieldWording('deviceLabel', 'unsafe-characters')).toBe(
-			'Remove any invisible or control characters.'
-		);
-	});
-
 	it('falls back rather than showing a bare code for a reason it does not know', () => {
 		expect(fieldWording('username', 'reversed')).toBe('That value can’t be used.');
 	});

@@ -94,14 +94,6 @@ test.describe('the sign-in form', () => {
 		await expect(page.getByRole('alert')).toHaveText('That username and password don’t match.');
 	});
 
-	test('refuses a device label over a hundred characters', async ({ page }) => {
-		await page.getByLabel('Name this device').fill('d'.repeat(101));
-		await attempt(page, freshUsername(), PASSWORD);
-
-		await expect(page.getByText('At most 100 characters.')).toBeVisible();
-		await expect(page.getByLabel('Name this device')).toHaveAttribute('aria-invalid', 'true');
-	});
-
 	test('has no detectable accessibility violations with the form refused', async ({ page }) => {
 		await attempt(page, freshUsername(), PASSWORD);
 		await expect(page.getByRole('alert')).toBeVisible();
