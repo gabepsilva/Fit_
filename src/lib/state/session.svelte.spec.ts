@@ -30,11 +30,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-/**
- * `fetch` is stubbed rather than pointed at a running server: what `refresh`
- * owns is which answers it believes, and a real endpoint would test the
- * endpoint instead. See `$lib/auth/api`'s own spec for the request shape.
- */
+// Tests which answers `refresh` believes, not the endpoint.
 function stubFetch(response: Response | Error): void {
 	vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
 		response instanceof Error ? Promise.reject(response) : Promise.resolve(response)
@@ -180,8 +176,7 @@ describe('session', () => {
 	});
 
 	it('keeps the record when the request never arrived, rather than guessing', async () => {
-		// Offline is not signed out. Dropping the record here would sign someone
-		// out of a working session every time they went through a tunnel.
+		// Offline is not signed out: dropping the record would sign out a working session.
 		session.begin(signedInSession(inDays(90)));
 		stubFetch(new TypeError('Failed to fetch'));
 		await expect(session.refresh()).resolves.toBe(false);
@@ -192,8 +187,7 @@ describe('session', () => {
 
 describe('SESSION_STORAGE_KEY', () => {
 	it('is the key already in the browsers that have it', () => {
-		// Renaming this is not a refactor: every device holding the old key reads
-		// as signed out on the next load, so the name is part of the contract.
+		// Renaming this signs out every device holding the old key: the name is a contract.
 		expect(SESSION_STORAGE_KEY).toBe('fit.session.v1');
 	});
 });
@@ -208,8 +202,7 @@ describe('a fresh store', () => {
 	});
 
 	it('reads a session that expires this very instant as over', () => {
-		// `expiresAt` is the moment the server stops honouring it, not the last
-		// moment it does, so the boundary belongs on the expired side.
+		// `expiresAt` is when the server stops honouring it, so the boundary is expired.
 		const now = Date.parse('2026-08-30T12:00:00.000Z');
 		vi.spyOn(Date, 'now').mockReturnValue(now);
 		const store = new SessionStore();
@@ -226,9 +219,7 @@ describe('a fresh store', () => {
 });
 
 describe('a browser with no localStorage', () => {
-	// The Capacitor WebView and a browser with site data blocked both reach this
-	// code with `globalThis.localStorage` missing. Nothing here may throw: the
-	// store is a cache, and losing it is not losing the session.
+	// Capacitor WebView and blocked site data both reach this with `localStorage` missing; nothing may throw.
 	beforeEach(() => {
 		vi.stubGlobal('localStorage', undefined);
 	});
@@ -281,8 +272,7 @@ describe('isSession', () => {
 	});
 
 	it('rejects a function wearing a session\u2019s properties, because it is not one', () => {
-		// The guard promises `value is SignedInSession`, so anything that is not an
-		// object has to fail it however convincing its properties look.
+		// The type guard must reject non-objects regardless of their properties.
 		const impostor = Object.assign(() => undefined, payload({}));
 		expect(isSession(impostor)).toBe(false);
 	});

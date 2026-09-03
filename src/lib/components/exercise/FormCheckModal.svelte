@@ -4,11 +4,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
 
-	/**
-	 * Three things to watch, for the movement you are about to do badly. The
-	 * demonstration itself is a placeholder and says so: a panel that looked like
-	 * a video player but never played would be worse than an honest gap.
-	 */
+	// The demo clip is a placeholder that says so: a fake player is worse than an honest gap.
 	let {
 		open = $bindable(false),
 		name,
@@ -26,9 +22,7 @@
 		<p class="text-xs">A demonstration clip belongs here</p>
 	</div>
 	<ul class="mt-4 flex flex-col gap-2.5">
-		<!-- Keyed by position: the cue lists are written by hand, and a repeated
-		     line keyed by its own text is a runtime error rather than a repeated
-		     line. Nothing reorders this list. -->
+		<!-- Keyed by position: a repeated cue would be a duplicate key, and nothing reorders this list. -->
 		{#each cues as cue, i (i)}
 			<li class="flex items-start gap-2.5">
 				<span

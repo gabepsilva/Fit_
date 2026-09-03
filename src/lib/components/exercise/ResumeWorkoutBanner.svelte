@@ -4,20 +4,11 @@
 	import type { Workout } from '$lib/domain/types';
 	import { elapsedSeconds, formatDuration, workoutSetsDone } from '$lib/domain/workout';
 
-	/**
-	 * The way back into a session that was walked away from. A workout with
-	 * nothing ticked is not worth interrupting the page for.
-	 */
+	// A workout with nothing ticked is not worth interrupting the page for.
 	let { workout }: { workout: Workout | null } = $props();
 
-	/**
-	 * How often the "ago" reading is retaken. This is a coarse reading of how
-	 * long a session has been abandoned — minutes and hours are what it is read
-	 * for — so it is not worth waking the home screen sixty times a minute to
-	 * keep the last digit honest. Ten seconds is close enough that the reading
-	 * is never visibly wrong, and it is exact the moment the screen appears
-	 * because the clock is read at mount rather than counted up from zero.
-	 */
+	// 10s is coarse on purpose: the reading is minutes and hours, ten ticks a minute is never
+	// visibly wrong, and it keeps the home screen from redrawing every second.
 	const TICK_MS = 10_000;
 
 	let now = $state(Date.now());

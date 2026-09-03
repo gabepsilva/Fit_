@@ -1,9 +1,8 @@
 import type { Routine, Workout, WorkoutExercise, WorkoutSet } from '$lib/domain/types';
 
 /**
- * Open a routine into the workout that will record it. Every set is written out
- * up front, because that is what the session screen ticks off — and because the
- * routine may be edited tomorrow, while what was lifted today may not.
+ * Open a routine into the workout that will record it. Sets are written out up
+ * front — the routine may be edited later, but what was lifted must not change.
  */
 export function workoutFromRoutine(
 	routine: Routine,
@@ -35,14 +34,9 @@ export function workoutSetsDone(workout: Workout): number {
 }
 
 /**
- * Whether a filed session counts as training. A session can be walked out of
- * with nothing ticked — `finishWorkout` files it so the summary has something
- * kind to say — but a week is not met by walking in and out again, so nothing
- * that counts sessions or marks a day as trained may count that one.
- *
- * Every screen that answers "did this happen?" reads through here, so the
- * answer cannot differ between the week strip, the today card, the progress
- * screen and the adherence chart.
+ * Whether a filed session counts as training: it must be finished and have at
+ * least one set ticked. The single source of truth for "did this happen?", so
+ * the week strip, today card, progress and adherence all agree.
  */
 export function countsAsTraining(workout: Workout): boolean {
 	return workout.finishedAt !== null && workoutSetsDone(workout) > 0;
@@ -61,8 +55,8 @@ export function workoutVolume(workout: Workout): number {
 }
 
 /**
- * How long the session has been running. Measured from the clock rather than
- * counted in memory, so leaving the screen — or the app — does not lose time.
+ * How long the session has run, measured from the clock rather than counted in
+ * memory, so leaving the screen does not lose time.
  */
 export function elapsedSeconds(workout: Workout, now: number): number {
 	const end = workout.finishedAt ?? now;
@@ -87,8 +81,8 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
- * What this movement went at last time, so the first set has a starting point
- * that is not a guess. The newest finished workout that logged it wins.
+ * What this movement went at last time, so the first set is not a guess.
+ * The newest finished workout that logged it wins.
  */
 export function lastPerformance(
 	workouts: Workout[],

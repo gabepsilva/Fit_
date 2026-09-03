@@ -4,11 +4,6 @@
 	import LinkButton from '$lib/ui/LinkButton.svelte';
 	import ScreenHeader from './ScreenHeader.svelte';
 
-	/**
-	 * A routine screen reached by an id that no longer names anything — a stale
-	 * link, or a routine deleted in another tab. Both the sheet and the builder
-	 * land here, so they say it once and in the same words.
-	 */
 	let {
 		/** What the screen would have been called had the routine still existed. */
 		title

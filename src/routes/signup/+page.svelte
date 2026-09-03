@@ -24,12 +24,7 @@
 		return problem?.field === field ? problem.message : undefined;
 	}
 
-	/**
-	 * The household is named here because registration creates one: an account
-	 * owns a household, every row is filtered by it, and a person who has not
-	 * got one has nothing to read. Leaving it blank falls back to the display
-	 * name rather than asking twice for the same word on a first-run form.
-	 */
+	// Blank household falls back to the display name; every row is filtered by household_id.
 	function submitted() {
 		const label = deviceLabel.trim();
 		const name = displayName.trim();

@@ -26,19 +26,17 @@ import {
 import type { Account } from './users/types';
 
 /**
- * The public authentication endpoints.
- *
- * The handlers live here rather than in `+server.ts` because `src/lib/server/`
- * is what the `server` vitest project measures and mutates; a route file that
- * held logic would be tested by nothing. Each route is a one-line wrapper that
- * supplies the process-wide database, and everything below takes it as an
- * argument so a spec can hand it an in-memory one.
+ * The public authentication endpoints. They live here rather than in
+ * `+server.ts` because this module is what the `server` vitest project measures
+ * and mutates; each route is a one-line wrapper supplying the process-wide
+ * database, and everything below takes it as an argument so a spec can hand it
+ * an in-memory one.
  */
 
 /**
- * The part of SvelteKit's `RequestEvent` these handlers use. Narrow on purpose:
- * a spec can build one without standing up a framework, and nothing here can
- * quietly start depending on the rest of the event.
+ * The part of SvelteKit's `RequestEvent` these handlers use, on purpose narrow:
+ * a spec can build one without the framework, and nothing here can quietly start
+ * depending on the rest of the event.
  */
 export type AuthEvent = {
 	request: Request;
@@ -49,14 +47,11 @@ export type AuthEvent = {
 };
 
 /**
- * How the client wants its session back.
- *
- * The web build gets the `HttpOnly` cookie and no token in the body — putting
- * it there as well would hand any script on the page the very credential the
- * flag exists to keep from it, and one that outlives the page by ninety days.
- * The Capacitor build has no usable cookie jar for a remote origin and asks for
- * the token instead, which it then sends as `Authorization: Bearer`. One
- * client, one credential: a request never carries both.
+ * How the client wants its session back. The web build gets the `HttpOnly`
+ * cookie and no token in the body — a body token would hand every script on the
+ * page the credential the cookie exists to hide. The Capacitor build has no
+ * usable cookie jar for a remote origin and asks for a token instead, sent as
+ * `Authorization: Bearer`. A request never carries both.
  */
 export const SESSION_DELIVERY_HEADER = 'x-fit-session';
 
@@ -72,10 +67,10 @@ type Submission = { fields: Record<string, string>; deviceLabel: string | null }
 type SubmissionResult = { ok: true; submission: Submission } | { ok: false; response: Response };
 
 /**
- * The device label is validated here, before an account is created rather than
- * after. `createSession` would refuse it either way, but by then registration
- * has already committed four rows, and the caller would get a 400 for an
- * account that exists.
+ * The device label is validated before an account is created, not after:
+ * `createSession` would refuse it either way, but by then registration has
+ * committed four rows and the caller would get a 400 for an account that
+ * exists.
  */
 async function readSubmission(request: Request): Promise<SubmissionResult> {
 	const fields = await readTextBody(request);
@@ -97,12 +92,10 @@ async function readSubmission(request: Request): Promise<SubmissionResult> {
 type IssueOptions = { deviceLabel: string | null; status: number };
 
 /**
- * Start a session and answer with it.
- *
- * `households` is in the body because `household_id` is the predicate every
- * later read filters on, so a client that has just signed in and does not know
- * its household has nothing it can ask for. `expiresAt` is there so a client
- * knows when to stop trusting what it holds without decoding anything.
+ * Start a session and answer with it. `households` is in the body because
+ * `household_id` is the predicate every later read filters on, so a fresh
+ * client has nothing else to ask for. `expiresAt` tells the client when to stop
+ * trusting what it holds, without decoding anything.
  */
 function establishSession(
 	db: DatabaseSync,
@@ -124,11 +117,9 @@ function establishSession(
 }
 
 /**
- * Registration is the one place that necessarily answers "does this username
- * exist": a sign-up form that cannot say a name is taken is not one. Sign-in
- * says nothing of the sort, and that is the property that matters — an attacker
- * learning a name is registered still has to guess the password, while one who
- * can tell a wrong name from a wrong password has halved the problem.
+ * Registration is the one place that answers "does this username exist": a
+ * sign-up form must say when a name is taken. Sign-in says nothing of the sort;
+ * one who can tell a wrong name from a wrong password has halved the problem.
  */
 function registrationError(problem: { field: string; code: string }): Response {
 	if (problem.code === 'taken') return apiError('username-taken', { field: problem.field });
@@ -146,19 +137,17 @@ function tooManyAttempts(retryAfterMs: number): Response {
 }
 
 /**
- * Create an account, the household it owns and its own profile, then sign it
- * in. The four rows go in one transaction inside `registerAccount`; this only
- * decides what the caller is told about it.
+ * Create an account, its household and its own profile, then sign it in. The
+ * four rows go in one transaction inside `registerAccount`; this only decides
+ * what the caller is told.
  *
- * `cost` is injected the way `registerAccount` takes one, because a spec that
- * hashed at the production cost would spend a third of a second per case.
+ * `cost` is injected as `registerAccount` takes it, so a spec need not hash at
+ * the production cost.
  *
  * Throttled on the address before anything is derived, in the order sign-in
- * uses. Without that, this endpoint is both a way to spend the server's CPU 350
- * ms at a time and a free oracle for `username-taken`, which is the one answer
- * here that names who exists. The attempt is counted whether or not an account
- * comes of it, so probing a name costs the prober exactly what registering one
- * does.
+ * uses: without it this is a 350 ms CPU sink and a free `username-taken` oracle.
+ * The attempt is counted whether or not an account results, so probing a name
+ * costs exactly what registering one does.
  */
 export async function register(
 	db: DatabaseSync,
@@ -187,24 +176,20 @@ export async function register(
 }
 
 /**
- * Sign in, in the order the throttle requires.
- *
- * `checkSignIn` runs before `authenticate` so a locked attempt costs a hash
- * lookup instead of 350 ms of scrypt — which is what stops the endpoint from
- * being a way to spend the server's CPU. The failure is counted before the
- * answer is written, and cleared only once the password has actually been
+ * Sign in, in the order the throttle requires. `checkSignIn` runs before
+ * `authenticate` so a locked attempt costs a hash lookup, not 350 ms of scrypt;
+ * the failure is counted before the answer and cleared only once the password is
  * proved.
  *
- * Every failure answers `invalid-credentials` and nothing else. An unknown
- * username, a wrong password and a malformed one are the same status, the same
- * body and — because `authenticate` verifies against a decoy hash when no
- * account matches — near enough the same duration. The username is the only
- * identifier this system has, so a caller who could tell those apart would have
- * halved the problem before guessing anything.
+ * Every failure answers `invalid-credentials` and nothing else: an unknown
+ * username, a wrong password and a malformed one share the same status, body and
+ * — via a decoy hash — near the same duration. The username is the only
+ * identifier, so a caller who could tell those apart would have halved the
+ * problem.
  *
- * A lockout is not an oracle either: the throttle keys on the username as it
- * was submitted, existing or not, so being told to wait says only what the
- * caller has already done.
+ * A lockout is not an oracle either: the throttle keys on the username as
+ * submitted, existing or not, so a wait says only what the caller has already
+ * done.
  */
 export async function signIn(
 	db: DatabaseSync,
@@ -230,24 +215,20 @@ export async function signIn(
 }
 
 /**
- * What the caller's own session is, for the client holding it.
+ * What the caller's own session is, for the client holding it. The browser
+ * cannot read its own `HttpOnly` cookie, so it cannot tell whether that session
+ * survived being revoked elsewhere; `session.svelte.ts` can only cache what
+ * signing in handed back. This reconciles it — the same shape as sign-in minus
+ * the token.
  *
- * The browser cannot read its own `HttpOnly` cookie — that is the point of the
- * flag — so it has no way to tell whether the session behind it survived being
- * revoked from another device, and `session.svelte.ts` can only cache what
- * signing in handed back. This is how that cache is reconciled, so the answer
- * is the same shape sign-in gives minus the token: the account, the households
- * whose rows it may read, and the expiry.
+ * Every field comes from `locals.auth`, resolved from the caller's own
+ * credential, so nothing here is more than the caller already has. No other
+ * profile, member, session row or token material: returning more is the leak,
+ * not the credential it was asked about.
  *
- * Every field comes from `locals.auth`, which the request hook resolved from
- * the credential this caller itself presented, so there is nothing here it did
- * not already have. No other profile, no household member, no session row and
- * no token material: a read endpoint that answered with more than the caller
- * owns would be the leak, not the credential it was asked about.
- *
- * It takes no database. Resolving the session already read one, once, in
- * `hooks.server.ts`, and reading it again here would only be a second chance to
- * disagree with the authority every other endpoint trusts.
+ * It takes no database: the session was already resolved in `hooks.server.ts`,
+ * and reading it again would only risk disagreeing with the authority every
+ * other endpoint trusts.
  */
 export function currentSession(event: AuthEvent): Response {
 	const auth = event.locals.auth;
@@ -267,16 +248,14 @@ function signedOut(): Response {
 /**
  * End the session this request presented, and remove the cookie carrying it.
  *
- * The credential is read with `sessionTokenFrom`, the same resolver the request
- * hook uses, so sign-out revokes exactly what the caller sent rather than
- * whatever `locals.auth` happened to resolve to. Bearer beats cookie here for
- * the same reason it does there.
+ * The credential comes from `sessionTokenFrom`, the same resolver the request
+ * hook uses, so this revokes exactly what the caller sent, not whatever
+ * `locals.auth` resolved to. Bearer beats cookie here for the same reason there.
  *
- * Idempotent on purpose. A browser holding a cookie the server has already
- * forgotten — expired, revoked from another device — still has to be able to
- * get rid of it, and answering 401 would leave it stuck presenting a session
- * that does not exist. There is no oracle in that: 204 is the answer whether or
- * not a row was deleted.
+ * Idempotent on purpose: a browser holding a cookie the server has forgotten —
+ * expired, revoked elsewhere — must still be able to get rid of it, and a 401
+ * would leave it stuck presenting a session that does not exist. No oracle: 204
+ * either way, whether or not a row was deleted.
  */
 export function signOut(db: DatabaseSync, event: AuthEvent): Response {
 	const token = sessionTokenFrom(event.request, event.cookies.get(SESSION_COOKIE));
@@ -287,13 +266,12 @@ export function signOut(db: DatabaseSync, event: AuthEvent): Response {
 
 /**
  * End every session the account has — the "sign out my other devices" a lost
- * phone needs, and the reason sessions are rows rather than signed tokens.
+ * phone needs, and why sessions are rows rather than signed tokens.
  *
- * This one does need `locals.auth`, because it acts on an account rather than
- * on a credential, and an anonymous request names no account to act on. The
- * session making the request goes with the rest: a phone that has been stolen
- * mid-session is exactly the case, and leaving the caller signed in would mean
- * doing it twice.
+ * This one needs `locals.auth` because it acts on an account, not a credential;
+ * an anonymous request names no account to act on. The requesting session goes
+ * with the rest: a stolen phone is exactly the case, and leaving the caller
+ * signed in would mean doing it twice.
  */
 export function signOutEverywhere(db: DatabaseSync, event: AuthEvent): Response {
 	const auth = event.locals.auth;

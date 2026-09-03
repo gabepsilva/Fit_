@@ -8,10 +8,8 @@
 	import { SET_GRID } from './sheet-grids';
 
 	/**
-	 * One line of the set list: which set, what it is being done at, and whether
-	 * it happened. Reps and load stay adjustable after the tick, because the
-	 * number that was planned and the number that was lifted often differ and
-	 * the correction usually arrives a moment late.
+	 * Reps and load stay adjustable after a set is ticked, since the planned and
+	 * the lifted number often differ.
 	 */
 	let {
 		number,

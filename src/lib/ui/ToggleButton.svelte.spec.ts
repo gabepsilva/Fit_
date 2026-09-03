@@ -31,10 +31,8 @@ describe('ToggleButton', () => {
 		await expect.element(page.getByRole('button')).toHaveClass(/bg-card/);
 	});
 
-	// The resting palette has to leave the element, not merely lose to the tone in
-	// the stylesheet. Nothing resolves conflicting utilities any more, so a
-	// resting background left in place would be decided by Tailwind's own class
-	// order rather than by which state the button is in.
+	// The resting palette has to leave the element, not merely lose in the
+	// stylesheet: nothing merges the classes, so a leftover would apply by Tailwind's order.
 	it('replaces the resting palette with the selected tone', async () => {
 		await render(ToggleButtonHarness, {
 			props: { label: 'Photo', pressed: true, resting: 'bg-card text-muted-foreground' }

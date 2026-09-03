@@ -1,23 +1,14 @@
 import { hasBearerCredential } from './request-auth';
 
 /**
- * Which state-changing requests are allowed to be made at all.
+ * Which state-changing requests are allowed at all.
  *
- * A cookie is ambient: the browser attaches it to a request another site
- * caused, which is the whole of cross-site request forgery. A bearer token is
- * not — the Android build has to read it out of storage and put it on the
- * request itself, and a page on another origin cannot make it do that. So the
- * two clients are checked differently on purpose: the cookie client must prove
- * where the request came from, and the bearer client is exempt.
- *
- * That exemption is also why the Capacitor origin is not in the allowed list.
- * A WebView presents `http://localhost` or `capacitor://localhost`, and
- * trusting either would trust every page any browser serves from localhost.
- *
- * SvelteKit has its own origin check, but it only covers form-encoded posts.
- * This one covers every unsafe method whatever the body, and is deliberately
- * not implicit: the origins that may drive this server are configuration, so
- * a deployment behind a different name fails closed until it says so.
+ * Cookies are ambient, so the cookie client proves its origin; a bearer token
+ * is attached deliberately and is exempt. The Capacitor origin is never in the
+ * list: a WebView presents `localhost`, which must not be trusted. Origins are
+ * configuration, so an undeclared deployment fails closed until it declares
+ * them. SvelteKit's own check covers form-encoded posts only; this one covers
+ * every unsafe method.
  */
 
 /** The environment variable that names the origins allowed to drive this server. */
@@ -40,23 +31,20 @@ function toOrigin(value: string, variable: string): string {
 	} catch {
 		throw new Error(`${variable} must list absolute origins; "${value}" is not one`);
 	}
-	// A scheme the URL standard has no origin for — `capacitor://localhost`, say
-	// — normalizes to the literal "null", which is also what a sandboxed frame
-	// sends. Allowing it would allow every one of them.
+	// Schemes with no origin normalize to the string "null", which sandboxed
+	// frames send; allowing it would allow every sandboxed frame.
 	if (parsed.origin === 'null') {
 		throw new Error(`${variable} must list origins with a scheme that has one; "${value}" has not`);
 	}
-	// `https://fit.example/app` and `https://fit.example` are the same origin,
-	// and only the origin is ever compared against the header.
+	// Only the origin is compared against the header, so paths are dropped.
 	return parsed.origin;
 }
 
 /**
  * The configured origins, most specific variable first.
  *
- * Empty means nothing was configured, which the check reads as same-origin
- * only. A misconfigured value throws rather than narrowing to nothing, because
- * a policy that silently allows less is a policy nobody notices is wrong.
+ * Empty means same-origin only; a malformed value throws rather than silently
+ * narrowing the policy.
  */
 export function configuredOrigins(
 	environment: Record<string, string | undefined> = process.env
@@ -75,10 +63,8 @@ export function configuredOrigins(
 /**
  * Whether this request may change state.
  *
- * A missing `Origin` header is refused rather than waved through: every browser
- * has sent one on unsafe methods for years, so its absence is either a client
- * that is not a browser — which can send the bearer token instead — or an
- * attempt to dodge the check.
+ * Browsers always send `Origin` on unsafe methods, so a missing one is refused
+ * rather than waved through.
  */
 export function checkOrigin(
 	request: Request,
@@ -91,8 +77,7 @@ export function checkOrigin(
 	if (hasBearerCredential(request)) return { allowed: true, basis: 'bearer' };
 	const origin = request.headers.get('origin');
 	if (origin === null) return { allowed: false, reason: 'missing-origin' };
-	// Nothing configured means the server answers under one name and that name
-	// is the one it is being asked under.
+	// Nothing configured: the allowed origin is the one the server answers under.
 	const allowed = origins.length > 0 ? origins : [url.origin];
 	if (!allowed.includes(origin)) return { allowed: false, reason: 'foreign-origin' };
 	return { allowed: true, basis: 'allowed-origin' };

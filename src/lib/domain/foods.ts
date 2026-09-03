@@ -2,8 +2,7 @@ import { FOODS } from './food-catalog';
 import type { Food, Micros } from './types';
 import { round1 } from './utils';
 
-// The seed rows themselves live in `./food-catalog`, so mutation testing can be
-// aimed at the behavior below without grading string literals in the data.
+// Seed rows live in `./food-catalog`; re-exported here so mutation testing targets behavior, not data.
 export { CATEGORY_LABEL, FOODS, PROVENANCE_LABEL } from './food-catalog';
 
 export const FOOD_BY_ID: Record<string, Food> = Object.fromEntries(

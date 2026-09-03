@@ -30,8 +30,7 @@
 		tend.patchActive((p) => ({
 			...p,
 			glp1: on,
-			// Leaving GLP-1 mode should not strand the profile on a goal that only
-			// exists for it.
+			// Reset goal when mode is off; 'glp1' goal only exists for that mode.
 			goal: on ? 'glp1' : p.goal === 'glp1' ? 'lose' : p.goal
 		}));
 	}

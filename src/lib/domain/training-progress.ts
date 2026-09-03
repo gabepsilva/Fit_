@@ -23,13 +23,9 @@ export type TrendPoint = {
 };
 
 /**
- * The heaviest set of one movement, week by week. Weekly rather than per
- * session, because two sessions in a week make a sawtooth out of a line that is
- * meant to answer one question: is this getting heavier?
- *
- * Weeks are held by year as well as by number: week 52 and week 1 either side
- * of New Year are consecutive, and sorting on the number alone would draw a
- * year of progress as a collapse.
+ * The heaviest set of one movement, week by week. Weeks are keyed by year and
+ * number, not number alone, so week 52 and week 1 either side of New Year
+ * stay in order.
  */
 export function loadTrend(workouts: Workout[], name: string, count = 7): TrendPoint[] {
 	const byWeek = new Map<string, TrendPoint>();
@@ -46,9 +42,8 @@ export function loadTrend(workouts: Workout[], name: string, count = 7): TrendPo
 }
 
 /**
- * How many weeks the trend reaches back over, gaps included. Two points
- * fourteen weeks apart are fifteen weeks of history, not two: counting the
- * points instead would caption a long silence as a short streak.
+ * How many weeks the trend spans, gaps included — the span between the first
+ * and last point, not the number of points.
  */
 export function weekSpan(points: TrendPoint[]): number {
 	const first = points[0];
@@ -106,9 +101,9 @@ export type AdherenceWeek = {
 };
 
 /**
- * What the calendar asked for against what happened, for the weeks just gone.
- * A week the plan left empty asks for nothing, so training anyway shows as done
- * without a shortfall to explain.
+ * What the plan asked for against what happened, for recent weeks. A week the
+ * plan left empty asks for nothing, so training there shows as done with no
+ * shortfall.
  */
 export function weeklyAdherence(args: {
 	workouts: Workout[];
@@ -121,9 +116,8 @@ export function weeklyAdherence(args: {
 }): AdherenceWeek[] {
 	const { workouts, plan, routines, weeks, year, throughWeek, count = 4 } = args;
 	const done = new Map<number, number>();
-	// A session that logged nothing is filed, so the summary can say so, but it is
-	// not a session the plan asked for. Counting it would let a week be met by
-	// walking in and out again.
+	// A filed-but-empty session is not one the plan asked for; counting it would
+	// let a week be met by walking in and out again.
 	for (const workout of workouts.filter(countsAsTraining)) {
 		const at = weekOf(workout.date);
 		if (at.year === year) done.set(at.week, (done.get(at.week) ?? 0) + 1);
@@ -172,13 +166,11 @@ export function personalRecords(workouts: Workout[], limit = 3): PersonalRecord[
 }
 
 /**
- * How much the movement on the chart has moved, as a sentence. Empty when there
- * is nothing to report: one week of history has no change in it, and a top set
- * that has not budged is not news.
+ * How much the charted movement has moved, as a sentence. Empty when there is
+ * nothing to report: one week has no change, and an unchanged top set is no news.
  */
 function loadSentence(workouts: Workout[], unit: LoadUnit): string {
-	// The movement the load trend opens on, so the note and the chart it sends
-	// you to are talking about the same thing.
+	// The movement the load trend opens on, so the note and its chart match.
 	const name = trainedExercises(workouts)[0];
 	if (name === undefined) return '';
 	const points = loadTrend(workouts, name);
@@ -187,32 +179,29 @@ function loadSentence(workouts: Workout[], unit: LoadUnit): string {
 	if (!first || !last || first.load === last.load) return '';
 	const change = round1(Math.abs(last.load - first.load));
 	const direction = last.load > first.load ? 'heavier' : 'lighter';
-	// One less than the span: the span counts both end weeks, and what is being
-	// pointed at is the week the first bar was lifted in, not the width of the
-	// chart.
+	// One less than the span: it points at the week the first bar was lifted,
+	// not the width of the chart.
 	const ago = weekSpan(points) - 1;
 	return `${name} is ${change} ${unit} ${direction} than ${ago} ${ago === 1 ? 'week' : 'weeks'} ago.`;
 }
 
 /**
- * Which group the plan is thinnest on, as a sentence. Empty until there are two
- * groups to compare: a single group trained is not the thin part of anything,
- * it is all there is.
+ * Which group the plan is thinnest on, as a sentence. Empty until two groups
+ * can be compared — one group is all there is, not the thin part.
  */
 function thinGroupSentence(workouts: Workout[], sinceISO: string): string {
 	const volume = volumeByGroup(workouts, sinceISO);
 	const thinnest = volume.length > 1 ? volume.at(-1) : undefined;
 	if (!thinnest) return '';
-	// "Legs are", "Chest is" — the group names that read as plurals are the ones
-	// that end in s, and that holds for every group in the library.
+	// "Legs are", "Chest is": a group reads as plural exactly when it ends in s.
 	const verb = thinnest.group.endsWith('s') ? 'are' : 'is';
 	return `${thinnest.group} ${verb} still the thin part of the plan.`;
 }
 
 /**
- * The take-away under the session summary: what the movement on the chart has
- * done lately, and which group the plan is thinnest on. Either half is dropped
- * when it has nothing to say, and with neither there is no note and no card.
+ * The take-away under the session summary: how the charted movement has moved
+ * and which group the plan is thinnest on. Each half is dropped when it has
+ * nothing to say.
  */
 export function summaryNote(args: {
 	workouts: Workout[];

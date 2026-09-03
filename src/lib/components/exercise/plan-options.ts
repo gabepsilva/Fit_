@@ -12,17 +12,12 @@ export type PlanOption = {
 	days: number[];
 };
 
-/**
- * The routines in rotation, plus the rest week that is a decision rather than a
- * gap. Every screen that assigns a week offers exactly this list, so it is built
- * in one place and a routine keeps its color wherever a week appears.
- */
+/** Routines plus the rest week, built once so a routine keeps its tone on every screen. */
 export function planOptions(routines: Routine[]): PlanOption[] {
 	const rest: PlanOption = {
 		id: REST_WEEK,
 		name: 'Rest week',
-		// An em dash rather than an initial: a rest week is the absence of a
-		// routine, and an "R" beside a "B" reads as one more of them.
+		// An em dash, not an initial: an "R" beside other initials reads as one more routine.
 		letter: '—',
 		tone: REST_TONE,
 		days: []

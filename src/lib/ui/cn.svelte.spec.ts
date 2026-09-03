@@ -15,10 +15,7 @@ describe('cn', () => {
 		expect(cn('p-2', 'm-4')).toBe('p-2 m-4');
 	});
 
-	// Guards the reason the bundle can do without a class-merge resolver: nothing
-	// downstream may assume `cn` picks a winner. A component that needs one state
-	// to replace another has to choose between them itself, the way ToggleButton
-	// chooses between `resting` and its pressed tone.
+	// Guards the no-merge contract: callers pick one utility per group, `cn` never does.
 	it('does not resolve two utilities from the same group', () => {
 		expect(cn('p-2', 'p-4')).toBe('p-2 p-4');
 	});

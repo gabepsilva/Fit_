@@ -7,9 +7,8 @@ import {
 import type { LibraryExercise, MuscleGroup, Routine, RoutineExercise } from '$lib/domain/types';
 
 /**
- * Roughly how long a set costs, counting the rest after it. Used only to put a
- * number on "about 40 min" beside a routine, so it stays a constant here rather
- * than becoming a setting nobody would tune.
+ * Rough minutes per set, rest included. Display-only, to put a number on
+ * "about 40 min" — a constant, not a tunable setting.
  */
 const MINUTES_PER_SET = 3.2;
 
@@ -31,8 +30,8 @@ export function libraryFor(group: MuscleGroup | null): LibraryExercise[] {
 }
 
 /**
- * What else trains the same thing — the answer to a machine already being
- * taken. The exercise being replaced is not offered as its own replacement.
+ * Other movements in the same muscle group. The exercise being replaced is not
+ * offered as its own replacement.
  */
 export function alternativesTo(name: string): LibraryExercise[] {
 	const group = LIBRARY_BY_NAME[name]?.group;
@@ -48,7 +47,7 @@ function routineSets(routine: Routine): number {
 	return routine.exercises.reduce((total, e) => total + e.sets, 0);
 }
 
-/** The one-line arithmetic under a routine's name: how much, and how long. */
+/** How many exercises, sets, and minutes a routine adds up to. */
 export function routineTotals(routine: Routine): {
 	exercises: number;
 	sets: number;
@@ -64,9 +63,8 @@ export type MuscleSection = {
 };
 
 /**
- * The routine as the paper sheet reads it: muscle group down the left, its
- * movements beside it. Groups keep the order they first appear in, so the sheet
- * matches the order the session will run in.
+ * Group a routine's movements by muscle. Groups keep first-appearance order so
+ * the sheet matches the order the session runs in.
  */
 export function muscleSections(exercises: RoutineExercise[]): MuscleSection[] {
 	const sections: MuscleSection[] = [];
@@ -88,9 +86,8 @@ export function exercisesFromLibrary(names: string[]): RoutineExercise[] {
 }
 
 /**
- * A template's routines, deep-copied. The templates are module constants shared
- * by every install; handing out references would let the first edit rewrite the
- * template for the next person who picks it.
+ * A template's routines, deep-copied. Handing out references would let one edit
+ * rewrite the shared template for everyone else who picks it.
  */
 export function routinesFromTemplate(template: RoutineTemplate): Routine[] {
 	return template.routines.map((r) => ({
@@ -116,9 +113,8 @@ const FIELD_MINIMUM = { sets: 1, reps: 1, load: 0 } as const;
 const MAX_SETS = 8;
 
 /**
- * One tap on a stepper: `direction` is +1 or -1 and the field decides the step
- * and the floor. Loads land on a plate-sized step and stop at bodyweight; sets
- * and reps stop at one, because a set of none is a removal, not a set.
+ * One tap on a stepper: `direction` is +1 or -1. Loads move by a plate step and
+ * floor at zero; sets and reps floor at one.
  */
 export function bumpField(field: BumpField, current: number, direction: number): number {
 	const next = Math.round((current + FIELD_STEPS[field] * Math.sign(direction)) * 10) / 10;

@@ -5,11 +5,7 @@ import type { SignedInSession } from '$lib/auth/api';
 import { session } from '$lib/state/session.svelte';
 import SignUpPage from './+page.svelte';
 
-/**
- * `goto` would ask the router to leave a page the harness is the only thing
- * rendering, so it is stubbed and asserted on instead: where a finished
- * registration sends someone is part of what this screen does.
- */
+// goto is mocked: the harness renders only this page, and the redirect target is under test.
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
@@ -193,7 +189,6 @@ describe('sign-up page', () => {
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Couldn’t reach the server');
 	});
 
-	/** Registration is reachable whatever this device believes about its session. */
 	it('shows the form even when this device still holds a session record', async () => {
 		session.begin(CREATED);
 		await open();

@@ -84,11 +84,10 @@ beforeEach(() => {
 });
 
 /**
- * Every case opens its own in-memory database; closing it is not tidiness. A
- * mutation run puts one vitest inside every worker and replays this suite
- * hundreds of times, and hundreds of live `node:sqlite` handles left for the
- * collector took the worker down with SIGSEGV -- which Stryker records as a
- * timeout against whichever mutant happened to be running.
+ * Each case opens its own in-memory database, and closing it is load-bearing:
+ * a mutation run replays this suite hundreds of times per worker, and the
+ * leaked `node:sqlite` handles take the worker down with SIGSEGV, which Stryker
+ * records as a timeout against whichever mutant was running.
  */
 afterEach(() => {
 	db.close();
@@ -269,8 +268,7 @@ describe('register', () => {
 	});
 
 	it('lets one household sign several people up in one sitting', async () => {
-		// The allowance exists to be spent: a partner and a grown child each need
-		// an account of their own, and they share the front door's address.
+		// The allowance is meant to be spent: several members share one address.
 		for (let index = 0; index < 5; index += 1) {
 			const { event } = eventFor({ body: { ...REGISTRATION, username: `member-${index}` } });
 			expect((await register(db, event, CHEAP)).status).toBe(201);
@@ -303,8 +301,8 @@ describe('register', () => {
 	});
 
 	it('counts a name that was already taken against the allowance too', async () => {
-		// This is the enumeration case: `username-taken` is the one answer here
-		// that names who exists, so asking has to cost what registering costs.
+		// Enumeration: `username-taken` names who exists, so probing must cost
+		// what registering does.
 		for (let index = 0; index < REGISTRATION_POLICY.limit; index += 1) {
 			const response = await register(db, eventFor({ body: REGISTRATION }).event, CHEAP);
 			expect(response.status).toBe(index === 0 ? 201 : 409);
@@ -322,8 +320,8 @@ describe('register', () => {
 	});
 
 	it('leaves signing in alone while registration is held', async () => {
-		// The two scopes answer different attacks, so spending one must not shut
-		// the door on people who already have accounts behind it.
+		// The registration and sign-in scopes serve different attacks, so locking
+		// one must not block the other.
 		await signUpUntilLocked();
 		const response = await signIn(db, signInEvent({ username: 'spender-0' }).event, CHEAP);
 		expect(response.status).toBe(200);
@@ -345,10 +343,8 @@ describe('register', () => {
 });
 
 /**
- * The scopes the sign-in throttle wrote, in order.
- *
- * Registering counts a row of its own in this table, and every case below
- * registers first, so the sign-in cases read past it rather than counting it.
+ * The sign-in throttle scopes in order, skipping the registration row every
+ * case writes first.
  */
 function signInScopes(): unknown[] {
 	return db
@@ -394,12 +390,12 @@ async function failUntilLocked(): Promise<void> {
 describe('signIn', () => {
 	beforeEach(registered);
 
-	// First in this block on purpose. The endpoint's injected cost governs every
-	// derivation below it, and a mutant that dropped it would otherwise be caught
-	// only after two dozen sign-ins had each paid the production KDF.
+	// First on purpose: the injected cost governs every derivation below, and a
+	// mutant dropping it is caught here rather than after two dozen production-cost
+	// sign-ins.
 	it('fails closed rather than deriving at a policy weaker than the stored hash', async () => {
-		// The account was hashed at r=8; a server whose current policy is weaker on
-		// any axis must refuse it rather than verify at the database's own cost.
+		// The account was hashed at r=8; a weaker current policy must refuse
+		// rather than verify at the stored cost.
 		const response = await signIn(db, signInEvent().event, { ...CHEAP, r: 4 });
 		expect(response.status).toBe(401);
 		expect(db.prepare('select count(*) as n from session').get()?.['n']).toBe(1);
@@ -473,8 +469,8 @@ describe('signIn', () => {
 	});
 
 	it('refuses the correct password too while the lock holds', async () => {
-		// A lock that the right password walks through protects nothing: an
-		// attacker guessing until it works never notices it.
+		// A lock the right password walks through protects nothing: an attacker
+		// guessing until it works would never notice.
 		await failUntilLocked();
 		const { event, written } = signInEvent();
 		expect((await signIn(db, event, CHEAP)).status).toBe(429);
@@ -531,8 +527,8 @@ describe('signIn', () => {
 	});
 
 	it('says how long to wait in whole seconds, and never in one', async () => {
-		// The lock is the policy's first minute, so the answer is that wait in
-		// whole seconds -- not a single second, and not a thousand times too many.
+		// The lock is the policy's first minute, so the wait is that, in whole
+		// seconds -- not one, and not a thousand times too many.
 		await failUntilLocked();
 		const response = await signIn(db, signInEvent().event, CHEAP);
 		const seconds = Number(response.headers.get('retry-after'));
@@ -541,8 +537,8 @@ describe('signIn', () => {
 	});
 
 	it('counts a sign-in with no username field against the empty name it becomes', async () => {
-		// An absent field is the empty username, not a distinct identity that
-		// carries its own fresh allowance.
+		// An absent username is the empty username, not a distinct identity with
+		// its own allowance.
 		for (let attempt = 0; attempt < 6; attempt += 1) {
 			const { event } = eventFor({ path: '/api/sessions', body: { password: 'wrong entirely' } });
 			await signIn(db, event, CHEAP);
@@ -738,8 +734,8 @@ describe('currentSession', () => {
 	});
 
 	it('answers those three fields and nothing else', async () => {
-		// A read endpoint that hands back more than the caller already owns is the
-		// leak, not the credential it was asked about.
+		// Returning more than the caller already owns is the leak, not the
+		// credential it was asked about.
 		const { event } = await readingEvent();
 		expect(Object.keys(await bodyOf(currentSession(event))).sort()).toEqual([
 			'account',

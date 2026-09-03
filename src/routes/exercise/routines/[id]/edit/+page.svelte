@@ -81,11 +81,9 @@
 			</div>
 			{#if routine.exercises.length > 0}
 				<ul class="flex flex-col gap-2">
-					<!-- Keyed by the exercise itself, not by its position: this list
-					     reorders and deletes, and Svelte's state proxies follow a
-					     movement's object across a patch, so the key moves with the row
-					     rather than repainting every row beneath it. Name would not do —
-					     the same movement may appear twice. -->
+					<!-- Keyed by the exercise object, not position: the list reorders and
+					     deletes, and proxies track the object across patches, so the row
+					     moves with it. Name would not do — the same movement may appear twice. -->
 					{#each routine.exercises as exercise, index (exercise)}
 						<BuilderExerciseRow
 							{index}

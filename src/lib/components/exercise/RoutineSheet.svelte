@@ -9,9 +9,8 @@
 	import { SHEET_GRID } from './sheet-grids';
 
 	/**
-	 * The routine as the paper sheet it replaces: muscle group down the left,
-	 * its movements beside it. Rows report the position they hold in the routine
-	 * rather than their own name, because the same movement may appear twice.
+	 * Grouped by muscle, but each row keeps its position in the routine (not its
+	 * name), since the same movement may appear twice.
 	 */
 	let {
 		routine,
@@ -23,8 +22,8 @@
 	} = $props();
 
 	/**
-	 * The group order comes from `muscleSections`; the positions come from the
-	 * routine itself, so a row still knows where it lives after regrouping.
+	 * Rows are regrouped by muscle but keep their routine index, so `onload`
+	 * reports the position in the routine.
 	 */
 	const sections = $derived(
 		muscleSections(routine.exercises).map((section) => ({
@@ -35,11 +34,7 @@
 		}))
 	);
 
-	/**
-	 * Built here rather than interpolated into the heading: the load column is
-	 * read in whatever unit the store is set to, and one expression keeps the
-	 * whole heading a single reactive reading.
-	 */
+	/** Derived so the unit inside "Load (…)" tracks the store's current unit. */
 	const loadHeading = $derived(`Load (${tend.state.loadUnit})`);
 
 	let openIndex = $state<number | null>(null);

@@ -1,9 +1,7 @@
 /**
- * An account as the rest of the application is allowed to see it.
- *
- * There is no `passwordHash` here, and that is the point: the hash is read
- * inside `accounts.ts` and never leaves it, so no route can leak it by
- * serializing whatever it was handed.
+ * An account as the rest of the application is allowed to see it. There is no
+ * `passwordHash`: the hash is read inside `accounts.ts` and never leaves it, so
+ * no route can leak it by serializing whatever it was handed.
  */
 export type Account = {
 	id: string;
@@ -26,11 +24,9 @@ export type Session = {
 };
 
 /**
- * What a request knows about who is making it.
- *
- * `households` is resolved here rather than looked up per query because
- * `household_id` is the predicate every later read filters on. A request that
- * has not established which households it may see has no business reading rows.
+ * What a request knows about who is making it. `households` is resolved here
+ * rather than per query because `household_id` is the predicate every later
+ * read filters on.
  */
 export type Auth = {
 	account: Account;

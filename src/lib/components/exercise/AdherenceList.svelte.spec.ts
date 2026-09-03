@@ -16,11 +16,7 @@ const push: Routine = {
 const now = weekOf(todayISO());
 const plannedNow: PlannedWeek[] = [{ year: now.year, week: now.week, routineId: push.id }];
 
-/**
- * A session that actually logged something. A finished session with nothing
- * ticked is filed so the summary can say so, but it is not a session the plan
- * asked for, so it is not what this list counts.
- */
+/** A finished session with sets ticked — one the plan can count. */
 const today: Workout = (() => {
 	const workout = workoutFromRoutine(push, { id: 'w1', date: todayISO(), startedAt: 0 });
 	for (const exercise of workout.exercises) {
@@ -38,7 +34,6 @@ describe('AdherenceList', () => {
 			li.textContent?.includes(`Week ${now.week}`)
 		);
 		const cells = [...(row?.querySelectorAll('[aria-hidden="true"] > span') ?? [])];
-		// Three sessions were asked for and one was logged, so one cell is filled.
 		expect(cells.map((cell) => cell.className.includes('bg-primary'))).toEqual([
 			true,
 			false,

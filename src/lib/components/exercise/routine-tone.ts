@@ -1,8 +1,6 @@
 /**
- * Routines are told apart by color on the planner, where a week is a chip too
- * small for a name. The palette is fixed and assigned by position rather than
- * stored on the routine: a color picker is a decision to make someone take,
- * and three routines in a rotation never collide anyway.
+ * A tone is assigned by position in the rotation, not stored on the routine:
+ * the palette is fixed, and a color picker would be a decision to push out.
  */
 export type RoutineTone = {
 	/** Filled: the chip for a selected week or today's day. */
@@ -33,8 +31,7 @@ const TONES: readonly RoutineTone[] = [
 		ink: 'text-primary',
 		dot: 'border-primary'
 	},
-	// Sage is the lightest of the three and cannot carry pale text at 2.7:1: it
-	// takes the ink color on its own fill, and lends only its tint to a letter.
+	// Sage is too light for pale text (2.7:1), so it fills with ink and lends only its tint to a letter.
 	{
 		solid: 'bg-sage-soft text-foreground',
 		tint: 'bg-sage-soft/25',

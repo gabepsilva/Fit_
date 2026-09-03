@@ -6,9 +6,8 @@
 	import { plannedOption, type PlanOption } from './plan-options';
 
 	/**
-	 * The whole training year at once, a month to a block and a week to a chip.
-	 * At this size a week can only carry its routine's initial and color, so the
-	 * legend above the grid is what makes the colors mean anything.
+	 * At chip size a week carries only its initial and color, so the legend above
+	 * is what makes the colors mean anything.
 	 */
 	let {
 		weeks,

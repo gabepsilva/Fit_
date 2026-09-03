@@ -26,12 +26,9 @@
 	});
 
 	/**
-	 * The template shelf and the empty today-card are two different states, not
-	 * one. The shelf is the opening screen of an app that has never been used:
-	 * no routines and nothing ever trained. Once there is history behind the
-	 * screen — someone deleted the routines they had been training — the home
-	 * screen stays, and the card says there is nothing on it. From there the
-	 * shelf is somewhere you go, which is what `asked` records.
+	 * The shelf and the empty today-card are different states. A first-run app
+	 * (no routines, nothing trained) opens on the shelf; a deleted rotation
+	 * keeps the home screen, and `asked` is how its empty card re-opens it.
 	 */
 	let asked = $state(false);
 	const firstRun = $derived(routines.length === 0 && workouts.length === 0);

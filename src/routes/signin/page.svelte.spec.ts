@@ -280,12 +280,7 @@ describe('sign-in page', () => {
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Couldn’t reach the server');
 	});
 
-	/**
-	 * There is no guard turning a signed-in visitor away, so a stale cached
-	 * record must never be what stands between someone and the form that would
-	 * replace it. Signing out everywhere from another device leaves exactly that
-	 * record behind, and this page is the way back.
-	 */
+	// A stale session (signed out from another device) must not hide the form.
 	it('shows the form even when this device still holds a session record', async () => {
 		session.begin(SESSION);
 		await open();

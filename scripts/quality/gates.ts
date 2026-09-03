@@ -6,9 +6,8 @@ export interface GateStep {
 	/** Machine-readable artifacts this step writes, relative to the project root. */
 	artifacts?: string[];
 	/**
-	 * Safe to run beside the other concurrent steps: holds no exclusive resource,
-	 * reads no artifact another step in the same tier writes, and binds no port.
-	 * Opt-in, so a new step is sequential until someone has checked that it is not.
+	 * Holds no exclusive resource, reads no artifact a peer step writes, and
+	 * binds no port. Opt-in, so a new step is sequential until checked.
 	 */
 	concurrent?: boolean;
 	/** Requires a running Docker daemon. */
@@ -156,9 +155,8 @@ const blockingSecuritySteps: GateStep[] = [
 ];
 
 /**
- * Feed-derived scanners. Their findings change without a code change, so they
- * cannot gate a merge without contradicting the determinism this repo claims.
- * They run on a schedule instead; see .github/workflows/nightly.yml.
+ * Feed-derived, so their findings change without a code change and they cannot
+ * gate a merge; they run on a schedule instead (nightly.yml).
  */
 const advisorySecuritySteps: GateStep[] = [
 	{
@@ -177,9 +175,8 @@ const advisorySecuritySteps: GateStep[] = [
 ];
 
 /**
- * The CI jobs. `tiers.ci` is derived from this map, so a step can never be added
- * to the merge gate and silently left out of the workflow: there is one list,
- * and the workflow selects from it with `--job` rather than repeating it.
+ * The one list of CI steps: `tiers.ci` derives from this map, and the workflow
+ * selects a slice with `--job` instead of repeating a step list.
  */
 export const ciJobs = {
 	static: [...staticSteps, workflowStep],

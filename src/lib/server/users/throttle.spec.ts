@@ -27,11 +27,8 @@ beforeEach(() => {
 });
 
 /**
- * Every case opens its own in-memory database; closing it is not tidiness. A
- * mutation run puts one vitest inside every worker and replays this suite
- * hundreds of times, and hundreds of live `node:sqlite` handles left for the
- * collector took the worker down with SIGSEGV -- which Stryker records as a
- * timeout against whichever mutant happened to be running.
+ * Each case opens its own database; close it. Under a mutation run, hundreds of
+ * live `node:sqlite` handles crash the worker, which Stryker records as a timeout.
  */
 afterEach(() => {
 	db.close();
@@ -93,9 +90,8 @@ describe('checkSignIn', () => {
 	});
 
 	it('locks the name people typed, not the account behind it', () => {
-		// The username scope must behave the same whether or not the account
-		// exists; a lockout that only ever fired for real names would answer
-		// "does this person exist" for free.
+		// The username scope must behave the same whether or not the account exists;
+		// a lockout that only fired for real names would leak which names exist.
 		const unknown: SignInAttempt = { username: 'nobody-here', clientAddress: '203.0.113.7' };
 		fail(unknown, USERNAME_POLICY.limit);
 		expect(checkSignIn(db, unknown, NOW)).toMatchObject({ allowed: false, scope: 'username' });
@@ -116,8 +112,8 @@ describe('checkSignIn', () => {
 	});
 
 	it('does not lock the same username from a different address', () => {
-		// The username counter is deliberately global: an attacker who rotates
-		// addresses must not get a fresh allowance against one account.
+		// The username counter is deliberately global: rotating addresses must not
+		// hand an attacker a fresh allowance against one account.
 		fail(jordan, USERNAME_POLICY.limit);
 		expect(checkSignIn(db, { ...jordan, clientAddress: '198.51.100.4' }, NOW)).toMatchObject({
 			allowed: false,

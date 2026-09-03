@@ -4,12 +4,7 @@
 	import { cn } from '$lib/ui/cn';
 	import { plannedOption, type PlanOption } from './plan-options';
 
-	/**
-	 * One week of the month, and the whole row is the control: a week names a
-	 * single routine, so there is nothing to choose within it. The seven cells
-	 * show which days that routine would land on, which is the part of the
-	 * decision a name alone hides.
-	 */
+	// The whole row is the control: a week names one routine, so there is nothing to choose within it.
 	let {
 		week,
 		options,

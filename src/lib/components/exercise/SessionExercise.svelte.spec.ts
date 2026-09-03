@@ -30,7 +30,7 @@ function startSession() {
 	tend.persist();
 }
 
-/** A filed session, so "last time" has something true to read from. */
+/** Files an earlier session so "last time" has data to read. */
 function fileEarlier(reps: number, load: number, name = 'Bench Press') {
 	const earlier: Workout = {
 		...workoutFromRoutine(pushA(), { id: 'w-old', date: todayISO(), startedAt: 0 }),

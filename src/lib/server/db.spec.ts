@@ -66,8 +66,7 @@ describe('migrate', () => {
 	});
 
 	it('still refuses a scope nothing counts in', () => {
-		// The check constraint is the only thing keeping a typo in a scope name
-		// from quietly becoming a counter nobody ever reads.
+		// The check constraint is what stops a scope typo from becoming a dead counter.
 		const db = new DatabaseSync(':memory:');
 		migrate(db);
 		expect(() => {
@@ -79,8 +78,7 @@ describe('migrate', () => {
 	});
 
 	it('carries the counts across the table it rebuilt them in', () => {
-		// Rebuilding the throttle table to widen its check constraint must not
-		// drop what it holds: that would hand every locked-out caller a reset.
+		// Widening the check constraint must not drop existing lockouts.
 		const db = new DatabaseSync(':memory:');
 		db.exec(
 			`create table sign_in_throttle (
@@ -121,8 +119,7 @@ describe('migrate', () => {
 	it('brings an older database forward without re-running what it has', () => {
 		const db = new DatabaseSync(':memory:');
 		db.exec('pragma user_version = 1');
-		// Version 1 is the users schema; only the migrations after it may run, and
-		// re-applying one would fail on `create table`.
+		// Only migrations after version 1 may run; re-applying one fails on `create table`.
 		expect(() => migrate(db)).not.toThrow();
 		expect(tableNames(db)).toContain('sign_in_throttle');
 		expect(tableNames(db)).not.toContain('account');

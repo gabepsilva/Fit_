@@ -49,9 +49,8 @@ export async function prepareMutationCache(options: {
 		// Missing or malformed metadata means the incremental result is not trustworthy.
 	}
 	if (recorded !== digest) await rm(options.incrementalPath, { force: true });
-	// Consume the validity marker before Stryker can mutate incremental state.
-	// A cancelled process therefore leaves no metadata that could bless a
-	// partially rewritten incremental file on the next run.
+	// Consume the validity marker before Stryker runs, so a cancelled process
+	// leaves no metadata to bless a partially rewritten incremental file.
 	await rm(options.metadataPath, { force: true });
 	return digest;
 }

@@ -6,11 +6,7 @@ import FormCheckModal from './FormCheckModal.svelte';
 
 const BENCH_CUES = FORM_CUES['Bench Press'] ?? [];
 
-/**
- * The cue lists are written by hand, so nothing stops two of them reading the
- * same. Keying the list by its own text would make that a runtime error, so the
- * catalog is given a movement that repeats itself for the length of one test.
- */
+/** Cues are handwritten, so a repeated line is possible; keyed by text it would throw at runtime. */
 const REPEATED = 'Brace before the descent';
 const REPEATER = 'Repeated Cue Movement';
 beforeAll(() => {

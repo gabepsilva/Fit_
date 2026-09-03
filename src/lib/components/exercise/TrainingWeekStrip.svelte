@@ -9,9 +9,8 @@
 	import { cn } from '$lib/ui/cn';
 
 	/**
-	 * The week as the plan drew it: which days this week's routine falls on, and
-	 * which of the days already gone actually happened. Nothing here edits the
-	 * week — every cell leads to the planner, which is where a week is changed.
+	 * Read-only: every cell links to the planner, where a week is actually
+	 * changed.
 	 */
 	let {
 		routines,
@@ -43,8 +42,7 @@
 			const iso = addDaysISO(monday, i);
 			const isToday = iso === today;
 			const letter = planned.days.includes(i) ? planned.letter : null;
-			// A session filed with nothing ticked is not a trained day: showing up
-			// earns a sentence on the summary, not a mark on the week.
+			// A session filed with nothing ticked is not a trained day.
 			const done = iso < today && workouts.some((w) => w.date === iso && countsAsTraining(w));
 			const name = isToday ? 'Today' : label;
 			return {
@@ -53,9 +51,8 @@
 				isToday,
 				letter,
 				done,
-				// The cell shows a weekday, a letter and a dot, none of which reads
-				// aloud as anything. This is what those three say. The routine is
-				// named once, above the strip, rather than seven times inside it.
+				// The cell's glyphs read as nothing to a screen reader; this is what
+				// they say. The routine is named once above, not per day.
 				description: `${name}, ${letter ? 'training day' : 'rest day'}${done ? ', trained' : ''}`
 			};
 		});

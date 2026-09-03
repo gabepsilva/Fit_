@@ -14,9 +14,7 @@ const CROSS_CUTTING = [
 	'tsconfig.json',
 	'vite.config.ts',
 	'quality/mutation-policy.json',
-	// The mutate globs and the jsdom/browser spec split moved out of the two
-	// config files above; editing either still redraws what a lane measures, so
-	// they stay cross-cutting.
+	// Moved out of the configs above; editing either still redraws a lane's scope.
 	'quality/mutate-patterns.mjs',
 	'quality/dom-free-client-specs.mjs'
 ];
@@ -31,7 +29,7 @@ function normalize(root: string, file: string): string {
 	return path.relative(root, file).split(path.sep).join('/');
 }
 
-/** Exported for `mutation-oracle.ts`, which walks the same tree. */
+/** Exported for `mutation-oracle.ts`. */
 export async function walk(directory: string): Promise<string[]> {
 	let entries;
 	try {
@@ -50,9 +48,8 @@ export async function walk(directory: string): Promise<string[]> {
 }
 
 /**
- * Exported for `mutation-oracle.ts`: a second copy of this predicate would let
- * the mutation scope and the check that guards it disagree about what counts
- * as production code.
+ * Shared with `mutation-oracle.ts` so the scope and its check cannot disagree
+ * about what counts as production code.
  */
 export function isProductionTypeScript(file: string): boolean {
 	return file.endsWith('.ts') && !file.endsWith('.d.ts') && !TEST_FILE.test(file);
@@ -161,7 +158,7 @@ function resolveMutationBase(projectRoot: string, requested?: string): string | 
 		try {
 			return git(projectRoot, ['merge-base', 'HEAD', candidate]);
 		} catch {
-			// Try the next deterministic base. A missing base forces broad scope below.
+			// A base that fails to resolve falls through; a missing base forces broad scope.
 		}
 	}
 	return null;
@@ -226,9 +223,8 @@ function changedLineRanges(projectRoot: string, base: string, file: string): Lin
 }
 
 /**
- * Which vitest project owns a source file. Exported because
- * `mutation-oracle.ts` has to ask the same question, and a second copy of this
- * rule would let the mutation scope and the check that guards it disagree.
+ * Which vitest project owns a source file. Shared with `mutation-oracle.ts` so
+ * the scope and its check cannot disagree.
  */
 export function isServerSource(file: string): boolean {
 	return (

@@ -1,8 +1,6 @@
 /**
- * Run `work` over `items`, `limit` at a time, keeping the input order in the
- * returned results. Shared by the gate runner and the gate self-test: both
- * schedule independent child processes and both have to report in plan order
- * rather than completion order.
+ * Run `work` over `items`, `limit` at a time, preserving input order in the
+ * returned results.
  */
 export async function pooled<T, R>(
 	items: readonly T[],

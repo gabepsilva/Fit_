@@ -1,22 +1,13 @@
 import { resolve } from '$app/paths';
 
 /**
- * The browser's side of the authentication endpoints.
+ * The browser's side of the authentication endpoints. `fetch`, not form actions:
+ * the endpoints only take `application/json`, and the Capacitor build is
+ * `adapter-static`, where form actions do not exist.
  *
- * Client `fetch` rather than form actions, and the reasons are structural
- * rather than taste. The endpoints already exist and take JSON — `readTextBody`
- * refuses anything that is not `application/json`, which is exactly what a
- * form-encoded post from a form action would send, so an action could not call
- * them and would have to be a second implementation of the same rules. The app
- * also sets `ssr = false`, so there is no no-JavaScript path for progressive
- * enhancement to protect, and the Capacitor build is `adapter-static`, where
- * form actions do not exist at all. One request path serves both builds.
- *
- * The origin policy in `hooks.server.ts` is satisfied by this on purpose, not
- * by accident: browsers attach `Origin` to every non-safe same-origin request,
- * and `checkOrigin` compares it against `url.origin` when nothing is
- * configured. Nothing here sends the `x-fit-session` header, so the web client
- * is answered with the `HttpOnly` cookie and never a token it could leak.
+ * Same-origin only: the `Origin` check in `hooks.server.ts` sees the page's own
+ * origin, and nothing sends `x-fit-session`, so the web client gets the
+ * `HttpOnly` cookie and never a token.
  */
 
 /** The account as the endpoints hand it back. No hash, no token. */
@@ -27,14 +18,12 @@ export type SessionAccount = {
 	createdAt: string;
 };
 
-/** A household the account belongs to, and what it may do there. */
 export type SessionHousehold = {
 	householdId: string;
 	name: string;
 	role: 'owner' | 'member';
 };
 
-/** What a successful sign-in or registration answers with. */
 export type SignedInSession = {
 	account: SessionAccount;
 	households: SessionHousehold[];
@@ -42,10 +31,8 @@ export type SignedInSession = {
 };
 
 /**
- * Every code the endpoints answer with, plus `unreachable` for the one failure
- * that never reaches them. A network that dropped the request is a different
- * thing to tell someone than a password that was wrong, and collapsing the two
- * would have a flaky connection read as a rejected credential.
+ * Every code the endpoints answer with, plus `unreachable` for a request that
+ * never reached them: a dropped connection is not a rejected credential.
  */
 export type AuthErrorCode =
 	| 'invalid-body'
@@ -78,7 +65,6 @@ export type Registration = {
 	deviceLabel?: string | undefined;
 };
 
-/** What a sign-in form submits. */
 export type Credentials = {
 	username: string;
 	password: string;
@@ -104,19 +90,15 @@ function codeOf(body: unknown): AuthErrorCode {
 }
 
 function textOf(body: unknown, key: 'field' | 'reason'): string | undefined {
-	// `codeOf` has already read a body that may be `null` -- an empty answer, or
-	// one that was not JSON -- and this runs on it regardless. Reaching into it
-	// unguarded threw a TypeError out of a caller that had asked for a failure.
+	// The body may be `null` or non-JSON: a malformed answer must not throw.
 	const error = (body as { error?: Record<string, unknown> } | null)?.error;
 	const value = error?.[key];
 	return typeof value === 'string' ? value : undefined;
 }
 
 /**
- * `Retry-After` in whole seconds, or `undefined` when the header is missing or
- * unusable. The endpoint sends seconds and never zero; anything else came from
- * something that is not this server, and guessing a number for it would tell
- * someone to wait for a length nobody promised.
+ * `Retry-After` in whole seconds, or `undefined` when missing or not a positive
+ * whole second: this endpoint sends seconds, so anything else is not its answer.
  */
 export function retryAfterSeconds(headers: Headers): number | undefined {
 	const seconds = Number(headers.get('retry-after'));
@@ -138,11 +120,7 @@ const UNREACHABLE: AuthFailure = { code: 'unreachable' };
 
 type Sent = { path: string; method: 'GET' | 'POST' | 'DELETE'; body?: Record<string, string> };
 
-/**
- * The one request these four calls make. `credentials` is left at the default,
- * which is `same-origin` — the session cookie is set and sent by the browser,
- * and nothing here has to know it exists.
- */
+/** `credentials` stays at the default, which carries the session cookie. */
 async function send(sent: Sent): Promise<Response | null> {
 	const init: RequestInit =
 		sent.body === undefined
@@ -155,8 +133,7 @@ async function send(sent: Sent): Promise<Response | null> {
 	try {
 		return await fetch(sent.path, init);
 	} catch {
-		// A dropped connection, a stopped server, a WebView with no host. None of
-		// those are a rejection, and the caller is told so.
+		// A dropped connection is not a rejection; `null` keeps the two apart.
 		return null;
 	}
 }
@@ -187,7 +164,6 @@ export async function register(input: Registration): Promise<AuthResult<SignedIn
 	return response === null ? { ok: false, failure: UNREACHABLE } : sessionFrom(response);
 }
 
-/** Sign in and start a session on this device. */
 export async function signIn(input: Credentials): Promise<AuthResult<SignedInSession>> {
 	const response = await send({
 		path: resolve('/api/sessions'),
@@ -198,12 +174,9 @@ export async function signIn(input: Credentials): Promise<AuthResult<SignedInSes
 }
 
 /**
- * What the server says this device's session is, or why it says nothing.
- *
- * The credential is the cookie the browser cannot read, so this is the only way
- * a reload learns whether the session it remembers still exists. A 401 is a
- * definitive answer — signed out — where a dropped request is `unreachable` and
- * means the caller learned nothing; the store keeps those apart deliberately.
+ * What the server says this device's session is. A 401 is a definitive
+ * "signed out"; a dropped request is `unreachable` and means nothing was
+ * learned — the store keeps those apart.
  */
 export async function currentSession(): Promise<AuthResult<SignedInSession>> {
 	const response = await send({ path: resolve('/api/sessions/current'), method: 'GET' });

@@ -4,7 +4,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import ScreenHeader from './ScreenHeader.svelte';
 
-/** Stands in for the one action a screen puts at the end of its header row. */
+/** Stand-in for a screen's header action. */
 const action = createRawSnippet(() => ({
 	render: () => '<button type="button">Save</button>'
 }));

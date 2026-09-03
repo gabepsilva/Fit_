@@ -75,9 +75,7 @@
 	function runText(raw: string) {
 		const trimmed = raw.trim();
 		if (!trimmed) return;
-		// The on-device parser is the whole story for now. Assisted parsing needs
-		// the server, which is not built yet; the AI tabs say so rather than
-		// silently doing something weaker than the user was promised.
+		// Only the on-device parser runs for now; assisted parsing needs a server that is not built yet.
 		const local = parseLocalText(trimmed, meal);
 		proposals = local.items.map(hydrateProposal);
 		if (!local.allMatched) {
@@ -121,8 +119,7 @@
 
 	function commit() {
 		const date = todayISO();
-		// A proposal without a catalog match has no nutrition behind it, so it is
-		// dropped rather than logged as a zero-calorie entry.
+		// Drop unmatched proposals: with no catalog food there is no nutrition to log.
 		const items = proposals.flatMap((p) =>
 			p.foodId && FOOD_BY_ID[p.foodId]
 				? [

@@ -14,10 +14,7 @@ export function exportJson(state: TendState) {
 	);
 }
 
-/**
- * The exported columns, in order. Header and value sit together so a new
- * column cannot land under the wrong heading.
- */
+/** Columns in order; header and value are paired so a new column can't land under the wrong heading. */
 const CSV_COLUMNS: { header: string; value: (item: LogItem) => string | number }[] = [
 	{ header: 'date', value: (i) => i.date },
 	{ header: 'meal', value: (i) => i.meal },
@@ -129,9 +126,7 @@ export const MFP_IMPORT_LIMIT = 80;
 
 /**
  * Turn parsed MyFitnessPal rows into log entries. They carry no `foodId`, so
- * they land as custom lines with zeroed micronutrients — an imported row states
- * calories and macros, and inventing micros from nothing would be worse than
- * showing none.
+ * the micros are zeroed rather than invented.
  */
 export function mfpRowsToLogItems(
 	rows: ReturnType<typeof parseMfpCsv>,

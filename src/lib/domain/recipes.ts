@@ -2,8 +2,7 @@ import { FOOD_BY_ID } from './foods';
 import { RECIPES, type Recipe } from './recipe-book';
 import type { Restriction } from './types';
 
-// The seed rows themselves live in `./recipe-book`, so mutation testing can be
-// aimed at the behavior below without grading string literals in the data.
+// Seed rows live in `./recipe-book`; re-exported here so mutation testing targets behavior, not data.
 export { RECIPES, type Recipe } from './recipe-book';
 
 export const RECIPE_BY_ID: Record<string, Recipe> = Object.fromEntries(

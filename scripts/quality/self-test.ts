@@ -9,9 +9,8 @@ import { pooled } from './pool';
 import { captureStatus } from '../security/shared';
 
 /**
- * Proves each gate fails on input it claims to reject. The clean control is the
- * gate run itself: `bun run ci` passing on an unmodified tree is the other half
- * of the proof, so this suite only has to demonstrate the failing direction.
+ * Proves each gate fails on input it claims to reject; `bun run ci` passing on
+ * an unmodified tree is the other half of the proof.
  */
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -26,11 +25,8 @@ const excluded = [
 	'./test-results',
 	'./playwright-report',
 	'./.stryker-tmp',
-	// The nutrition ETL pipeline: gigabytes of Python environment, data extracts
-	// and the food database, and gitignored rather than absent. Each fixture gets
-	// its own copy of this template, so copying it in exhausts the tmpfs holding
-	// the workspace before a single fixture runs. `stryker.config.mjs` ignores it
-	// for the same reason.
+	// Multi-GB gitignored pipeline data; copying it into every fixture template
+	// would exhaust the tmpfs. `stryker.config.mjs` ignores it for the same reason.
 	'./data',
 	'./.security-cache/images',
 	'./.security-cache/trivy'
@@ -69,22 +65,14 @@ async function runCaptured(
 }
 
 /**
- * Fixtures are independent: each gets its own copy of the tree, breaks one
- * thing in it, and runs one gate. Nothing is shared but the read-only template,
- * so they can run side by side — which matters, because this is the slowest job
- * in CI and it used to run them one at a time.
- *
- * The cap is deliberately well under the core count. A fixture is not one
- * process: mutation fixtures start nested test runners and `uncovered-file`
- * a coverage run, each of which runs in parallel internally. Four heavy gates at
- * once already saturates a workstation, and a hosted runner has two cores.
+ * Each fixture is an independent tree copy, so they run in parallel, but each
+ * spawns nested test runners of its own, so the pool is a quarter of the cores.
  */
 const concurrency = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 4)));
 
 /**
- * A nested mutation run must not size itself to the whole machine while its
- * siblings are doing the same. Two workers is enough for a fixture that only
- * has to fail.
+ * Sibling fixtures run concurrently, so a nested mutation run is capped at two
+ * workers.
  */
 const fixtureEnv: NodeJS.ProcessEnv = {
 	...process.env,
@@ -109,10 +97,8 @@ async function createTemplate(root: string): Promise<string> {
 		`tar -cf - ${excludeArgs.join(' ')} . | tar -xf - -C ${JSON.stringify(template)}`
 	]);
 	if (copied !== 0) throw new Error('Could not copy the working tree.');
-	// A fixture needs a baseline containing the current working tree, including
-	// uncommitted implementation work. Reusing the source checkout .git file
-	// would share one index between concurrent fixtures and make diff-scoped
-	// gates compare against the branch commit instead of this copied baseline.
+	// A fresh .git per template: reusing the checkout's would share one index
+	// between concurrent fixtures and shift the diff base.
 	await run(template, 'git', ['init']);
 	await run(template, 'git', ['add', '-A']);
 	const committed = await run(template, 'git', [
@@ -127,8 +113,7 @@ async function createTemplate(root: string): Promise<string> {
 	if (committed !== 0) throw new Error('Could not commit the fixture baseline.');
 	await symlink(path.join(projectRoot, 'node_modules'), path.join(template, 'node_modules'), 'dir');
 	// Stryker resolves the Vitest projects before its sandbox can regenerate
-	// SvelteKit's ignored tsconfig. A disposable template therefore needs the
-	// same generated config that `bun install` prepares in a clean CI checkout.
+	// the gitignored tsconfig, so the template needs this synced SvelteKit config.
 	const synced = await run(template, 'bunx', ['svelte-kit', 'sync']);
 	if (synced !== 0) throw new Error('Could not prepare the fixture SvelteKit config.');
 	return template;
@@ -171,8 +156,8 @@ async function proveFixture(
 		]);
 		if (committed !== 0) throw new Error(`Could not commit support files for ${fixture.name}.`);
 	}
-	// Most scanners read tracked files. One mutation fixture deliberately stays
-	// untracked to prove changed-file discovery cannot silently miss new code.
+	// Scanners read tracked files, so fixtures are staged; one stays untracked
+	// on purpose to prove changed-file discovery finds untracked code.
 	if (fixture.stage !== false) await run(workspace, 'git', ['add', '-A']);
 
 	for (const step of fixture.prepare ?? []) {
@@ -216,8 +201,8 @@ try {
 	const exclusive = selectedFixtures.filter((fixture) => fixture.exclusive === true);
 	const runFixture = async (fixture: GateFixture): Promise<FixtureResult> => {
 		const result = await proveFixture(fixture, template, root);
-		// Printed on completion rather than in order, so a slow fixture never
-		// hides the ones that already finished. The report below keeps the order.
+		// Printed on completion, not in plan order, so a slow fixture never hides
+		// the ones that already finished.
 		const status = result.reason === 'skipped' ? 'skip' : result.proven ? 'pass' : 'FAIL';
 		console.log(`${status}  ${result.gate.padEnd(20)} ${result.name}`);
 		return result;

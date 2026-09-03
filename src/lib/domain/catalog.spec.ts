@@ -128,9 +128,8 @@ describe('recipeMacros', () => {
 	});
 
 	it('reports every macro per serving, not just the energy', () => {
-		// Stated by hand from the catalog rather than derived with the same
-		// arithmetic the function uses, so a swapped operand or a field reading
-		// the wrong nutrient shows up here as a wrong number.
+		// Stated by hand, not derived with the function's arithmetic, so a
+		// swapped operand or a wrong-nutrient read shows up as a wrong number.
 		const recipe = RECIPE_BY_ID['yogurt-bowl'];
 		if (!recipe) throw new Error('test fixture references an unknown recipe');
 		expect(recipeMacros(recipe)).toEqual({
@@ -228,8 +227,7 @@ describe('buildGrocery', () => {
 	});
 
 	it('rounds an awkward quantity to a quarter serving you can actually buy', () => {
-		// The turkey taco asks for 1.2 servings of ground turkey. A shopping list
-		// that says 1.2 is answering a question nobody asked at the counter.
+		// The taco asks for 1.2 servings of ground turkey; a list can't say 1.2.
 		const tacos: PlannedMeal[] = [
 			{ date: '2026-06-01', meal: 'dinner', recipeId: 'turkey-taco', forProfileIds: ['p1'] }
 		];

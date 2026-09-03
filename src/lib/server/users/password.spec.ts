@@ -12,9 +12,8 @@ import {
 } from './password';
 
 /**
- * The lowest cost the parser will accept. The production cost is ~350 ms per
- * hash, which a suite that hashes on nearly every case cannot afford — and a
- * mutation run, which replays the suite hundreds of times, even less.
+ * The lowest cost the parser will accept. The production cost (~350 ms per hash)
+ * is unaffordable for a suite that hashes on nearly every case.
  */
 const CHEAP = { n: 2 ** 12, r: 8, p: 1 };
 
@@ -139,8 +138,7 @@ describe('verifyPassword', () => {
 	});
 
 	it('verifies a hash made at a cost the current default no longer uses', async () => {
-		// The parameters travel with the hash, so raising the default cost must not
-		// lock out everyone who registered before the change.
+		// Parameters travel with the hash, so raising the default must not lock out old registrations.
 		const stored = await hashPassword(PASSWORD, { n: 2 ** 13, r: 8, p: 1 });
 		expect(await verifyPassword(PASSWORD, stored)).toBe(true);
 	});

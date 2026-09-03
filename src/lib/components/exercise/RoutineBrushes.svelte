@@ -3,11 +3,7 @@
 	import { cn } from '$lib/ui/cn';
 	import type { PlanOption } from './plan-options';
 
-	/**
-	 * The brush: which routine the next tap on a week will paint it with. It
-	 * chooses nothing on its own, so the month planner stays a screen where every
-	 * change is a deliberate tap.
-	 */
+	// The brush in hand: `selected` is what the next tapped week paints with; it changes nothing on its own.
 	let {
 		options,
 		selected,

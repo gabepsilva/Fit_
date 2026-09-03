@@ -107,14 +107,13 @@ describe('TrainingWeekStrip', () => {
 		expect(markers('bg-primary')).toHaveLength(0);
 	});
 
-	// A filed session with nothing in it is worth a kind sentence on the summary,
-	// not a ticked training day here.
+	// A filed empty session is not a trained day here.
 	it('leaves a day where nothing was ticked unmarked', async () => {
 		await render(TrainingWeekStrip, {
 			props: { ...base, today: WEDNESDAY, workouts: [walkedOut(MONDAY)] }
 		});
 		expect(markers('bg-primary')).toHaveLength(0);
-		// Read once, not retried: the claim is that the word never arrives.
+		// Read once, not retried: the claim is that "trained" never appears.
 		expect(page.getByRole('link', { name: /trained$/ }).elements()).toHaveLength(0);
 	});
 
@@ -149,7 +148,7 @@ describe('TrainingWeekStrip', () => {
 		expect(links).toHaveLength(8);
 		for (const link of links) {
 			expect(link.getAttribute('href')).toBe('/exercise/plan');
-			// Reachable by keyboard, which a div dressed as a cell was not.
+			// Keyboard-reachable, which a div dressed as a cell was not.
 			expect(link.tabIndex).toBe(0);
 		}
 	});
@@ -180,8 +179,7 @@ describe('TrainingWeekStrip', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Mon, training day, trained', exact: true }))
 			.toBeInTheDocument();
-		// Read once, not retried: the claim is that only the day that happened
-		// carries it, and a retried assertion would pass on either of two days.
+		// Read once, not retried: the claim is exactly one day carries "trained".
 		expect(page.getByRole('link', { name: /trained$/ }).elements()).toHaveLength(1);
 	});
 });

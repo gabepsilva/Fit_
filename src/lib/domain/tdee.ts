@@ -28,10 +28,7 @@ export function estimatedTdee(profile: Profile) {
 	return Math.round(mifflinStJeor(profile, kg) * ACTIVITY_FACTOR[profile.activity]);
 }
 
-/**
- * A day's nutrition, all zero. The only place the tracked fields are listed:
- * totals, the empty day and the rolling sum all start from here.
- */
+/** A day's nutrition, all zero; the single place the tracked fields are listed. */
 function emptyDay() {
 	return {
 		kcal: 0,
@@ -100,10 +97,7 @@ export type AdaptiveTdee = {
 	sampleSize: number;
 };
 
-/**
- * Least-squares kg/day over the weigh-ins, plus how many days they span. Fewer
- * than four readings is too little to fit a line through, so it reports zero.
- */
+/** Least-squares kg/day over the weigh-ins, plus their span; zero with fewer than four readings. */
 function weightTrend(weights: WeightEntry[]) {
 	const first = weights[0];
 	if (weights.length < 4 || !first) return { kgPerDay: 0, weightSpanDays: 0 };
@@ -201,9 +195,8 @@ export function nutritionForDay(log: LogItem[], date: string): DayNutrition {
 }
 
 /**
- * Averages over the days that were actually logged. An unlogged day is left
- * out of the divisor rather than counted as a zero, so a quiet day never drags
- * the week's average down.
+ * Averages over the logged days only; an unlogged day is left out of the
+ * divisor rather than counted as a zero.
  */
 export function rollingAverages(log: LogItem[], days: number, end = todayISO()) {
 	const dates = lastNDates(days, end);

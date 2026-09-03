@@ -58,10 +58,9 @@ function isUsernameTaken(error: unknown): boolean {
 }
 
 /**
- * The four rows a new account needs: itself, the household it owns, the
- * membership joining them, and its own profile. Registration is the only place
- * that writes all four, and it writes them inside one transaction, so a failure
- * on the last cannot leave an account that belongs to no household.
+ * The four rows a new account needs: itself, its household, the membership
+ * joining them, and its own profile. One transaction, so a failure cannot leave
+ * an account that belongs to no household.
  */
 function insertAccount(
 	db: DatabaseSync,
@@ -83,9 +82,7 @@ function insertAccount(
 	db.prepare(
 		'insert into membership (household_id, account_id, role, created_at) values (?, ?, ?, ?)'
 	).run(householdId, account.id, 'owner', stamp);
-	// Everyone whose intake is tracked is a profile. This is the one that also
-	// happens to be able to sign in; a partner or a child gets a profile row with
-	// no `account_id` and never sees this table.
+	// Every tracked person has a profile; this one also has an `account_id`.
 	db.prepare(
 		'insert into profile (id, household_id, account_id, name, created_at) values (?, ?, ?, ?, ?)'
 	).run(newId(), householdId, account.id, account.displayName, stamp);
@@ -116,8 +113,7 @@ export async function registerAccount(
 		db.exec('commit');
 	} catch (error) {
 		db.exec('rollback');
-		// The unique index on `username` is what decides this, not a prior SELECT:
-		// two sign-ups racing for the same name would both pass the check.
+		// Decided by the unique index, not a prior SELECT: racing sign-ups would both pass a check.
 		if (isUsernameTaken(error)) {
 			return { ok: false, problem: { field: 'username', code: 'taken' } };
 		}
@@ -127,11 +123,9 @@ export async function registerAccount(
 }
 
 /**
- * The account for these credentials, or `null`.
- *
- * An unknown username costs the same as a wrong password, because the caller
- * can otherwise time the difference and learn which usernames exist — the whole
- * exposure of a system where the username is the only identifier.
+ * The account for these credentials, or `null`. An unknown username costs the
+ * same as a wrong password; timing the difference would reveal which usernames
+ * exist.
  */
 export async function authenticate(
 	db: DatabaseSync,
@@ -141,8 +135,8 @@ export async function authenticate(
 ): Promise<Account | null> {
 	const cost = options.cost ?? OWASP_SCRYPT;
 	const now = options.now ?? new Date();
-	// Do not normalize arbitrarily large text or hand it to a KDF. A too-short
-	// password is still verified below, so it does not reveal whether an account exists.
+	// Refuse oversized input before normalizing or hashing. Too-short passwords are
+	// still verified below, so they reveal no more than a real attempt.
 	if (usernameProblem(username) || password.length > MAX_PASSWORD_LENGTH) return null;
 	const normalizedUsername = normalizeUsername(username);
 	const row = db
@@ -171,9 +165,8 @@ export async function authenticate(
 }
 
 /**
- * Every household this account belongs to. Resolved once per request and put on
- * `locals`, because `household_id` is the predicate every later query filters
- * on — a request that has not established it has no business reading rows.
+ * Every household this account belongs to, resolved once per request onto
+ * `locals`. `household_id` is the predicate every later query filters on.
  */
 export function membershipsFor(db: DatabaseSync, accountId: string): Membership[] {
 	const rows = db

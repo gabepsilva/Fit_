@@ -134,8 +134,7 @@ test.describe('once onboarded', () => {
 	test('navigates to exercise, which opens on the starting points', async ({ page }) => {
 		await page.getByRole('button', { name: 'Open menu' }).click();
 		await page.getByRole('link', { name: 'Exercise' }).click();
-		// The sample journal seeds meals, not training, so Exercise opens on its
-		// first-run picker rather than on a rotation nobody chose.
+		// Sample journal has no training data; Exercise shows its first-run picker.
 		await expect(page.getByRole('heading', { name: 'Nothing here yet', level: 1 })).toBeVisible();
 	});
 
@@ -148,7 +147,7 @@ test.describe('once onboarded', () => {
 	test('opens the log sheet on the photo tab from the camera', async ({ page }) => {
 		await page.getByRole('button', { name: 'Log from a photo' }).click();
 		await expect(page.getByRole('dialog')).toBeVisible();
-		// `exact`, because the top bar's own camera button is "Log from a photo".
+		// Exact: the top bar has a camera button with the same name.
 		await expect(page.getByRole('button', { name: 'Photo', exact: true })).toHaveAttribute(
 			'aria-pressed',
 			'true'

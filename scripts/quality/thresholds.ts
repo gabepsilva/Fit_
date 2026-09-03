@@ -4,10 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { parseMutationPolicy } from './mutation-types';
 
-/**
- * Guards the numbers that decide whether a gate passes. The suppression ratchet
- * stops a diagnostic being silenced; this stops the bar itself being lowered.
- */
+/** Fails when a gate threshold moves against its ratchet direction. */
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
 const baselinePath = path.join(projectRoot, 'quality', 'threshold-baseline.json');

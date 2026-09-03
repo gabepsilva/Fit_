@@ -17,9 +17,9 @@ export const requestAuthDependencies: RequestAuthDependencies = {
 };
 
 /**
- * Read one session token without allowing an ambient cookie to override an
- * explicit Authorization header. A present but malformed header fails closed
- * instead of silently downgrading to the cookie.
+ * Read one session token. An explicit `Authorization` header wins over the
+ * ambient cookie; a present but malformed header fails closed instead of
+ * downgrading to the cookie.
  */
 export function sessionTokenFrom(
 	request: Request,
@@ -33,9 +33,8 @@ export function sessionTokenFrom(
 /**
  * Whether the request carries a bearer token rather than an ambient cookie.
  *
- * The distinction is what the origin policy turns on: a credential the client
- * had to attach deliberately cannot be replayed by a page on another site the
- * way a cookie the browser attaches for it can.
+ * The origin policy turns on this: a token the client attached itself cannot
+ * be replayed by another site the way an ambient cookie can.
  */
 export function hasBearerCredential(request: Request): boolean {
 	const authorization = request.headers.get('authorization');

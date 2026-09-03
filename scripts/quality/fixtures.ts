@@ -2,11 +2,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 /**
- * Deliberately broken inputs, one per gate, proving each gate catches what it
- * claims. Fixtures are generated at run time rather than committed: a stored
- * fixture for the secret scanner would trip the secret scanner on this
- * repository, and the same is true of the spell checker and the linters.
- * Fragments are joined so the offending literal never appears in the source.
+ * One deliberately broken input per gate. Fixtures are generated at run time
+ * rather than committed: a stored fixture would trip the secret scanner, spell
+ * checker, or linters on this repository, so offending literals are fragments
+ * joined at run time.
  */
 
 export interface GateFixture {
@@ -245,10 +244,9 @@ export const fixtures: GateFixture[] = [
 		apply: async (root) => {
 			const payload = 'fit-bundle-budget-fixture-payload-'.repeat(8000);
 			await write(root, 'src/lib/fixture.ts', `export const payload = '${payload}';\n`);
-			// A route of its own, rather than an edit to an existing page: the
-			// payload still lands in the client build and counts against the
-			// budget, and the fixture cannot be broken by whatever a real page
-			// happens to contain.
+			// A route of its own, not an edit to an existing page: the payload
+			// still counts against the budget, and the fixture cannot be broken
+			// by whatever a real page happens to contain.
 			await write(
 				root,
 				'src/routes/fixture/+page.svelte',
@@ -353,9 +351,9 @@ export const fixtures: GateFixture[] = [
 		exclusive: true,
 		failureIncludes: 'changed-line score',
 		description: 'A surviving mutant in a changed client module must fail change-scoped mutation.',
-		// The spec and its registration are support: they are what a developer
-		// adding this module would have written first. Only `fixture.ts` — the
-		// module whose mutant survives — is left outside the baseline.
+		// The baseline is what a developer adding this module would have
+		// committed; only `fixture.ts`, the module whose mutant survives, is
+		// left outside it.
 		baselinePaths: ['src/lib/ui/fixture.svelte.test.ts', 'quality/dom-free-client-specs.mjs'],
 		apply: async (root) => {
 			await write(
@@ -368,9 +366,9 @@ export const fixtures: GateFixture[] = [
 				'src/lib/ui/fixture.svelte.test.ts',
 				"import { expect, it } from 'vitest';\nimport { classify } from './fixture';\n\nit('exports the classifier', () => {\n\texpect(typeof classify).toBe('function');\n});\n"
 			);
-			// Mutation runs no longer include the browser project, so an unregistered
-			// `.svelte.` spec would leave this module measured by nothing and Stryker
-			// would exit on "No tests were found" rather than on the surviving mutant.
+			// Mutation runs skip the browser project, so an unregistered spec
+			// would leave this module measured by nothing and Stryker would
+			// exit on "No tests were found" rather than the surviving mutant.
 			await edit(root, 'quality/dom-free-client-specs.mjs', (content) =>
 				content.replace(
 					"\t'src/lib/ui/download.svelte.spec.ts'\n",

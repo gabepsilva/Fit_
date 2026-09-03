@@ -4,9 +4,7 @@
 	import { resolve } from '$app/paths';
 
 	/**
-	 * The bar at the top of every screen below the Exercise home: where you came
-	 * from, where you are, and the one action that finishes the screen. The back
-	 * control is a link rather than `history.back()`, so arriving from a deep
+	 * The back control is a link, not `history.back()`, so arriving from a deep
 	 * link still leads somewhere sensible.
 	 */
 	let {

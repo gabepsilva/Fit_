@@ -1,7 +1,7 @@
 <script lang="ts">
 	import AppShell from './AppShell.svelte';
 
-	// AppShell takes the page as a snippet, which a props-only render cannot supply.
+	// A props-only render cannot supply the snippet AppShell expects as its page.
 	let { body }: { body: string } = $props();
 </script>
 

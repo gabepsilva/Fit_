@@ -5,11 +5,6 @@
 	import { tend } from '$lib/state/tend.svelte';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
-	/**
-	 * The top set of one movement, week by week. Weekly columns rather than a
-	 * line, because the question is only ever whether the bar on the right is
-	 * taller than the one on the left.
-	 */
 	let { workouts }: { workouts: Workout[] } = $props();
 
 	let picked = $state('');
@@ -24,9 +19,7 @@
 		const loads = points.map((p) => p.load);
 		const top = Math.max(0, ...loads);
 		const low = Math.min(top, ...loads);
-		// Load moves in small steps against a much larger total, so a column
-		// measured from zero would flatten every change worth seeing. The floor
-		// sits below the lightest week instead.
+		// Loads move in small steps, so the floor sits just below the lightest week; zero would flatten them.
 		const floor = Math.max(0, low - (top - low) * 0.6);
 		return points.map((point, i) => {
 			const height = top === floor ? 100 : ((point.load - floor) / (top - floor)) * 100;
@@ -38,8 +31,7 @@
 		const first = points[0];
 		const last = points.at(-1);
 		if (!first || !last) return '';
-		// Weeks elapsed, not bars drawn: a movement trained twice across a quarter
-		// covers a quarter, and saying "last 2 weeks" would claim the opposite.
+		// Weeks elapsed, first to last point, not the number of bars drawn.
 		const weeks = weekSpan(points);
 		const span = `top set, last ${weeks} week${weeks === 1 ? '' : 's'}`;
 		if (points.length === 1) return `${name} · ${span}`;

@@ -11,10 +11,7 @@
 		ontoggle
 	}: { item: LogItem; open: boolean; step: number; ontoggle: () => void } = $props();
 
-	/**
-	 * The stepper writes straight through to the store, which re-derives the
-	 * entry's nutrition for the new count; there is no local copy to drift.
-	 */
+	// Writes straight through to the store, which re-derives nutrition; no local copy to drift.
 	function setServings(n: number) {
 		tend.updateLog(item.id, { servings: n });
 	}

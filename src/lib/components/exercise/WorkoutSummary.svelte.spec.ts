@@ -22,9 +22,8 @@ function pushA(): Routine {
 }
 
 /**
- * Two weeks of pressing, a week apart, with one shoulder movement in the first
- * of them — so Bench Press is the movement the trend opens on and Shoulders is
- * the group with the fewest sets behind it.
+ * Two weeks of pressing, a shoulder movement in the first, so the trend has a
+ * movement to open on and a group with the fewest sets behind it.
  */
 function fileTwoWeeksOfPressing() {
 	const press = (load: number) => ({
@@ -137,9 +136,8 @@ describe('WorkoutSummary', () => {
 		expect(page.getByText('not done').elements()).toHaveLength(2);
 	});
 
-	// A swap renames the movement in place, so a session that swapped exercise 2
-	// onto what exercise 1 already was files two rows under one name. Reading it
-	// back must not depend on those names differing.
+	// A swap can leave two rows with the same name; reading back must not depend
+	// on the names differing.
 	it('reads back a session where two movements share a name', async () => {
 		fileSession();
 		const second = tend.state.workouts.at(-1)?.exercises[1];
@@ -156,8 +154,7 @@ describe('WorkoutSummary', () => {
 		await expect.element(page.getByText('1200 lb')).toBeInTheDocument();
 	});
 
-	// Turning up and logging nothing still gets filed, and the screen says so
-	// rather than answering with a page of zeroes and no explanation.
+	// A walked-out session is still filed, and the screen says so.
 	it('files a session where nothing was ticked and says as much', async () => {
 		fileEmptySession();
 		await render(WorkoutSummary);

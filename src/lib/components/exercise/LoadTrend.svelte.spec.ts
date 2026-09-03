@@ -73,8 +73,6 @@ describe('LoadTrend', () => {
 	});
 
 	it('measures the caption in weeks elapsed, not in bars drawn', async () => {
-		// Trained in the first week and again fourteen weeks later: two points, but
-		// fifteen weeks of history behind them.
 		const workouts = [session(0, [bench(40)]), session(14, [bench(50)])];
 		await render(LoadTrend, { props: { workouts } });
 		await expect

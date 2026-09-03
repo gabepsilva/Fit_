@@ -4,10 +4,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Button from '$lib/ui/Button.svelte';
 
-	/**
-	 * `menuOpen` is reported rather than owned: the shell holds the drawer state,
-	 * and the button only needs it to describe itself to assistive technology.
-	 */
+	// menuOpen is reported, not owned: the shell holds the drawer; this only feeds aria-expanded.
 	let {
 		menuOpen,
 		onmenu,

@@ -11,27 +11,15 @@
 	} from '$lib/ui/camera';
 	import Button from '$lib/ui/Button.svelte';
 
-	/**
-	 * `camera` opens the viewfinder, `file` opens the picker — each as soon as
-	 * the pane appears, because the tab that created it was the decision. There
-	 * is no menu in between.
-	 */
+	// The camera or picker opens at once: the tab the user picked was already the decision.
 	let { route, ontype }: { route: 'camera' | 'file'; ontype: () => void } = $props();
 
-	/**
-	 * `ready` is the resting state at either end: the camera is opening, or the
-	 * picker is open and waiting to be answered.
-	 */
 	type Phase = 'ready' | 'live' | 'reading' | 'shot' | 'failed';
 
 	const TROUBLE: Record<CameraFailure | PickFailure, string> = {
-		// `unsupported` names the browser on purpose: it means `getUserMedia` is
-		// missing, which needs an insecure origin, and the Android shell serves
-		// from https://localhost. That branch is unreachable in the native app.
+		// This message names the browser; the app serves https://localhost, so it never fires there.
 		unsupported: 'This browser doesn’t offer a camera.',
-		// `denied` is reachable in both, where the way back differs: site
-		// settings in a browser, app permissions on Android. Naming neither is
-		// what keeps this sentence true wherever it is read.
+		// Names neither way back: site settings in a browser, app permissions on Android.
 		denied: 'Camera access was declined. You can undo that in your settings.',
 		unavailable: 'The camera wouldn’t open. Something else may be using it.',
 		'not-an-image': 'That file isn’t a picture.',
@@ -42,8 +30,7 @@
 	let failure = $state<CameraFailure | PickFailure>('unavailable');
 	let shot = $state<string | null>(null);
 	let stream = $state<MediaStream | null>(null);
-	// A readonly binding: zero until the stream reports its size, which is also
-	// the first moment there is a frame worth capturing.
+	// Zero until the stream reports its size: the first moment there is a frame to capture.
 	let videoWidth = $state(0);
 	let stopStream: (() => void) | null = null;
 	let grabFrame: (() => string | null) | null = null;
@@ -51,11 +38,7 @@
 
 	const Icon = $derived(route === 'camera' ? Camera : ImageUp);
 
-	/**
-	 * Hand the live stream to the element and keep a way to read a frame from it.
-	 * An attachment rather than `bind:this` so both are undone the moment the
-	 * viewfinder leaves the page.
-	 */
+	// An attachment, not bind:this, so the stream and grabber are undone when the viewfinder leaves.
 	function viewfinder(source: MediaStream | null) {
 		return (node: HTMLVideoElement) => {
 			node.srcObject = source;
@@ -67,10 +50,7 @@
 		};
 	}
 
-	/**
-	 * Opening the picker from the attachment rather than from `onMount` is what
-	 * guarantees the input exists by the time it is asked to open.
-	 */
+	// Opened from the attachment, not onMount, so the input exists by the time it is clicked.
 	function filePicker(node: HTMLInputElement) {
 		picker = node;
 		node.click();
@@ -106,8 +86,7 @@
 	async function chosen() {
 		const input = picker;
 		const file = input?.files?.[0];
-		// Clearing the input is what makes choosing the *same* picture twice count
-		// as a second change rather than as nothing at all.
+		// Clear the value so re-picking the same picture still fires a change.
 		if (input) input.value = '';
 		if (!file) return;
 
@@ -126,13 +105,11 @@
 		const taken = grabFrame?.() ?? null;
 		if (!taken) return;
 		shot = taken;
-		// The camera is released as soon as there is a still: leaving the indicator
-		// light on while someone studies a frozen frame is its own small betrayal.
+		// Release as soon as there is a still, so the camera indicator goes off.
 		release();
 		phase = 'shot';
 	}
 
-	/** Another go, down whichever route this pane is. */
 	function again() {
 		if (route === 'file') {
 			choose();
@@ -148,8 +125,7 @@
 		ontype();
 	}
 
-	// The camera opens with the pane, so it closes with it too: leaving the photo
-	// tab, closing the sheet, and navigating away all land here.
+	// Closes with the pane on every exit: tab change, sheet close, navigation.
 	onDestroy(release);
 	onMount(() => {
 		if (route === 'camera') void open();
@@ -188,7 +164,7 @@
 		<p class="text-muted-foreground max-w-xs text-sm">{TROUBLE[failure]}</p>
 		<Button variant="secondary" onclick={again}>Try again</Button>
 	{:else if route === 'file' && phase === 'ready'}
-		<!-- The picker is already open. This is the way back when it is dismissed. -->
+		<!-- The picker was dismissed: the only way back is to open it again. -->
 		<Icon class="text-muted-foreground size-8" />
 		<Button onclick={choose}>Choose a picture</Button>
 	{:else}
@@ -198,7 +174,7 @@
 		</p>
 	{/if}
 
-	<!-- One sentence per line: the tests match this copy, and a reflow must not split it. -->
+	<!-- Tests match this copy; keep the whole sentence on one line. -->
 	<p class="text-muted-foreground max-w-xs text-sm">
 		Reading a still needs the server, which isn’t built yet, so nothing leaves this device.
 	</p>

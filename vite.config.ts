@@ -7,30 +7,12 @@ import adapterStatic from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 
-/**
- * Order matters, and the DOM-free project deliberately comes first.
- *
- * Stryker's vitest runner sets `bail: 1`, so a mutant run stops at the first
- * failing test. Under `coverageAnalysis: 'perTest'` a mutant in a shared module
- * — `auth/api.ts`, `state/session.svelte.ts` — is covered both by its own fast
- * unit spec and by the page and component specs that mount it in Chromium.
- * With the browser project first, the browser had to boot and transform before
- * anything could fail, and the run blew Stryker's budget: the mutant was
- * recorded as a Timeout, which Stryker credits as a kill while proving nothing.
- * Running the jsdom project first lets the unit spec fail in milliseconds, and
- * the same mutant is recorded as Killed by the assertion that actually caught it.
- */
+// DOM-free project first: Stryker's `bail: 1` + perTest coverage means the fast unit spec
+// must fail before the browser project boots, or the mutant times out instead of being killed.
 const testProjects = [
 	{
 		extends: './vite.config.ts',
-		// Its own dependency-optimizer cache, per project.
-		//
-		// `ignorePatterns` keeps `node_modules/.vite` out of the Stryker sandbox, so
-		// every worker's vitest optimizes from nothing — and the projects in that
-		// worker start together and were writing into one directory, because the
-		// cache key does not include the project. Two of them then raced on the
-		// rename that publishes it and the run died with ENOTEMPTY before a single
-		// mutant ran. A directory each removes the collision rather than retrying it.
+		// Per-project cache dir: concurrent vitest projects in one Stryker worker would otherwise race on rename.
 		cacheDir: 'node_modules/.vite-client-node',
 		test: {
 			name: 'client-node',

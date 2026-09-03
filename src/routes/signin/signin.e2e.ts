@@ -3,30 +3,16 @@ import { clearRegistrationThrottle, freshUsername } from '../../../tests/e2e-sup
 import AxeBuilder from '@axe-core/playwright';
 
 /**
- * Signing in is how the app opens. The form is the first screen an
- * unauthenticated visitor sees, so it is reached by asking for the app rather
- * than by finding a link in a drawer that is itself behind the gate.
- *
- * The journal is still this device's. Signing in opens the app rather than
- * fetching anything, which is why a device that already has one comes back to
- * exactly the journal it had.
+ * Signing in is how the app opens: the form is the first screen an
+ * unauthenticated visitor sees. Signing in opens the app rather than fetching
+ * anything, so a device comes back to exactly the journal it had.
  */
 
 const PASSWORD = 'salt-and-pepper-mill';
 const DISPLAY_NAME = 'Robin';
 
-/**
- * Seed an account through the endpoint rather than through the sign-up form:
- * this file is about the sign-in page, and a second flow in the setup would
- * make its failures ambiguous.
- *
- * The `origin` header is the one thing an API context has to say for itself.
- * `hooks.server.ts` refuses an unsafe request that does not declare where it
- * came from, because a browser always declares it and anything that does not
- * is either not a browser or is hiding. Playwright's `request` fixture is the
- * former, and it also carries its own cookie jar, so seeding never leaves the
- * page holding a session it did not sign in for.
- */
+// Seeded via API to keep this file's scope to the sign-in form.
+// The origin header is required by the server's CSRF check.
 async function seedAccount(request: APIRequestContext, baseURL: string, username: string) {
 	const response = await request.post('/api/accounts', {
 		headers: { origin: new URL(baseURL).origin },
@@ -39,14 +25,11 @@ async function axeViolations(page: Page) {
 	const results = await new AxeBuilder({ page })
 		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
 		.analyze();
-	// Returned rather than asserted here, so each test carries its own assertion.
+	// Returned, not asserted: each test makes its own a11y assertion.
 	return results.violations;
 }
 
-/**
- * Ask for the app, and be handed the form. No link is clicked to get here:
- * there is no screen with a link on it before this one.
- */
+/** Ask for the app and be handed the form; no link is clicked, there is no earlier screen. */
 async function reachSignIn(page: Page, path = '/') {
 	await page.goto(path);
 	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
@@ -138,8 +121,7 @@ test.describe('with an account already registered', () => {
 		await openSampleJournal(page);
 		await signOut(page);
 
-		// Signing out closes the app; it does not empty the device. The same
-		// journal is behind the form, waiting for the same account.
+		// Signing out closes the app; it does not empty the device.
 		await attempt(page, username, PASSWORD);
 		await expect(page.getByRole('heading', { name: 'breakfast' })).toBeVisible();
 	});
@@ -158,8 +140,7 @@ test.describe('with an account already registered', () => {
 		await attempt(page, username, 'not-the-password');
 		await expect(page.getByRole('alert')).toHaveText('That username and password don’t match.');
 
-		// And the right one still works afterwards, so the sentence above is a
-		// rejection rather than a form that has stopped submitting.
+		// Prove the form still submits after a rejection.
 		await page.getByLabel('Password').fill(PASSWORD);
 		await page.getByRole('button', { name: 'Sign in' }).click();
 		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();

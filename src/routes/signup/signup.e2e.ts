@@ -3,34 +3,28 @@ import { clearRegistrationThrottle, freshUsername } from '../../../tests/e2e-sup
 import AxeBuilder from '@axe-core/playwright';
 
 /**
- * Creating an account, which is how a new device gets in at all. Registration
- * is the only path that necessarily answers "does this username exist", so the
- * taken name is exercised here and nowhere else.
+ * Creating an account. Registration is the only path that answers "does this
+ * username exist", so the taken name is exercised here and nowhere else.
  */
 
-/** Ten characters is the server's floor, so the happy path clears it by a margin. */
+/** Above the server's 10-char minimum. */
 const PASSWORD = 'salt-and-pepper-mill';
 
 async function axeViolations(page: Page) {
 	const results = await new AxeBuilder({ page })
 		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
 		.analyze();
-	// Returned rather than asserted here, so each test carries its own assertion.
+	// Returned, not asserted: each test makes its own a11y assertion.
 	return results.violations;
 }
 
-/**
- * Take the route a person takes: ask for the app, be given the sign-in form,
- * and follow the offer to create one. The gate is the only way in, so this is
- * the only way here.
- */
+/** The route a person takes: ask for the app, get the sign-in form, follow the offer to create one. */
 async function reachSignUp(page: Page) {
 	await page.goto('/');
 	await page.getByRole('link', { name: 'Create one' }).click();
 	await expect(page.getByRole('heading', { name: 'Create an account', level: 1 })).toBeVisible();
 }
 
-/** Fill the three boxes that are not optional and submit. */
 async function submitAccount(page: Page, username: string, password = PASSWORD) {
 	await page.getByLabel('Username').fill(username);
 	await page.getByLabel('Name', { exact: true }).fill('Robin');
@@ -48,8 +42,6 @@ test.describe('creating an account', () => {
 	test('states the rules before anything is rejected', async ({ page }) => {
 		await expect(page.getByText('3 to 32 characters: letters, digits, and . _ -')).toBeVisible();
 		await expect(page.getByText('At least 10 characters. Length beats punctuation.')).toBeVisible();
-		// The household is named here because registration creates one, and it is
-		// optional because the display name already answers the question.
 		await expect(page.getByLabel('Household')).toBeVisible();
 	});
 
@@ -80,7 +72,6 @@ test.describe('creating an account', () => {
 
 		await expect(page.getByText('At least 10 characters.', { exact: true })).toBeVisible();
 		await expect(page.getByLabel('Password')).toHaveAttribute('aria-invalid', 'true');
-		// Nothing was created, so the form is still the page being looked at.
 		await expect(page.getByRole('heading', { name: 'Create an account', level: 1 })).toBeVisible();
 	});
 
@@ -104,11 +95,7 @@ test.describe('creating an account', () => {
 	});
 });
 
-/**
- * The second sign-up for one name. The form is reached directly the second
- * time because the gate no longer stands between this device and the app,
- * which is the state the first registration leaves behind.
- */
+/** The second sign-up for one name; goto directly, since the gate no longer stands in the way. */
 test('says a username is taken, under the box that holds it', async ({ page }) => {
 	const username = freshUsername();
 	await reachSignUp(page);

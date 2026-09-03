@@ -15,8 +15,7 @@
 
 	const results = $derived.by(() => {
 		if (!query.trim()) return FOODS.slice(0, 20);
-		// A scanned barcode is an exact identifier, so it short-circuits the
-		// fuzzy name search rather than competing with it.
+		// A barcode is an exact match; check it before falling back to fuzzy search.
 		const barcode = query.replace(/\s/g, '');
 		if (/^\d{8,14}$/.test(barcode)) {
 			const hit = FOODS.find((f) => f.barcode === barcode);

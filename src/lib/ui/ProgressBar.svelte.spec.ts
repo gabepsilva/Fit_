@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import ProgressBar from './ProgressBar.svelte';
 
-/** The filled part of the bar, which is what every assertion here is about. */
+/** The filled part of the bar. */
 function fill() {
 	return document.body.querySelector<HTMLElement>('.bg-primary');
 }

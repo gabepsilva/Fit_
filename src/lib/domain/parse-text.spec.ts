@@ -242,8 +242,7 @@ describe('parseLocalText', () => {
 		const item = firstItem('2 slices of toast');
 		expect(item?.servings).toBe(2);
 		expect(item?.foodId).toBe('sourdough');
-		// The whole query is now the alias, rather than "of toast" scraping past
-		// the threshold on a partial match.
+		// The whole query is now the alias, so it can't scrape past on a partial match.
 		expect(item?.confidence).toBe(0.96);
 	});
 

@@ -4,11 +4,7 @@
 	import { cn } from '$lib/ui/cn';
 
 	/**
-	 * Minus, a reading, plus. Every number in the app is adjusted with one thumb,
-	 * so the control is a pair of targets rather than a text field: nobody types
-	 * 47.5 while holding a dumbbell.
-	 *
-	 * The caller owns the value and the step; this only reports the direction.
+	 * Stateless: the caller owns the value and the step, this only reports the direction.
 	 * `QuantityStepper` wraps it for the callers that would rather bind a number.
 	 */
 	let {

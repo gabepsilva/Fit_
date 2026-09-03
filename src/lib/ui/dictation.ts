@@ -1,8 +1,4 @@
-/**
- * A thin wrapper over the Web Speech API, which is prefixed on WebKit and
- * absent entirely on some Android browsers. Callers get `null` when the browser
- * cannot dictate, so they can fall back to typing rather than failing.
- */
+// Prefixed on WebKit, absent on some Android browsers; `null` means fall back to typing.
 
 type SpeechRecognitionLike = {
 	lang: string;
@@ -36,8 +32,7 @@ export function startDictation(handlers: Handlers): Dictation | null {
 
 	const rec = new Recognition();
 	rec.lang = 'en-US';
-	// Only the settled transcript is useful; partial results would re-parse on
-	// every syllable.
+	// Only the settled transcript matters; partials would re-parse every syllable.
 	rec.interimResults = false;
 	rec.onresult = (ev) => handlers.onresult(ev.results[0]?.[0]?.transcript ?? '');
 	rec.onerror = handlers.onerror;

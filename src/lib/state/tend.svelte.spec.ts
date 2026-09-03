@@ -24,10 +24,6 @@ function freshStore() {
 	return store;
 }
 
-/**
- * Log one catalog food. The store carried this shorthand until nothing in the
- * app turned out to use it; the tests that lean on it keep it here instead.
- */
 function logFood(
 	store: TendStore,
 	args: { foodId: string; servings: number; meal: Meal; date?: string; source?: LogSource }
@@ -37,15 +33,11 @@ function logFood(
 	]);
 }
 
-/**
- * Say whether the tab is on screen. `visibilityState` is read-only on a real
- * document, so the test defines it rather than assigning to it.
- */
+/** `visibilityState` is read-only on a real document, so define it rather than assign. */
 function setVisibility(state: DocumentVisibilityState) {
 	Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
 }
 
-/** Put a known plan in place, so a swap has something predictable to move. */
 function setPlan(store: TendStore, plan: PlannedMeal[]) {
 	store.state.weekPlan = plan;
 	store.persist();
@@ -61,26 +53,19 @@ function onboarded(overrides: Partial<Profile> = {}) {
 	return store;
 }
 
-/**
- * The persisted payload, read back through the literal key rather than the
- * exported constant: a build that renamed the key would still round-trip
- * against itself, and every already-installed copy of the app would silently
- * lose its data.
- */
+// Uses the literal key, not the exported constant: a renamed key would round-trip against itself.
 function stored(): TendState {
 	const raw = localStorage.getItem('tend.v1');
 	if (raw === null) throw new Error('nothing was written to localStorage');
 	return JSON.parse(raw) as TendState;
 }
 
-/** A second store over the same storage, standing in for a page reload. */
 function reloaded() {
 	const store = new TendStore();
 	store.hydrate();
 	return store;
 }
 
-/** A free-text entry: no `foodId`, so it can only ever be scaled by ratio. */
 function customEntry(overrides: Partial<LogItem> = {}): LogItem {
 	return {
 		id: 'custom',
@@ -155,9 +140,7 @@ describe('hydration', () => {
 		expect(store.state.activeProfileId).toBe('');
 	});
 
-	// A payload written before the units and the rest length were settings at
-	// all: those keys are absent, and a session opened on `undefined` seconds
-	// would count down from NaN.
+	// An older payload lacks these keys; a session opened on `undefined` would count down from NaN.
 	it('gives an older payload the default unit and rest length', () => {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded: true, workouts: [] }));
 		const store = new TendStore();
@@ -283,8 +266,7 @@ describe('the log', () => {
 		expect(store.profile?.log[0]?.protein).toBe(3.2);
 		store.updateLog(id, { servings: 2 });
 		const after = store.profile?.log[0];
-		// Scaling the half-serving entry by ratio would land on 12.8 protein and
-		// 1.6 iron; these are the numbers only the source food can produce.
+		// Only the source food produces these numbers; ratio scaling would not.
 		expect(after?.servings).toBe(2);
 		expect(after?.kcal).toBe(144);
 		expect(after?.protein).toBe(12.6);
@@ -296,8 +278,7 @@ describe('the log', () => {
 	it('scales a custom entry by ratio when it has no catalog food behind it', () => {
 		const store = onboarded();
 		store.addLogItems([customEntry()]);
-		// Two servings to three: the ratio is 1.5, not 2 * 3, and not 1 — which
-		// is what applying the patch before rescaling would produce.
+		// The ratio is 1.5, not 1 (which patching before rescaling would produce).
 		store.updateLog('custom', { servings: 3 });
 		const after = store.profile?.log[0];
 		expect(after?.servings).toBe(3);
@@ -456,8 +437,7 @@ describe('the week plan', () => {
 	});
 
 	it('bends a restriction rather than leaving a meal unplanned', () => {
-		// Nothing on the breakfast menu is vegan, so those slots fall back to the
-		// full breakfast list while lunch and dinner still hold the line.
+		// No breakfast recipe is vegan, so those slots fall back to the full list.
 		const store = onboarded({ restrictions: ['vegan'] });
 		const plan = store.state.weekPlan;
 		expect(plan).toHaveLength(21);
@@ -476,8 +456,7 @@ describe('the week plan', () => {
 		const store = onboarded();
 		const dinners = RECIPES.filter((r) => r.meal === 'dinner');
 		const breakfast = RECIPES.filter((r) => r.meal === 'breakfast')[0]?.id ?? '';
-		// Another day's dinner comes first and the same day's breakfast comes in
-		// between, so matching on only half of date-and-meal picks the wrong slot.
+		// A different day's dinner and a same-day breakfast sit between: matching on half of date-and-meal picks the wrong slot.
 		setPlan(store, [
 			{ date: '2026-06-02', meal: 'dinner', recipeId: dinners[0]?.id ?? '', forProfileIds: [] },
 			{ date: '2026-06-01', meal: 'breakfast', recipeId: breakfast, forProfileIds: [] },
@@ -591,8 +570,7 @@ describe('whole-state operations', () => {
 	});
 
 	it('neither reads nor writes where there is no localStorage at all', () => {
-		// The store is constructed at import time and a server render reaches
-		// `hydrate()` before any browser storage exists.
+		// A server render reaches `hydrate()` before any browser storage exists.
 		const real = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
 		Object.defineProperty(globalThis, 'localStorage', { value: undefined, configurable: true });
 		try {
@@ -730,14 +708,12 @@ describe('the sample household', () => {
 	});
 });
 
-/** A store holding the single-routine starter template, which is the smallest real routine. */
 function withRoutine() {
 	const store = freshStore();
 	store.useTemplate('fb');
 	return store;
 }
 
-/** The same, with a session already open on it. */
 function inSession() {
 	const store = withRoutine();
 	store.startWorkout('full-body');
@@ -933,8 +909,7 @@ describe('the movements in a routine', () => {
 		const routine = store.routine('full-body');
 		const otherRow = routine?.exercises[1];
 		store.bumpRoutineExercise('full-body', 0, 'load', 1);
-		// The sheet groups these rows by muscle; rebuilding the routine would
-		// redraw every group for one stepper tap.
+		// Rebuilding the routine would give every row a new identity and redraw every group.
 		expect(store.routine('full-body')).toBe(routine);
 		expect(store.routine('full-body')?.exercises[1]).toBe(otherRow);
 	});
@@ -1138,8 +1113,7 @@ describe('running a session', () => {
 		const laterSet = exercise?.sets[1];
 		const otherExercise = workout?.exercises[1];
 		store.toggleSet(0);
-		// A rebuilt workout would answer these with new objects, and every row of
-		// the session screen would rerender for one tick.
+		// A rebuilt workout would give every set a new identity and rerender the whole screen.
 		expect(store.state.activeWorkout).toBe(workout);
 		expect(store.currentExercise).toBe(exercise);
 		expect(store.currentExercise?.sets[1]).toBe(laterSet);
@@ -1160,8 +1134,7 @@ describe('running a session', () => {
 		store.toggleSet(0);
 		store.toggleSet(2);
 		const sets = store.currentExercise?.sets ?? [];
-		// Two of three are ticked, but the one left to log is the middle one: the
-		// session screen labels its button from this index, never from the count.
+		// The session screen labels its button from this index, never from the count.
 		expect(sets.filter((s) => s.done)).toHaveLength(2);
 		expect(sets.findIndex((s) => !s.done)).toBe(1);
 	});
@@ -1213,9 +1186,6 @@ describe('filing a session', () => {
 		expect(store.currentExercise).toBeNull();
 	});
 
-	// Turning up and logging nothing is still something that happened, and the
-	// summary has a line for it. Dropping it would send someone back to the home
-	// screen as though the session had never been opened.
 	it('files a session where nothing was ticked rather than dropping it', () => {
 		const store = inSession();
 		const filed = store.finishWorkout();
@@ -1242,10 +1212,6 @@ describe('filing a session', () => {
 	});
 });
 
-/**
- * The one answer to "did this happen?", so the week strip, the today card and
- * the adherence chart cannot disagree about a session someone walked out of.
- */
 describe('what counts as training', () => {
 	it('counts a filed session with a set ticked in it', () => {
 		const store = inSession();
@@ -1283,9 +1249,7 @@ describe('the load unit and the rest length', () => {
 		expect(reloaded().state.loadUnit).toBe('lb');
 	});
 
-	// The unit is a label on a number, not a conversion of it: 60 was on the bar
-	// whichever word is printed beside it, and rewriting the log every time
-	// somebody looked at the other unit would lose what was actually lifted.
+	// The unit is a label, not a conversion: rewriting the log would lose what was lifted.
 	it('leaves every load already logged exactly as it was', () => {
 		const store = inSession();
 		store.toggleSet(0);
@@ -1320,8 +1284,7 @@ describe('the load unit and the rest length', () => {
 		expect(store.state.restSeconds).toBe(92);
 	});
 
-	// The rest length is moved on a stepper, so it shares a save with the taps
-	// either side of it rather than serializing the whole state on each one.
+	// Moved on a stepper, so it shares a save rather than serializing per tap.
 	it('lets a burst of steps share one save', async () => {
 		const store = freshStore();
 		store.setRestSeconds(105);
@@ -1379,8 +1342,7 @@ describe('saving a session without paying for it on every tap', () => {
 		store.toggleSet(0);
 		store.bumpSet(0, 'load', 1);
 		store.bumpSet(0, 'load', 1);
-		// Still the session as it was opened: the taps have not each serialized
-		// the whole state on the way through.
+		// The taps have not each serialized the whole state on the way through.
 		expect(stored().activeWorkout?.exercises[0]?.sets[0]?.done).toBe(false);
 		await vi.waitFor(() => {
 			expect(stored().activeWorkout?.exercises[0]?.sets[0]?.done).toBe(true);
