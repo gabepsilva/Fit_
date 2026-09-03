@@ -113,7 +113,6 @@ test.describe('with an account already registered', () => {
 	test('signs in and opens the app', async ({ page }) => {
 		await attempt(page, username, PASSWORD);
 
-		await expect(page.getByText(`Signed in as ${DISPLAY_NAME}.`)).toBeVisible();
 		// This device has no journal yet, so what it opens on is the first run.
 		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 	});

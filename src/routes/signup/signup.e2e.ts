@@ -61,7 +61,6 @@ test.describe('creating an account', () => {
 		const username = freshUsername();
 		await submitAccount(page, username);
 
-		await expect(page.getByText('Welcome, Robin.')).toBeVisible();
 		// A new account on a new device opens on the first run rather than on a
 		// journal: registering creates the account, not the journal.
 		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();

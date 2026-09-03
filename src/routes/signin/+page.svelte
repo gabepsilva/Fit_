@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
@@ -107,7 +106,6 @@
 		problem = null;
 		held = null;
 		session.begin(result.value);
-		toast(`Signed in as ${result.value.account.displayName}.`);
 		await goto(target);
 	}
 </script>

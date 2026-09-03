@@ -161,18 +161,17 @@
 		<!--
 			One toaster for every branch, mounted outside all of them.
 
-			Signing in is a toast immediately followed by a navigation, and that
-			navigation is what swaps the branch above. A toaster inside the branch
-			was unmounted mid-announcement and took the message with it, so the
-			sentence confirming the sign-in never arrived.
+			Signing out is a toast immediately followed by the branch above
+			swapping: `session.forget()` changes what this renders, and a toaster
+			inside the branch being left is unmounted mid-announcement and takes
+			the message with it.
 
 			Top rather than svelte-sonner's default corner, because the bottom of
-			the screen is where this application puts the button it is asking you
-			to press. `Onboarding` pins its actions there with `sticky bottom-0`,
-			and a toast lands on `Continue` every time — on a phone the toaster is
-			full width, so the corner it nominally sits in means nothing. Signing
-			in is precisely when that happens: the toast and the first screen of
-			onboarding arrive together.
+			the screen is where this application puts things to press. `Sheet` is
+			`fixed bottom-0` and `LogSheet` raises six of these from inside it;
+			`Onboarding` pins its actions there with `sticky bottom-0`. On a phone
+			the toaster is full width, so the corner it nominally sits in means
+			nothing.
 		-->
 		<Toaster position="top-center" offset={TOAST_OFFSET} mobileOffset={TOAST_OFFSET} />
 	</div>
