@@ -96,6 +96,22 @@ The verdict records this as `strict-changed-with-legacy-background` and reports 
 Scope records Git change status separately from added-line ranges: a production file modified
 only by deletions is still strict even though it has no changed-line denominator.
 
+Strict liability is lifted only from a change that is provably inert: it leaves lines in the
+new source, Stryker anchored no mutant to any of them, and none of them reach code Stryker
+could mutate. The last test is put to the syntax rather than to the mutant count, because
+Stryker has no mutator for a renamed call target. The middle one asks where a mutant starts
+rather than how far it reaches, because a `BlockStatement` mutant spans every comment in the
+body it replaces. A rewritten comment, doc block or reordered import is excused; a deletion, a
+rename, and any line Stryker anchored a mutant to are not, and the security lane never is. The
+verdict reports the count as `inertFiles` and the lane prints it, so an excused file is
+disclosed rather than quietly dropped.
+
+Stryker's own aggregate break stands down on the two changed lanes, which the verdict governs
+instead: it is harder than the break on every file it judges, and it holds unchanged fallback
+files to the same 80 in their own pool. Leaving the break on would re-impose the whole-file
+debt an excused file was just relieved of, from a pool that is often a single file. The break
+remains the governing rule for the full-tree lane, and `mutation.break` is unchanged.
+
 `bun run test:mutation:full` preserves the pre-existing Stryker-compatible aggregate score and
 80 percent merge threshold while legacy files are remediated. It remains blocking and
 incremental on every pull request, and also runs after pushes to `main` and forced-cold every

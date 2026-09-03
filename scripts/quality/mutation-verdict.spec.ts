@@ -262,6 +262,227 @@ describe('mutation verdict', () => {
 		expect(verdict.ok).toBe(false);
 	});
 
+	it('lifts strict liability from a change that only rewrites a comment', async () => {
+		const { root, scope } = await fixture();
+		const source = [
+			'// A comment that a sweep rewrote, and nothing else.',
+			'export function choose(value: boolean) { return value ? 1 : 2; }',
+			''
+		].join('\n');
+		await writeFile(path.join(root, 'src/a.ts'), source);
+		scope.lane = 'changed-node';
+		scope.files[0] = { path: 'src/a.ts', changeStatus: 'M', changedLines: [{ start: 1, end: 1 }] };
+		const verdict = await evaluateMutationReport({
+			projectRoot: root,
+			lane: 'changed-node',
+			scope,
+			policy,
+			report: {
+				files: {
+					'src/a.ts': {
+						source,
+						mutants: [
+							...Array.from({ length: 4 }, (_, index) => mutant(String(index), 'Killed', 2)),
+							mutant('survivor', 'Survived', 2),
+							mutant('uncovered', 'NoCoverage', 2)
+						]
+					}
+				}
+			}
+		});
+		expect(verdict.inertFiles).toBe(1);
+		expect(verdict.files[0]?.inertChange).toBe(true);
+		expect(verdict.strictFiles).toBe(0);
+		expect(verdict.failures).toEqual([]);
+		expect(verdict.ok).toBe(true);
+	});
+
+	it('lifts strict liability from a rewritten JSDoc block, which is a node and not trivia', async () => {
+		const { root, scope } = await fixture();
+		const source = [
+			'/**',
+			' * A doc block that a sweep rewrote.',
+			' */',
+			'export function choose(value: boolean) { return value ? 1 : 2; }',
+			''
+		].join('\n');
+		await writeFile(path.join(root, 'src/a.ts'), source);
+		scope.lane = 'changed-node';
+		scope.files[0] = { path: 'src/a.ts', changeStatus: 'M', changedLines: [{ start: 1, end: 3 }] };
+		const verdict = await evaluateMutationReport({
+			projectRoot: root,
+			lane: 'changed-node',
+			scope,
+			policy,
+			report: {
+				files: {
+					'src/a.ts': {
+						source,
+						mutants: [mutant('survivor', 'Survived', 4), mutant('uncovered', 'NoCoverage', 4)]
+					}
+				}
+			}
+		});
+		expect(verdict.files[0]?.inertChange).toBe(true);
+		expect(verdict.strictFiles).toBe(0);
+		expect(verdict.ok).toBe(true);
+	});
+
+	it('keeps a rename strict even though Stryker produces no mutant for it', async () => {
+		const { root, scope } = await fixture();
+		const source = [
+			'import { helper } from "./helper";',
+			'export function choose(value: boolean) { return value ? 1 : 2; }',
+			'export const answer = helper();',
+			''
+		].join('\n');
+		await writeFile(path.join(root, 'src/a.ts'), source);
+		scope.lane = 'changed-node';
+		scope.files[0] = { path: 'src/a.ts', changeStatus: 'M', changedLines: [{ start: 3, end: 3 }] };
+		const verdict = await evaluateMutationReport({
+			projectRoot: root,
+			lane: 'changed-node',
+			scope,
+			policy,
+			report: {
+				files: {
+					'src/a.ts': {
+						source,
+						mutants: [
+							...Array.from({ length: 3 }, (_, index) => mutant(String(index), 'Killed', 2)),
+							mutant('survivor', 'Survived', 2),
+							mutant('second-survivor', 'Survived', 2)
+						]
+					}
+				}
+			}
+		});
+		expect(verdict.files[0]?.inertChange).toBe(false);
+		expect(verdict.strictFiles).toBe(1);
+		expect(verdict.failures).toContain('src/a.ts killed-only score 60.00 is below 80');
+	});
+
+	it('excuses an import-only change but not the statement below it', async () => {
+		const { root, scope } = await fixture();
+		const source = [
+			'import { helper } from "./helper";',
+			'export function choose(value: boolean) { return value ? 1 : 2; }',
+			''
+		].join('\n');
+		await writeFile(path.join(root, 'src/a.ts'), source);
+		scope.lane = 'changed-node';
+		const evaluate = async (changedLines: { start: number; end: number }[]) => {
+			scope.files[0] = { path: 'src/a.ts', changeStatus: 'M', changedLines };
+			return evaluateMutationReport({
+				projectRoot: root,
+				lane: 'changed-node',
+				scope,
+				policy,
+				report: {
+					files: {
+						'src/a.ts': {
+							source,
+							mutants: [mutant('survivor', 'Survived', 2)]
+						}
+					}
+				}
+			});
+		};
+		expect((await evaluate([{ start: 1, end: 1 }])).files[0]?.inertChange).toBe(true);
+		expect((await evaluate([{ start: 2, end: 2 }])).files[0]?.inertChange).toBe(false);
+	});
+
+	it('is not defeated by an enclosing block mutant that merely spans the comment', async () => {
+		const { root, scope } = await fixture();
+		const source = [
+			'export function choose(value: boolean) {',
+			'\t// A comment inside the body, which the block mutant spans.',
+			'\treturn value ? 1 : 2;',
+			'}',
+			''
+		].join('\n');
+		await writeFile(path.join(root, 'src/a.ts'), source);
+		scope.lane = 'changed-node';
+		scope.files[0] = { path: 'src/a.ts', changeStatus: 'M', changedLines: [{ start: 2, end: 2 }] };
+		const block = {
+			...mutant('block', 'Killed', 1),
+			mutatorName: 'BlockStatement',
+			location: { start: { line: 1, column: 40 }, end: { line: 4, column: 1 } }
+		};
+		const verdict = await evaluateMutationReport({
+			projectRoot: root,
+			lane: 'changed-node',
+			scope,
+			policy,
+			report: {
+				files: {
+					'src/a.ts': { source, mutants: [block, mutant('uncovered', 'NoCoverage', 3)] }
+				}
+			}
+		});
+		expect(verdict.files[0]?.inertChange).toBe(true);
+		expect(verdict.strictFiles).toBe(0);
+		expect(verdict.ok).toBe(true);
+	});
+
+	it('keeps a file strict when Stryker mutated a line the syntax read called inert', async () => {
+		const { root, scope } = await fixture();
+		const source = [
+			'// A comment, which carries no token of its own.',
+			'export function choose(value: boolean) { return value ? 1 : 2; }',
+			''
+		].join('\n');
+		await writeFile(path.join(root, 'src/a.ts'), source);
+		scope.lane = 'changed-node';
+		scope.files[0] = { path: 'src/a.ts', changeStatus: 'M', changedLines: [{ start: 1, end: 1 }] };
+		const verdict = await evaluateMutationReport({
+			projectRoot: root,
+			lane: 'changed-node',
+			scope,
+			policy,
+			report: {
+				files: {
+					'src/a.ts': {
+						source,
+						// Stryker disagreeing with the syntax read has to fail closed
+						// rather than excuse the file.
+						mutants: [mutant('survivor', 'Survived', 1)]
+					}
+				}
+			}
+		});
+		expect(verdict.files[0]?.inertChange).toBe(false);
+		expect(verdict.strictFiles).toBe(1);
+	});
+
+	it('keeps a security file strict even when its change reaches no mutable code', async () => {
+		const { root, scope } = await fixture();
+		const source = [
+			'// Only a comment moved here.',
+			'export function choose(value: boolean) { return value ? 1 : 2; }',
+			''
+		].join('\n');
+		await writeFile(path.join(root, 'src/a.ts'), source);
+		scope.files[0] = { path: 'src/a.ts', changeStatus: 'M', changedLines: [{ start: 1, end: 1 }] };
+		const verdict = await evaluateMutationReport({
+			projectRoot: root,
+			lane: 'security',
+			scope,
+			policy,
+			report: {
+				files: {
+					'src/a.ts': {
+						source,
+						mutants: [mutant('uncovered', 'NoCoverage', 2)]
+					}
+				}
+			}
+		});
+		expect(verdict.inertFiles).toBe(0);
+		expect(verdict.strictFiles).toBe(1);
+		expect(verdict.failures).toContain('strict changed uncovered mutants 1 exceed 0');
+	});
+
 	it('fails closed when a scope omits explicit changed-production identity', async () => {
 		const { root, scope } = await fixture();
 		delete (scope.files[0] as Partial<(typeof scope.files)[number]>).changeStatus;
