@@ -1,9 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import {
-	clearRegistrationThrottle,
-	freshUsername,
-	toastsCleared
-} from '../../../tests/e2e-support';
+import { clearRegistrationThrottle, freshUsername, toastCleared } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -58,8 +54,12 @@ async function reachSignIn(page: Page, path = '/') {
 
 /** Take the sample journal, so there is something on the device to come back to. */
 async function openSampleJournal(page: Page) {
-	// Signing in toasts, and the toast lands on the button below. See `toastsCleared`.
-	await toastsCleared(page);
+	// Signing in toasts, and the toast lands on the button below. Waited for by
+	// name before it is waited out, because this runs a moment after the submit
+	// that raises it and an empty toaster here would mean "not yet" rather than
+	// "gone". See `toastCleared`.
+	await expect(page.getByText(`Signed in as ${DISPLAY_NAME}.`)).toBeVisible();
+	await toastCleared(page);
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Open the sample journal' }).click();
