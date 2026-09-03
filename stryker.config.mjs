@@ -7,12 +7,31 @@ const { mutation } = JSON.parse(
 );
 
 const scopeFile = process.env.FIT_MUTATION_SCOPE;
-const scopedMutate =
+const scope =
 	scopeFile === undefined
 		? null
-		: /** @type {{ files: { path: string }[] }} */ (
+		: /** @type {{ lane: string, files: { path: string }[] }} */ (
 				JSON.parse(readFileSync(scopeFile, 'utf8'))
-			).files.map(({ path }) => path);
+			);
+const scopedMutate = scope === null ? null : scope.files.map(({ path }) => path);
+
+/**
+ * Whether `scripts/quality/mutation-verdict.ts` is the governing rule for this
+ * run, so the aggregate break below should stand down.
+ *
+ * The break is the legacy full-tree defense and stays exactly that. On a
+ * changed lane the verdict is harder than it on every file it judges: killed
+ * only, where the break also credits a timeout; per file as well as in
+ * aggregate; and no tolerance at all for a timeout or an uncovered mutant. It
+ * also holds unchanged fallback files to this same 80 in their own pool.
+ *
+ * The single place the two part company is a file the verdict excuses because
+ * the change never reached mutable code. There the break would re-impose the
+ * whole-file debt the verdict just lifted, and from a pool that is often one
+ * file, so the lane would still go red for a rewritten comment. Leaving it on
+ * would make it, not the verdict, the rule that decides such a run.
+ */
+const governedByVerdict = scope?.lane === 'changed-node' || scope?.lane === 'changed-client';
 
 /**
  * Every Stryker worker starts its own vitest, and vitest sizes its pool to the
@@ -106,13 +125,13 @@ export default {
 	jsonReporter: {
 		fileName: process.env.FIT_MUTATION_REPORT ?? 'reports/mutation/mutation.json'
 	},
-	// Keep the historical aggregate break as a first defense. The wrapper still
-	// applies the governing strict killed-only/per-file verdict where required,
-	// because Stryker's built-in score credits timeouts.
+	// Keep the historical aggregate break as a first defense on the lanes it
+	// governs. The wrapper still applies the strict killed-only/per-file verdict
+	// where required, because Stryker's built-in score credits timeouts.
 	thresholds: {
 		high: mutation.high,
 		low: mutation.low,
-		break: mutation.break
+		break: governedByVerdict ? null : mutation.break
 	},
 	// Only re-mutate what changed. The file is cached in CI, not committed.
 	incremental: true,
