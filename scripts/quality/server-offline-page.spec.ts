@@ -18,13 +18,32 @@ import { describe, expect, it } from 'vitest';
 
 const PAGE = new URL('../../static/server-offline.html', import.meta.url);
 
-function inlineScript(): string {
+type Page = { script: string; ids: ReadonlySet<string> };
+
+/**
+ * The script the page ships, and the element ids the page actually declares.
+ *
+ * Both come out of the same read, because the point is to hold them together.
+ * Stubbing `getElementById` to answer anything would test the branch while
+ * saying nothing about whether it is wired to the markup: a misspelled `id`
+ * would break the real page and leave this suite green. Serving only the ids
+ * the file declares makes a lookup for an element that is not there return
+ * `null`, which is what the browser does, and the script then fails here the
+ * way it would on the phone.
+ */
+function page(): Page {
 	const html = readFileSync(PAGE, 'utf8');
-	const body = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
-	// A page that stopped carrying its script would otherwise pass every
-	// assertion below by never running any of them.
-	if (body === undefined) throw new Error('server-offline.html has no inline script');
-	return body;
+	const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+	// Exactly one, rather than the first of however many. Taking `[0]` silently
+	// picked a block if a second were ever added, and a page whose script had
+	// gone missing would pass every assertion below by running none of them.
+	const script = blocks.length === 1 ? blocks[0] : undefined;
+	if (script === undefined)
+		throw new Error(`server-offline.html carries ${blocks.length} inline scripts; expected 1.`);
+	const ids = [...html.matchAll(/\sid="([^"]+)"/g)].flatMap((match) =>
+		match[1] === undefined ? [] : [match[1]]
+	);
+	return { script, ids: new Set(ids) };
 }
 
 type Node = {
@@ -65,8 +84,18 @@ type Rendered = {
 
 /** Run the script the page actually ships, against one hostname and fragment. */
 function render(hostname: string, hash: string): Rendered {
-	const retry = node();
-	const fallback = node();
+	const { script, ids } = page();
+	const nodes = new Map<string, Node>();
+	for (const id of ids) nodes.set(id, node());
+
+	const named = (id: string): Node => {
+		const found = nodes.get(id);
+		// The page stopped declaring an element this suite reasons about, so the
+		// assertions below no longer mean what they say.
+		if (found === undefined) throw new Error(`server-offline.html declares no id "${id}".`);
+		return found;
+	};
+
 	const windowListeners = new Map<string, () => void>();
 	let replaced: string | null = null;
 
@@ -83,14 +112,15 @@ function render(hostname: string, hash: string): Rendered {
 		}
 	};
 	const document = {
-		getElementById: (id: string) => (id === 'retry' ? retry : fallback)
+		getElementById: (id: string) => nodes.get(id) ?? null
 	};
 
-	runInNewContext(inlineScript(), { window, document, URL });
+	runInNewContext(script, { window, document, URL });
 
+	const retry = named('retry');
 	return {
 		retry,
-		fallback,
+		fallback: named('fallback'),
 		navigated: () => replaced,
 		press: () => retry.listeners.get('click')?.(),
 		reconnect: () => windowListeners.get('online')?.()
