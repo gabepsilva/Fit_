@@ -174,6 +174,35 @@ test.describe('once onboarded', () => {
 		await expect(page.getByRole('dialog')).toBeHidden();
 	});
 
+	/**
+	 * The toaster clears the bar rather than covering it.
+	 *
+	 * `TopBar` is `sticky top-0` and carries the three buttons the app is driven
+	 * from, `Log food` among them; a toast over them is a toast over the only
+	 * controls on screen. The container is measured rather than the toast inside
+	 * it, because the container is where the offset lands and it does not move,
+	 * while the toast slides into it and is somewhere else for a moment.
+	 *
+	 * The upper bound is the other half of the decision: at the bottom this
+	 * would clear the bar trivially, and land on whatever the screen is asking
+	 * to be pressed instead.
+	 */
+	test('keeps a toast clear of the bar it would otherwise cover', async ({ page }) => {
+		await page.getByRole('button', { name: 'Log food' }).click();
+		await page.getByLabel('What you ate').fill('two eggs');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await page.getByRole('button', { name: 'Add to today' }).click();
+
+		const toaster = page.locator('[data-sonner-toaster]');
+		await expect(toaster.locator('[data-sonner-toast]')).toHaveCount(1);
+
+		const box = await toaster.boundingBox();
+		const bar = await page.getByRole('button', { name: 'Log food' }).boundingBox();
+		const viewport = page.viewportSize();
+		expect(box?.y).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0));
+		expect(box?.y).toBeLessThan((viewport?.height ?? 0) / 2);
+	});
+
 	test('keeps the journal across a reload', async ({ page }) => {
 		await page.reload();
 		await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
