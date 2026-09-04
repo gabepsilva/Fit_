@@ -11,6 +11,7 @@
 		item,
 		step,
 		matching,
+		resolved,
 		onmatch,
 		onpickmatch,
 		onchange,
@@ -19,13 +20,15 @@
 		item: QuantifiedItem;
 		step: number;
 		matching: boolean;
+		/** The food behind a proposal that is not in the bundled catalog, such as a scanned one. */
+		resolved?: Food | undefined;
 		onmatch: () => void;
 		onpickmatch: (food: Food) => void;
 		onchange: (next: QuantifiedItem) => void;
 		onremove: () => void;
 	} = $props();
 
-	const food = $derived(item.foodId ? FOOD_BY_ID[item.foodId] : undefined);
+	const food = $derived(resolved ?? (item.foodId ? FOOD_BY_ID[item.foodId] : undefined));
 	const summary = $derived(`${Math.round(item.confidence * 100)}% sure · ${item.meal}`);
 	const removeLabel = $derived(`Remove ${item.name}`);
 	// Re-read against the food rather than trusting a stored flag: matching an item

@@ -1,4 +1,5 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
+import type { CatalogFoodPayload } from '$lib/domain/catalog-food';
 import { text } from '../users/rows';
 import { searchTerms, singular } from './query';
 import { searchSql } from './ranking';
@@ -22,26 +23,7 @@ const FOOD_COLUMNS = `f.food_id, f.name, f.brand, f.kind, f.category, f.gtin14, 
  * whole snapshot, which is why the nutrients and the `license` travel with it
  * rather than being fetched again later.
  */
-export type CatalogFood = {
-	id: number;
-	name: string;
-	brand: string | null;
-	kind: string;
-	category: string | null;
-	barcode: string | null;
-	license: string;
-	serving: { label: string | null; grams: number | null };
-	/** Every nutrient is per 100 g or 100 ml, which is how the catalog stores them. */
-	per100g: {
-		kcal: number;
-		protein: number | null;
-		fat: number | null;
-		carbs: number | null;
-		sugar: number | null;
-		fiber: number | null;
-		sodium: number | null;
-		saturatedFat: number | null;
-	};
+export type CatalogFood = CatalogFoodPayload & {
 	quality: number;
 	sources: number;
 };
