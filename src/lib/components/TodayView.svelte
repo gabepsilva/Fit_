@@ -24,7 +24,7 @@
 
 	function greetingFor(loggedDays: number) {
 		if (loggedDays === 0) return 'Whenever you log is a good time.';
-		return `${loggedDays} day${loggedDays === 1 ? '' : 's'} logged this week. That’s enough.`;
+		return `${loggedDays} day${loggedDays === 1 ? '' : 's'} logged this week.`;
 	}
 </script>
 
