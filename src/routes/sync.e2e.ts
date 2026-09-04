@@ -2,6 +2,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import {
 	clearRegistrationThrottle,
 	freshUsername,
+	openLogSheetAndType,
 	returnThroughApi,
 	signInThroughApi,
 	signOutThroughDrawer
@@ -29,8 +30,7 @@ async function openEmptyJournal(page: Page) {
 }
 
 async function logTwoEggs(page: Page) {
-	await page.getByRole('button', { name: 'Log food' }).click();
-	await page.getByLabel('What you ate').fill('two eggs');
+	await openLogSheetAndType(page, 'two eggs');
 	await page.getByRole('button', { name: 'Parse' }).click();
 	await page.getByRole('button', { name: 'Add to today' }).click();
 	await expect(page.getByRole('dialog')).toBeHidden();

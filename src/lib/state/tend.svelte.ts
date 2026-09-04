@@ -19,6 +19,7 @@ import type {
 	Routine,
 	RoutineExercise,
 	TendState,
+	UnitSystem,
 	WeightEntry,
 	Workout,
 	WorkoutSet
@@ -26,6 +27,7 @@ import type {
 import {
 	DEFAULT_LOAD_UNIT,
 	DEFAULT_REST_SECONDS,
+	DEFAULT_UNITS,
 	MAX_REST_SECONDS,
 	MIN_REST_SECONDS
 } from '$lib/domain/types';
@@ -50,7 +52,8 @@ function emptyState(): TendState {
 		workouts: [],
 		activeWorkout: null,
 		loadUnit: DEFAULT_LOAD_UNIT,
-		restSeconds: DEFAULT_REST_SECONDS
+		restSeconds: DEFAULT_REST_SECONDS,
+		units: DEFAULT_UNITS
 	};
 }
 
@@ -428,6 +431,14 @@ export class TendStore {
 			Math.max(MIN_REST_SECONDS, Math.round(seconds))
 		);
 		this.persistSoon();
+	}
+
+	// -- preferences -----------------------------------------------------------
+
+	// The system is a display choice, not a conversion: nothing stored is rewritten.
+	setUnits(units: UnitSystem) {
+		this.state.units = units;
+		this.persist();
 	}
 
 	// -- workouts ------------------------------------------------------------

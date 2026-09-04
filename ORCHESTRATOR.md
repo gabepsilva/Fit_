@@ -134,6 +134,8 @@ the next delegation can prefer it.
 
 Rules:
 
+- **The orchestrator must stay free to talk.** Gabriel's instruction, 2026-09-04: "I want sub agents doing the work and you must be free to talk to me — you should be free as much as possible." Never block the main session on a long-running command. Do not poll CI, sleep, or watch a gate in the foreground; hand that to a subagent that blocks on it and reports a verdict. The orchestrator's own tool calls should be short reads and quick decisions, nothing that occupies it for minutes. If work needs waiting, the waiting belongs to an agent.
+
 - Default to the smallest rung that can do the job. Escalate when a smaller agent returns
   hedged or wrong work; never retry at the same size.
 - Do not re-run slow gates to reassure yourself. The agent runs the tier its slice needs

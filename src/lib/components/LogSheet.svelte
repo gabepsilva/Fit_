@@ -11,7 +11,8 @@
 	import { logFromFood } from '$lib/domain/log-entry';
 	import { guessMeal, hydrateProposal, parseLocalText } from '$lib/domain/parse-text';
 	import { defaultServings, servingStep } from '$lib/domain/profile';
-	import type { Food, Meal, ProposedItem } from '$lib/domain/types';
+	import { matchToFood, type QuantifiedItem } from '$lib/domain/quantity';
+	import type { Food, Meal } from '$lib/domain/types';
 	import { MEALS } from '$lib/domain/types';
 	import { todayISO } from '$lib/domain/utils';
 	import { logUi, type LogTab } from '$lib/state/log-ui.svelte';
@@ -37,7 +38,7 @@
 	let text = $state('');
 	let meal = $state<Meal>(guessMeal());
 	let listening = $state(false);
-	let proposals = $state<ProposedItem[]>([]);
+	let proposals = $state<QuantifiedItem[]>([]);
 	let matchIndex = $state<number | null>(null);
 	let dictation: Dictation | null = null;
 
@@ -237,12 +238,10 @@
 							matching={matchIndex === i}
 							onmatch={() => (matchIndex = matchIndex === i ? null : i)}
 							onpickmatch={(food: Food) => {
-								proposals = proposals.map((x, idx) =>
-									idx === i ? { ...x, foodId: food.id, name: food.name, confidence: 1 } : x
-								);
+								proposals = proposals.map((x, idx) => (idx === i ? matchToFood(x, food) : x));
 								matchIndex = null;
 							}}
-							onchange={(next: ProposedItem) =>
+							onchange={(next: QuantifiedItem) =>
 								(proposals = proposals.map((x, idx) => (idx === i ? next : x)))}
 							onremove={() => (proposals = proposals.filter((_, idx) => idx !== i))}
 						/>

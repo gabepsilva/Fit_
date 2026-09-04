@@ -4,7 +4,7 @@
 	import { exportCsv, exportJson, mfpRowsToLogItems, parseMfpCsv } from '$lib/domain/export-data';
 	import { emptyProfile } from '$lib/domain/profile';
 	import { computeTargets } from '$lib/domain/tdee';
-	import type { Injection } from '$lib/domain/types';
+	import type { Injection, LoadUnit, UnitSystem } from '$lib/domain/types';
 	import { todayISO, uid } from '$lib/domain/utils';
 	import { tend } from '$lib/state/tend.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -13,9 +13,14 @@
 	import Input from '$lib/ui/Input.svelte';
 	import Label from '$lib/ui/Label.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
+	import Stepper from '$lib/ui/Stepper.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import Textarea from '$lib/ui/Textarea.svelte';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
+
+	// A stepper, not a typed field: typing into a bound-and-clamped number input
+	// fights the person typing, since every keystroke re-clamps mid-entry.
+	const REST_STEP = 15;
 
 	let wipeOpen = $state(false);
 	let mfp = $state('');
@@ -54,6 +59,16 @@
 		notes = '';
 		toast('Dose noted.');
 	}
+
+	const UNIT_SYSTEMS: { id: UnitSystem; label: string }[] = [
+		{ id: 'metric', label: 'Metric' },
+		{ id: 'imperial', label: 'Imperial' }
+	];
+
+	const LOAD_UNITS: { id: LoadUnit; label: string }[] = [
+		{ id: 'kg', label: 'kg' },
+		{ id: 'lb', label: 'lb' }
+	];
 
 	function importMfp() {
 		const items = mfpRowsToLogItems(parseMfpCsv(mfp), () => uid('l-'));
@@ -99,6 +114,57 @@
 			<p class="text-muted-foreground mt-3 text-xs">
 				Shared meal plans honor every profile’s restrictions. Logs stay separate.
 			</p>
+		</section>
+
+		<section class="bg-card rounded-3xl p-4 shadow-border">
+			<h2 class="font-display text-xl tracking-tight">Preferences</h2>
+			<p class="text-muted-foreground mt-1 text-sm">
+				Changes how weight and height are read. Nothing already recorded is rewritten.
+			</p>
+			<div class="mt-3">
+				<p class="text-muted-foreground text-sm font-medium">Units</p>
+				<div class="mt-2 inline-flex gap-1" role="group" aria-label="Units: metric or imperial">
+					{#each UNIT_SYSTEMS as u (u.id)}
+						<ToggleButton
+							pressed={tend.state.units === u.id}
+							onclick={() => tend.setUnits(u.id)}
+							resting="bg-secondary"
+							class="h-10 rounded-full px-4 text-sm"
+						>
+							{u.label}
+						</ToggleButton>
+					{/each}
+				</div>
+			</div>
+			<div class="mt-4">
+				<p class="text-muted-foreground text-sm font-medium">Exercise load label</p>
+				<div class="mt-2 inline-flex gap-1" role="group" aria-label="Exercise load label: kg or lb">
+					{#each LOAD_UNITS as u (u.id)}
+						<ToggleButton
+							pressed={tend.state.loadUnit === u.id}
+							onclick={() => tend.setLoadUnit(u.id)}
+							resting="bg-secondary"
+							class="h-10 rounded-full px-4 text-sm"
+						>
+							{u.label}
+						</ToggleButton>
+					{/each}
+				</div>
+				<p class="text-muted-foreground mt-2 text-xs">
+					Relabels the bar only — a load already logged keeps its number.
+				</p>
+			</div>
+			<div class="mt-4">
+				<p class="text-muted-foreground text-sm font-medium">Rest between sets, seconds</p>
+				<Stepper
+					class="mt-1.5"
+					size="md"
+					value={tend.state.restSeconds}
+					label="rest between sets"
+					onstep={(direction) =>
+						tend.setRestSeconds(tend.state.restSeconds + direction * REST_STEP)}
+				/>
+			</div>
 		</section>
 
 		<section class="bg-card rounded-3xl p-4 shadow-border">

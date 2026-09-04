@@ -3,11 +3,32 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { logFromFood } from '$lib/domain/log-entry';
 import { emptyProfile } from '$lib/domain/profile';
-import type { LogSource, Meal } from '$lib/domain/types';
+import type { LogSource, Meal, Workout } from '$lib/domain/types';
 import { addDaysISO, todayISO, weekdayLong, weekdayShort } from '$lib/domain/utils';
 import { logUi } from '$lib/state/log-ui.svelte';
 import { tend } from '$lib/state/tend.svelte';
 import TodayView from './TodayView.svelte';
+
+/** A finished session today, the minimum a workout needs to count as training. */
+function finishedWorkout(date = todayISO()): Workout {
+	return {
+		id: `w-${Math.random()}`,
+		routineId: 'r1',
+		routineName: 'Push',
+		date,
+		startedAt: 0,
+		finishedAt: 1,
+		exerciseIndex: 0,
+		exercises: [
+			{
+				name: 'Bench Press',
+				group: 'Chest',
+				sets: [{ reps: 5, load: 60, done: true }],
+				note: ''
+			}
+		]
+	};
+}
 
 /** Log one catalog food, the way the sheet does it. */
 function logFood(args: {
@@ -176,5 +197,74 @@ describe('TodayView', () => {
 	it('names the selected day above the heading', async () => {
 		await render(TodayView);
 		expect(document.body.textContent).toContain(weekdayLong(todayISO()));
+	});
+
+	describe('training and weight', () => {
+		it('states plainly that a new account has no training logged or planned', async () => {
+			await render(TodayView);
+			await expect
+				.element(page.getByText('No training logged or planned this week.'))
+				.toBeInTheDocument();
+		});
+
+		it('states plainly that a new account has no weight recorded', async () => {
+			await render(TodayView);
+			await expect.element(page.getByText('No weight recorded yet.')).toBeInTheDocument();
+		});
+
+		it('reads a single weight entry without claiming a trend', async () => {
+			tend.addWeight(80, todayISO());
+			await render(TodayView);
+			await expect
+				.element(page.getByText('80.0 kg. Not enough entries yet for a trend.'))
+				.toBeInTheDocument();
+		});
+
+		it('renders how many sessions happened against what was planned', async () => {
+			tend.state.workouts.push(finishedWorkout());
+			await render(TodayView);
+			await expect
+				.element(page.getByText('1 session this week. Nothing was planned.'))
+				.toBeInTheDocument();
+		});
+
+		it('reads the weight in kilograms by default', async () => {
+			tend.addWeight(80, addDaysISO(todayISO(), -1));
+			tend.addWeight(79, todayISO());
+			await render(TodayView);
+			await expect
+				.element(page.getByText('79.0 kg. Not enough entries yet for a trend.'))
+				.toBeInTheDocument();
+		});
+
+		it('switches the weight reading to pounds when the preference changes, without touching storage', async () => {
+			tend.addWeight(80, todayISO());
+			await render(TodayView);
+			await expect
+				.element(page.getByText('80.0 kg. Not enough entries yet for a trend.'))
+				.toBeInTheDocument();
+			tend.setUnits('imperial');
+			await expect
+				.element(page.getByText('176.4 lb. Not enough entries yet for a trend.'))
+				.toBeInTheDocument();
+			expect(tend.profile?.weights[0]?.kg).toBe(80);
+		});
+
+		it('gives each addition an accessible name that says what it measures', async () => {
+			await render(TodayView);
+			await expect
+				.element(page.getByRole('group', { name: "This week's training" }))
+				.toBeInTheDocument();
+			await expect.element(page.getByRole('group', { name: 'Weight' })).toBeInTheDocument();
+		});
+
+		it('keeps the day log within the first phone-sized viewport', async () => {
+			logFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
+			await page.viewport(390, 844);
+			await render(TodayView);
+			const heading = page.getByRole('heading', { name: 'breakfast', level: 2 });
+			const box = heading.element().getBoundingClientRect();
+			expect(box.top).toBeLessThan(844);
+		});
 	});
 });
