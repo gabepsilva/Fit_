@@ -140,6 +140,15 @@ Cost is a constraint Gabriel set, not a preference.
   return the conclusion, an agent does, even for a two-line read.
 - Slices are short, prompts are precise, and lookups go to the cheapest agent.
 
+A bundle budget may be raised, but never as the reflex when a build goes over. Gabriel
+set the rule on 2026-09-04: a raise is fine when real features have been added and the
+orchestrator can say exactly what grew and why, naming the chunks and the byte counts.
+When that account cannot be given, the answer is not a bigger number but a bundle analyzer
+and a trim of whatever is largest. A raise arrives with its evidence in the pull request
+that needs it: the old and new limits, the measured build size, where the growth landed,
+and whether any new dependency entered. Repeated raises without that evidence mean the
+budget has stopped being a budget.
+
 ## The five-hour window
 
 Claude Code meters usage in a rolling five-hour window, and the orchestrator is
