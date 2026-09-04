@@ -132,6 +132,15 @@ jobs:
             coverage/
             reports/
 
+  # One lane, deliberately. The changed and full-tree lanes moved to the daily
+  # schedule in mutation-audit.yml to cut runner minutes (product owner,
+  # 2026-09-04). The security lane stays because the authentication boundary is
+  # the one place where a test that fails to assert is a security risk rather
+  # than a maintenance cost, and cold it is also the cheapest of the four at
+  # 3m50.
+  #
+  # Kept as a matrix of one so the check keeps its name and `check:ci-contract`
+  # keeps reading `job:` out of it; adding a lane back is one block, not a rewrite.
   mutation:
     name: Mutation (${{ matrix.name }})
     runs-on: ubuntu-24.04
@@ -145,22 +154,6 @@ jobs:
             lane: security
             browser: false
             timeout: 20
-          - name: changed-node
-            job: mutation-node
-            lane: changed-node
-            browser: false
-            timeout: 20
-          - name: changed-client
-            job: mutation-client
-            lane: changed-client
-            browser: true
-            timeout: 30
-          - name: full
-            job: mutation-full
-            lane: full
-            browser: true
-            # A cold run measured ~17 minutes with 9 workers; hosted runners may expose only 3.
-            timeout: 60
     env:
       MUTATION_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD^' }}
     steps:

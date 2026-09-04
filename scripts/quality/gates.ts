@@ -43,6 +43,11 @@ const staticSteps: GateStep[] = [
 		concurrent: true
 	},
 	{ name: 'check:ci-contract', purpose: 'Local and hosted CI job parity', concurrent: true },
+	{
+		name: 'check:schedules',
+		purpose: 'Non-blocking tiers still run on a schedule',
+		concurrent: true
+	},
 	{ name: 'knip', purpose: 'Unused files, exports, dependencies', concurrent: true },
 	{
 		name: 'duplicates',
@@ -107,11 +112,13 @@ const changedClientMutationStep: GateStep = {
 	browser: true
 };
 
-const requiredMutationSteps = [
-	securityMutationStep,
-	changedNodeMutationStep,
-	changedClientMutationStep
-];
+/**
+ * The one mutation lane that still blocks a merge. Gabriel's call, 2026-09-04:
+ * the authentication boundary is where a test that fails to assert is a
+ * security risk rather than a maintenance cost, and cold it is the cheapest
+ * lane of the four at 3m50.
+ */
+const mergeGateMutationSteps = [securityMutationStep];
 
 const fullMutationStep: GateStep = {
 	name: 'test:mutation:full',
@@ -123,6 +130,19 @@ const fullMutationStep: GateStep = {
 	],
 	browser: true
 };
+
+/**
+ * Off the pull-request matrix since 2026-09-04, by the product owner, to cut
+ * runner minutes: cold they cost 2m34, 8m51 and 18m07, and none of them was the
+ * critical path. The changed lanes judge a diff and the full lane re-verifies
+ * untouched code, so a schedule can ask both questions once a day instead of
+ * once a push. They report debt now; they do not gate. See QUALITY.md.
+ */
+const scheduledMutationSteps = [
+	changedNodeMutationStep,
+	changedClientMutationStep,
+	fullMutationStep
+];
 
 const selfTestStep: GateStep = {
 	name: 'test:gates',
@@ -182,9 +202,6 @@ export const ciJobs = {
 	static: [...staticSteps, workflowStep],
 	unit: [coverageStep],
 	'mutation-security': [securityMutationStep],
-	'mutation-node': [changedNodeMutationStep],
-	'mutation-client': [changedClientMutationStep],
-	'mutation-full': [fullMutationStep],
 	build: buildSteps,
 	e2e: [e2eStep],
 	security: blockingSecuritySteps,
@@ -217,16 +234,21 @@ export const tiers = {
 		...staticSteps,
 		workflowStep,
 		coverageStep,
-		...requiredMutationSteps,
-		fullMutationStep,
+		...mergeGateMutationSteps,
+		...scheduledMutationSteps,
 		...buildSteps,
 		e2eStep,
 		selfTestStep
 	],
 	/** Ring 4. The complete merge gate, and the exact set CI runs. */
 	ci: ciSteps,
-	/** Deterministic full-tree audit, run on main and cold on schedule. */
-	audit: [fullMutationStep],
+	/**
+	 * The three lanes that left the pull-request path on 2026-09-04. Not a merge
+	 * gate and not run per push: mutation-audit.yml runs them daily against
+	 * `main` and reports the debt as an issue rather than failing anything.
+	 * `check:schedules` proves that schedule and that issue path still exist.
+	 */
+	audit: scheduledMutationSteps,
 	/** Ring 5. Scheduled, non-deterministic scanners. */
 	nightly: advisorySecuritySteps
 } satisfies Record<string, GateStep[]>;

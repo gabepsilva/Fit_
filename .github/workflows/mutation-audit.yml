@@ -1,8 +1,21 @@
-name: Full mutation audit
+name: Scheduled mutation audit
 
+# Three of the four mutation lanes, off the pull-request matrix since 2026-09-04
+# (product owner's call, to cut runner minutes): changed-node, changed-client
+# and the full tree. Only the security lane still gates a merge.
+#
+# None of these gates anything any more -- "we will pay debt daily" -- so a lane
+# that finds debt must not fail this run either. Each one is `continue-on-error`
+# and the reporting step reads what they wrote: a lane that swallowed its exit
+# code and printed nothing would be worth less than not running it. The debt
+# leaves here as a GitHub issue naming the surviving mutants, plus warning
+# annotations and a job summary on the run itself.
+#
+# Thresholds are untouched. Not blocking is not the same as not measuring: a
+# lowered number would make this report understate the debt it exists to find.
 on:
   schedule:
-    - cron: '41 4 * * 1'
+    - cron: '41 4 * * *'
   workflow_dispatch:
 
 permissions:
@@ -13,10 +26,13 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
-  full-mutation:
-    name: Full mutation audit
+  scheduled-mutation:
+    name: Scheduled mutation audit
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,29 +69,98 @@ jobs:
       - name: Install Chromium
         run: bunx playwright install --with-deps chromium
 
-      - name: Restore validated full-mutation cache
-        if: github.event_name != 'schedule'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            reports/mutation/full/incremental.json
-            reports/mutation/full/cache.json
-          key: stryker-v2-full-${{ runner.os }}-${{ hashFiles('.tool-versions', 'bun.lock', 'stryker.config.mjs', 'vite.config.ts', 'quality/mutation-policy.json') }}-${{ github.sha }}
-          restore-keys: stryker-v2-full-${{ runner.os }}-${{ hashFiles('.tool-versions', 'bun.lock', 'stryker.config.mjs', 'vite.config.ts', 'quality/mutation-policy.json') }}-
+      # "Changed" is defined against a diff, and a scheduled run on `main` has no
+      # base ref to diff against. Left alone, `resolveMutationBase` falls through
+      # to `origin/main`, whose merge-base with HEAD is HEAD -- an empty scope, a
+      # lane that mutates nothing, and a green check that proves nothing. So the
+      # base is the tip of `main` as it stood a day ago: the changed lanes then
+      # judge exactly what merged since the last audit, a day late but with the
+      # strict killed-only verdict intact.
+      #
+      # A quiet day resolves to HEAD itself. That is a real answer, not a
+      # failure, so the changed lanes are skipped and say so rather than
+      # reporting a green run over an empty scope. The full lane covers the whole
+      # tree either way. A base that will not resolve at all is a broken audit
+      # and fails here.
+      - name: Resolve the changed-lane base
+        id: base
+        run: |
+          set -euo pipefail
+          window='24 hours ago'
+          head="$(git rev-parse HEAD)"
+          base="$(git rev-list -1 --before="$window" "$head" || true)"
+          if [[ -z "$base" ]]; then
+            echo "::error::No commit on this branch predates '$window'; the changed lanes have no base to diff against."
+            exit 1
+          fi
+          if [[ "$base" == "$head" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing merged in the last 24 hours (HEAD $head). Changed lanes skipped; the full lane still runs." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "base=$base" >> "$GITHUB_OUTPUT"
+            echo "Changed lanes diff $base..$head (the last 24 hours of \`main\`)." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-      - name: Run incremental full audit
-        if: github.event_name != 'schedule'
-        run: bun run test:mutation:full
+      - name: Run the changed Node lane over the last day
+        if: steps.base.outputs.changed == 'true'
+        continue-on-error: true
+        env:
+          MUTATION_BASE: ${{ steps.base.outputs.base }}
+        run: bun run test:mutation:changed:node
 
-      - name: Run forced-cold full audit
-        if: github.event_name == 'schedule'
+      - name: Run the changed client lane over the last day
+        if: steps.base.outputs.changed == 'true'
+        continue-on-error: true
+        env:
+          MUTATION_BASE: ${{ steps.base.outputs.base }}
+        run: bun run test:mutation:changed:client
+
+      # Always cold. No cache is restored for it, so the daily answer is a fresh
+      # measurement of the whole tree rather than an increment on top of one.
+      - name: Run the forced-cold full audit
+        if: '!cancelled()'
+        continue-on-error: true
         run: bun run test:mutation:full -- --force-cold
+
+      # The lanes above cannot fail the run, so this is what makes their findings
+      # exist: it reads every verdict and crash record, names the mutants that
+      # were not killed, writes the job summary and warning annotations, and sets
+      # `debt` for the issue step. It always exits 0 -- it reports, it does not gate.
+      - name: Collect the mutation debt report
+        id: debt
+        if: '!cancelled()'
+        run: bun run report:mutation-debt
 
       - name: Upload full mutation evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: full-mutation-${{ github.run_id }}-${{ github.run_attempt }}
+          name: scheduled-mutation-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
           retention-days: 14
-          path: reports/mutation/full/
+          path: reports/mutation/
+
+      # The only way this debt reaches a person. One issue per marker, commented
+      # on rather than reopened, so a lane that stays red for a week does not
+      # file seven issues. The body is the report the step above wrote, survivor
+      # list included, so the issue is actionable without opening the artifacts.
+      - name: Raise an issue when a lane reports mutation debt
+        if: steps.debt.outputs.debt == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { readFileSync } = require('node:fs');
+            const marker = '<!-- scheduled-mutation-audit -->';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const report = readFileSync('reports/mutation/debt.md', 'utf8');
+            const body = `${marker}\n${report}\n\nMeasured on \`${context.sha}\`; full Stryker reports are attached to ${run}. These lanes report, they do not gate, so nothing is blocked and nothing else will tell you. Kill the surviving mutants or record a reviewed exception in \`quality/mutation-equivalents.json\`. Do not lower a threshold: that would make this report understate the debt.`;
+            const { owner, repo } = context.repo;
+            const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'quality' });
+            const previous = issues.find((issue) => issue.body?.includes(marker));
+
+            if (previous) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: previous.number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title: 'Mutation debt from the daily audit', body, labels: ['quality'] });
+            }

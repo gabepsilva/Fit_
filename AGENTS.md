@@ -27,7 +27,7 @@ run `bun scripts/quality/gate.ts verify:fast` — about twenty-five seconds, and
 the formatting, lint, spelling and typecheck failures that account for most red builds.
 Then push and read the verdict from `gh pr checks`. Do not run the full `ci` tier locally
 just to be sure: it takes eight to eighteen minutes on one machine to produce the answer
-eleven parallel hosted jobs give in nine, and waiting on it is the single most wasteful
+eight parallel hosted jobs give in nine, and waiting on it is the single most wasteful
 thing an agent does. Run `gate.ts ci --job <name>` when you are iterating on one failing
 lane, and run things locally when they need this machine, such as the deploy scripts.
 
