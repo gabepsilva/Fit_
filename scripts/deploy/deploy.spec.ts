@@ -8,6 +8,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { installFile } from './deploy';
 import { hostUser } from '../security/shared';
 import { addressSource } from '../../src/lib/server/client-address';
+import { catalogPath } from '../../src/lib/server/catalog/connection';
 import { applicationDatabasePath } from '../../src/lib/server/db';
 import { configuredOrigins } from '../../src/lib/server/origin-policy';
 import {
@@ -119,6 +120,15 @@ describe('the environment file the deploy installs', () => {
 		expect(path.dirname(database)).toBe(STATE_DIRECTORY);
 		expect(directive('ReadWritePaths')).toBe(STATE_DIRECTORY);
 		expect(directive('ProtectSystem')).toBe('strict');
+	});
+
+	it('points at a food catalog the unit can read but no release can replace', () => {
+		const catalog = catalogPath(environmentTemplate()['FIT_CATALOG_PATH']);
+		// Under the state directory, so ProtectSystem=strict does not hide it,
+		// and outside the release tree, so a deploy cannot replace or delete the
+		// 365 MB file it never ships.
+		expect(catalog.startsWith(`${STATE_DIRECTORY}/`)).toBe(true);
+		expect(path.dirname(catalog)).not.toBe(STATE_DIRECTORY);
 	});
 
 	it('creates that database private to the service user', () => {

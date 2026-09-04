@@ -18,7 +18,7 @@
 			"sourceHash": "040553b69fdf4f9ac052f53cced9ec81ee3ad3e23238c3113695b497ff1c5ed6",
 			"fingerprint": "7fb89f2b6cc2744066b5ca551fd383a59688522931020b0476855c3c1de6e286",
 			"classification": "equivalent",
-			"rationale": "The `typeof body !== ‘object’` half only short-circuits a body that is a JSON string, number or boolean; each of those reads `.error` as undefined, so the very next guard returns the same `invalid-body`. Both halves reach one verdict and no response body can separate them.",
+			"rationale": "The `typeof body !== \u2018object\u2019` half only short-circuits a body that is a JSON string, number or boolean; each of those reads `.error` as undefined, so the very next guard returns the same `invalid-body`. Both halves reach one verdict and no response body can separate them.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		},
 		{
@@ -58,7 +58,7 @@
 			"sourceHash": "040553b69fdf4f9ac052f53cced9ec81ee3ad3e23238c3113695b497ff1c5ed6",
 			"fingerprint": "f14e7d1a8b16a4238d9c6fdd2d18bbb6532533d54b69e030a874c18476e3ec58",
 			"classification": "equivalent",
-			"rationale": "The catch supplies the value `codeOf` and `textOf` then read. `undefined` fails `typeof body !== ‘object’` where `null` fails `body === null`, both returning `invalid-body`, and `?.error` is undefined for either. No caller can tell the two apart.",
+			"rationale": "The catch supplies the value `codeOf` and `textOf` then read. `undefined` fails `typeof body !== \u2018object\u2019` where `null` fails `body === null`, both returning `invalid-body`, and `?.error` is undefined for either. No caller can tell the two apart.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		},
 		{
@@ -78,7 +78,7 @@
 			"sourceHash": "040553b69fdf4f9ac052f53cced9ec81ee3ad3e23238c3113695b497ff1c5ed6",
 			"fingerprint": "53d81fce847f031f92b911484e422f9e65e248e3c080f61f9edf599f884c6446",
 			"classification": "equivalent",
-			"rationale": "Same catch, in `sessionFrom`: the very next line rejects `undefined` on `typeof value !== ‘object’` and `null` on `value === null`, and both produce the identical `unreachable` failure.",
+			"rationale": "Same catch, in `sessionFrom`: the very next line rejects `undefined` on `typeof value !== \u2018object\u2019` and `null` on `value === null`, and both produce the identical `unreachable` failure.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		},
 		{
@@ -98,7 +98,7 @@
 			"sourceHash": "098164e58f7e3e8d03e8115fb4e31d5c6a53dcdf9a4a0911ef1a6dcbc44fb443",
 			"fingerprint": "c1d30753ddb4a6324680835dc54f6c51c8a40400f64199a06b1da7612bf9f22b",
 			"classification": "equivalent",
-			"rationale": "The fallback is a lookup key for a reason that was not sent. No field record in `FIELD_WORDING` holds an empty key, so `‘’` and any other absent key alike miss the table and fall through to the same `UNRECOGNIZED_FIELD` sentence.",
+			"rationale": "The fallback is a lookup key for a reason that was not sent. No field record in `FIELD_WORDING` holds an empty key, so `\u2018\u2019` and any other absent key alike miss the table and fall through to the same `UNRECOGNIZED_FIELD` sentence.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		},
 		{
@@ -118,7 +118,7 @@
 			"sourceHash": "098164e58f7e3e8d03e8115fb4e31d5c6a53dcdf9a4a0911ef1a6dcbc44fb443",
 			"fingerprint": "4adee6cac89f63edd12ccea8cbf8bf4b3baf9d6650f307062aa1c333b3b8fd27",
 			"classification": "equivalent",
-			"rationale": "The fallback is a field name for a failure that named none. `FIELD_WORDING` has no empty-string field, so `‘’` and any other unlisted name both miss the table and produce the same `UNRECOGNIZED_FIELD` sentence.",
+			"rationale": "The fallback is a field name for a failure that named none. `FIELD_WORDING` has no empty-string field, so `\u2018\u2019` and any other unlisted name both miss the table and produce the same `UNRECOGNIZED_FIELD` sentence.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		},
 		{
@@ -128,15 +128,15 @@
 			"location": {
 				"end": {
 					"column": 79,
-					"line": 75
+					"line": 83
 				},
 				"start": {
 					"column": 23,
-					"line": 75
+					"line": 83
 				}
 			},
-			"sourceHash": "d79ee839dbbe776cc3826eb781859dbff5452d0ed0a7091b36fee598431acdf8",
-			"fingerprint": "b800dfc23f030c017bb32ab0b937dfac71b93b7e985332d40ae42e3f726ad710",
+			"sourceHash": "ea34778d1e59b83a37376ba86171b6820df718a876ce602d161fcf6e49b4417c",
+			"fingerprint": "e9261cc729e35d5ba0023c1fb355ac5f270c271f28d271d84e3e091b6c89cd8b",
 			"classification": "equivalent",
 			"rationale": "String.prototype.split always returns at least one element, so the element at index 0 is never null or undefined and the optional access before trim can only ever take its defined branch.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -148,15 +148,15 @@
 			"location": {
 				"end": {
 					"column": 3,
-					"line": 84
+					"line": 92
 				},
 				"start": {
 					"column": 10,
-					"line": 81
+					"line": 89
 				}
 			},
-			"sourceHash": "d79ee839dbbe776cc3826eb781859dbff5452d0ed0a7091b36fee598431acdf8",
-			"fingerprint": "f5ba1c49eeec023e27a3acb3665081dbb762fa7d7ce64ace4dde6fe8d18caff2",
+			"sourceHash": "ea34778d1e59b83a37376ba86171b6820df718a876ce602d161fcf6e49b4417c",
+			"fingerprint": "70e2ab53568954705097ed2042f277d980e863d5a649753f281d2897125c0f09",
 			"classification": "equivalent",
 			"rationale": "Emptying the catch leaves parsed as undefined, which textFieldsOf already refuses because it is not an object, so a malformed body still answers null on both the guarded and the unguarded path.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -398,7 +398,7 @@
 			"sourceHash": "50b053f538a12120ebdbbaa2ba509a528b4ead15afe83b80ea5d4f4f0b1ffdc8",
 			"fingerprint": "04a42dde80d6e6782956ab721b4801f4b0413a10dc41024f5b55aba7aba1c679",
 			"classification": "equivalent",
-			"rationale": "The guard is a short circuit, not a decision. Without it an absent record reaches `JSON.parse`, where `null`, `undefined` and `‘’` either parse to a value `isSession` rejects or throw into the catch beside it — every path returns the same `null`, and nothing is written.",
+			"rationale": "The guard is a short circuit, not a decision. Without it an absent record reaches `JSON.parse`, where `null`, `undefined` and `\u2018\u2019` either parse to a value `isSession` rejects or throw into the catch beside it \u2014 every path returns the same `null`, and nothing is written.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
 		}
 	]

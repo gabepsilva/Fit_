@@ -115,7 +115,9 @@ so there is no proxy on the machine. `scripts/deploy/deploy.spec.ts` holds that 
 that environment file to each other, so the port and the capability cannot drift apart. `scripts/deploy/fit.env.example` is the template for the
 environment file, and documents what each variable does: `ORIGIN`, which is also the origin
 policy's allow-list; `FIT_CLIENT_ADDRESS=forwarded` with `ADDRESS_HEADER=cf-connecting-ip`,
-so the sign-in throttle keys on the visitor rather than on Cloudflare; and `FIT_DB_PATH`.
+so the sign-in throttle keys on the visitor rather than on Cloudflare; `FIT_DB_PATH`; and
+`FIT_CATALOG_PATH`, the read-only food catalog the ETL builds, which is shipped to the
+machine separately and which the app starts and serves without.
 The deploy writes that file only when it is absent, so an edit on the machine survives the
 next release.
 

@@ -17,12 +17,20 @@ const STATUS = {
 	unauthenticated: 401,
 	/** The origin policy refused a state-changing request. */
 	'forbidden-origin': 403,
+	/** The catalog has no row for what was asked, such as a barcode nothing carries. */
+	'not-found': 404,
 	/** Registration only: the username is already in use. */
 	'username-taken': 409,
 	/** A write's expected version does not match what is stored; the current document is returned alongside it. */
 	'stale-version': 409,
 	/** The sign-in throttle is holding this attempt; `Retry-After` says for how long. */
-	'too-many-attempts': 429
+	'too-many-attempts': 429,
+	/**
+	 * The food catalog is not installed on this server. It is a 365 MB file
+	 * shipped outside the release, so a deployment without it still serves
+	 * every other route and the client falls back to its bundled foods.
+	 */
+	'catalog-unavailable': 503
 } as const;
 
 export type ApiErrorCode = keyof typeof STATUS;
