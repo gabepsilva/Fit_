@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ROUTINE_TEMPLATES } from '$lib/domain/exercise-catalog';
 import { logFromFood } from '$lib/domain/log-entry';
 import { emptyProfile } from '$lib/domain/profile';
@@ -113,6 +113,7 @@ const dose: Omit<Injection, 'id'> = {
 };
 
 beforeEach(() => localStorage.clear());
+afterEach(() => vi.restoreAllMocks());
 
 describe('hydration', () => {
 	it('starts empty when there is nothing stored', () => {
@@ -193,8 +194,11 @@ describe('onboarding', () => {
 
 	it('persists explicitly after generating the plan, not only through it', () => {
 		const spy = persistSpy();
-		onboarded();
+		onboarded({ name: 'Alex' });
 		expect(spy).toHaveBeenCalledTimes(2);
+		const persisted = stored();
+		expect(persisted.profiles.map((p) => p.name)).toContain('Alex');
+		expect(persisted.weekPlan.length).toBeGreaterThan(0);
 		spy.mockRestore();
 	});
 
@@ -949,6 +953,17 @@ describe('the movements in a routine', () => {
 		expect(store.routine('full-body')?.exercises.map((e) => e.name)).toEqual(before);
 	});
 
+	it('leaves the row where it is for an index past the end of the routine', () => {
+		const store = withRoutine();
+		const spy = persistSpy();
+		const before = store.routine('full-body')?.exercises.map((e) => e.name);
+		// The bounds check is the only thing standing between this and splicing in `undefined`.
+		store.moveExerciseUp('full-body', 99);
+		expect(store.routine('full-body')?.exercises.map((e) => e.name)).toEqual(before);
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
+
 	it('steps only the row and the field it was pointed at', () => {
 		const store = withRoutine();
 		store.bumpRoutineExercise('full-body', 1, 'reps', 1);
@@ -1543,13 +1558,12 @@ describe('debounced persistence internals', () => {
 
 	it('does not touch addEventListener when it is not available', () => {
 		const store = inSession();
-		const real = Object.getOwnPropertyDescriptor(globalThis, 'addEventListener');
-		Object.defineProperty(globalThis, 'addEventListener', { value: undefined, configurable: true });
+		vi.stubGlobal('addEventListener', undefined);
 		try {
 			expect(() => store.toggleSet(0)).not.toThrow();
 			expect(store.currentExercise?.sets[0]?.done).toBe(true);
 		} finally {
-			if (real) Object.defineProperty(globalThis, 'addEventListener', real);
+			vi.unstubAllGlobals();
 		}
 	});
 });
