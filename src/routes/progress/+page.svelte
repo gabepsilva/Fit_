@@ -6,7 +6,13 @@
 		microTargets,
 		rollingAverages
 	} from '$lib/domain/tdee';
-	import { displayWeight, weightToKg, weightUnitAbbr, weightUnitName } from '$lib/domain/units';
+	import {
+		displayWeight,
+		formatWeight,
+		weightToKg,
+		weightUnitAbbr,
+		weightUnitName
+	} from '$lib/domain/units';
 	import { tend } from '$lib/state/tend.svelte';
 	import AvgRow from '$lib/components/AvgRow.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -49,7 +55,7 @@
 			<div class="flex items-baseline justify-between">
 				<h2 class="font-display text-xl tracking-tight">Weight</h2>
 				<p class="tabular text-muted-foreground text-sm">
-					{displayWeight(latestWeight(profile.weights), units)}
+					{formatWeight(latestWeight(profile.weights), units)}
 					<span class="sr-only">{weightName}</span>
 					<span aria-hidden="true">{weightAbbr}</span>
 				</p>

@@ -50,18 +50,27 @@ export function displayWeight(kg: number, units: UnitSystem): number {
 	return round1(units === 'imperial' ? kgToLb(kg) : kg);
 }
 
+/** `displayWeight`, rendered so an exact reading never drops its decimal: "74.0 kg". */
+export function formatWeight(kg: number, units: UnitSystem): string {
+	return displayWeight(kg, units).toFixed(1);
+}
+
 /** The canonical `kg` for a number a person typed in the chosen system. */
 export function weightToKg(value: number, units: UnitSystem): number {
 	return units === 'imperial' ? lbToKg(value) : value;
+}
+
+/** A stored `heightCm`, read as whole feet and inches — the imperial half of `displayHeight`. */
+export function heightToFeetInches(cm: number): { feet: number; inches: number } {
+	const totalInches = Math.round(cmToIn(cm));
+	return { feet: Math.floor(totalInches / 12), inches: totalInches % 12 };
 }
 
 export type DisplayHeight = { feet: number; inches: number } | { cm: number };
 
 /** A stored `heightCm`, read in the chosen system: whole cm, or feet + inches. */
 export function displayHeight(cm: number, units: UnitSystem): DisplayHeight {
-	if (units === 'metric') return { cm: Math.round(cm) };
-	const totalInches = Math.round(cmToIn(cm));
-	return { feet: Math.floor(totalInches / 12), inches: totalInches % 12 };
+	return units === 'metric' ? { cm: Math.round(cm) } : heightToFeetInches(cm);
 }
 
 /** `displayHeight` rendered as text: "168 cm" or "5′6″". */

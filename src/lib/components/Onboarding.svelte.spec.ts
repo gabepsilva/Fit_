@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import { displayWeight, heightFromFeetInches, kgToLb, lbToKg } from '$lib/domain/units';
 import { tend } from '$lib/state/tend.svelte';
 import Onboarding from './Onboarding.svelte';
 
@@ -126,7 +127,7 @@ describe('Onboarding', () => {
 		await expect.element(page.getByLabelText('Height, inches')).toBeInTheDocument();
 	});
 
-	it('stores the imperial reading back as canonical kg and cm, unrounded to the display precision', async () => {
+	it('stores the imperial reading as exact canonical kg and cm, not the rounded display value', async () => {
 		const complete = vi.spyOn(tend, 'completeOnboarding').mockImplementation(() => undefined);
 		tend.state.units = 'imperial';
 		await toStepTwo();
@@ -136,8 +137,22 @@ describe('Onboarding', () => {
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await page.getByRole('button', { name: 'Start empty' }).click();
 		const profile = complete.mock.calls[0]?.[0].profile;
-		expect(profile?.weights[0]?.kg).toBeCloseTo(72.6, 1);
-		expect(profile?.heightCm).toBeCloseTo(175.3, 1);
+		// The exact conversion, not `round1`'s display-precision value (72.6): storing
+		// the rounded figure would make a 160 lb entry read back as something else.
+		expect(profile?.weights[0]?.kg).toBe(lbToKg(160));
+		expect(profile?.heightCm).toBe(heightFromFeetInches(5, 9));
+	});
+
+	it('round-trips a typed imperial weight back to the exact same reading', async () => {
+		const complete = vi.spyOn(tend, 'completeOnboarding').mockImplementation(() => undefined);
+		tend.state.units = 'imperial';
+		await toStepTwo();
+		await page.getByLabelText('Weight lb').fill('160');
+		await page.getByRole('button', { name: 'Continue' }).click();
+		await page.getByRole('button', { name: 'Start empty' }).click();
+		const storedKg = complete.mock.calls[0]?.[0].profile.weights[0]?.kg ?? 0;
+		expect(displayWeight(storedKg, 'imperial')).toBe(160);
+		expect(kgToLb(storedKg)).toBeCloseTo(160, 9);
 	});
 
 	it('requests a household profile when asked', async () => {

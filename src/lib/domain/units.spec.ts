@@ -4,7 +4,9 @@ import {
 	displayHeight,
 	displayWeight,
 	formatHeight,
+	formatWeight,
 	heightFromFeetInches,
+	heightToFeetInches,
 	heightUnitName,
 	inToCm,
 	kgToLb,
@@ -55,6 +57,11 @@ describe('weight conversion', () => {
 		expect(weightUnitAbbr('imperial')).toBe('lb');
 		expect(weightUnitAbbr('metric')).toBe('kg');
 	});
+
+	it('keeps a whole reading from dropping its decimal in text', () => {
+		expect(formatWeight(74, 'metric')).toBe('74.0');
+		expect(formatWeight(80, 'imperial')).toBe('176.4');
+	});
 });
 
 describe('height conversion', () => {
@@ -82,6 +89,10 @@ describe('height conversion', () => {
 
 	it('converts feet and inches typed in imperial back to canonical cm', () => {
 		expect(heightFromFeetInches(5, 6)).toBeCloseTo(167.64, 2);
+	});
+
+	it('round-trips feet and inches typed in, back out, with no drift', () => {
+		expect(heightToFeetInches(heightFromFeetInches(5, 9))).toEqual({ feet: 5, inches: 9 });
 	});
 
 	it('names the unit in full for a screen reader', () => {

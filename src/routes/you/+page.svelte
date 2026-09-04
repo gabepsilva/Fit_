@@ -5,7 +5,6 @@
 	import { emptyProfile } from '$lib/domain/profile';
 	import { computeTargets } from '$lib/domain/tdee';
 	import type { Injection, LoadUnit, UnitSystem } from '$lib/domain/types';
-	import { MAX_REST_SECONDS, MIN_REST_SECONDS } from '$lib/domain/types';
 	import { todayISO, uid } from '$lib/domain/utils';
 	import { tend } from '$lib/state/tend.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -14,9 +13,14 @@
 	import Input from '$lib/ui/Input.svelte';
 	import Label from '$lib/ui/Label.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
+	import Stepper from '$lib/ui/Stepper.svelte';
 	import Switch from '$lib/ui/Switch.svelte';
 	import Textarea from '$lib/ui/Textarea.svelte';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
+
+	// A stepper, not a typed field: typing into a bound-and-clamped number input
+	// fights the person typing, since every keystroke re-clamps mid-entry.
+	const REST_STEP = 15;
 
 	let wipeOpen = $state(false);
 	let mfp = $state('');
@@ -151,14 +155,14 @@
 				</p>
 			</div>
 			<div class="mt-4">
-				<Label for="rest-seconds">Rest between sets, seconds</Label>
-				<Input
-					id="rest-seconds"
+				<p class="text-muted-foreground text-sm font-medium">Rest between sets, seconds</p>
+				<Stepper
 					class="mt-1.5"
-					type="number"
-					min={MIN_REST_SECONDS}
-					max={MAX_REST_SECONDS}
-					bind:value={() => tend.state.restSeconds, (v) => tend.setRestSeconds(Number(v) || 0)}
+					size="md"
+					value={tend.state.restSeconds}
+					label="rest between sets"
+					onstep={(direction) =>
+						tend.setRestSeconds(tend.state.restSeconds + direction * REST_STEP)}
 				/>
 			</div>
 		</section>
