@@ -189,7 +189,12 @@ fast and makes a mobile viewport the default thing under test.
 
 `bun run test:e2e:all` sets `E2E_ALL_BROWSERS` and adds `mobile-safari` (iPhone 15, the real
 WebKit engine iOS uses) plus desktop Chrome and Firefox as a responsive-regression backstop.
-CI runs the full matrix.
+CI runs the full matrix, one hosted job per project, selected with `E2E_PROJECT`; the list
+those jobs must cover lives in `scripts/quality/e2e-projects.ts`.
+
+Each Playwright worker gets its own preview server, on its own port, over its own SQLite
+file (`tests/preview-server.ts`). Nothing is shared between workers — not the accounts, not
+the registration throttle — so the suite runs in parallel rather than one test at a time.
 
 Generated reports are written under `coverage/`, `playwright-report/`, and `reports/`. They are
 ignored by Git and uploaded by GitHub Actions.

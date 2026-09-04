@@ -273,8 +273,37 @@ export const fixtures: GateFixture[] = [
 		apply: (root) =>
 			edit(root, '.github/workflows/ci.yml', (content) =>
 				content.replace(
-					'needs: [static, unit, mutation, build, e2e, security, self-test]',
-					'needs: [static, unit, build, e2e, security, self-test]'
+					'needs: [static, unit, mutation, build, e2e, e2e-report, security, self-test]',
+					'needs: [static, unit, build, e2e, e2e-report, security, self-test]'
+				)
+			)
+	},
+	{
+		// The end-to-end suite is sharded one job per browser project. Dropping a
+		// project from the matrix is how that sharding goes wrong: the suite still
+		// passes, on fewer browsers, and nothing else in the tree would notice.
+		name: 'dropped-e2e-project',
+		gate: 'check:ci-contract',
+		failureIncludes: 'CI workflow does not run every end-to-end project: firefox',
+		description: 'A declared browser project dropped from the hosted end-to-end matrix.',
+		apply: (root) =>
+			edit(root, '.github/workflows/ci.yml', (content) =>
+				content.replace('          - project: firefox\n            browser: firefox\n', '')
+			)
+	},
+	{
+		// The same failure mode for the self-test's own shards: a group that stops
+		// running takes its fixtures with it, and the gates they prove go untested
+		// while the job still reports green.
+		name: 'unrun-self-test-group',
+		gate: 'check:ci-contract',
+		failureIncludes: 'CI workflow does not run every gate self-test group: mutation',
+		description: 'A gate self-test group dropped from the hosted matrix.',
+		apply: (root) =>
+			edit(root, '.github/workflows/ci.yml', (content) =>
+				content.replace(
+					'          - group: mutation\n            docker: false\n            browser: true\n',
+					''
 				)
 			)
 	},

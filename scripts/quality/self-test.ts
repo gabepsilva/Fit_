@@ -5,6 +5,7 @@ import path from 'node:path';
 import process from 'node:process';
 import type { GateFixture } from './fixtures';
 import { fixtures } from './fixtures';
+import { fixturesInGroup, selfTestGroupNames } from './self-test-groups';
 import { pooled } from './pool';
 import { captureStatus } from '../security/shared';
 
@@ -47,38 +48,74 @@ const skipBrowser = process.argv.includes('--skip-browser');
 const onlyIndex = process.argv.indexOf('--only');
 const onlyName = onlyIndex === -1 ? undefined : process.argv[onlyIndex + 1];
 if (onlyIndex !== -1 && onlyName === undefined) throw new Error('--only requires a fixture name.');
+const groupIndex = process.argv.indexOf('--group');
+const groupFlag = groupIndex === -1 ? undefined : process.argv[groupIndex + 1];
+if (groupIndex !== -1 && groupFlag === undefined) throw new Error('--group requires a group name.');
+// The hosted matrix passes the group in the environment: `gate.ts` runs the
+// npm script by name and has nowhere to put an argument.
+const groupName = groupFlag ?? process.env['SELF_TEST_GROUP'];
+if (onlyName !== undefined && groupName !== undefined) {
+	throw new Error('Pass --only or --group, not both.');
+}
 const selectedFixtures =
-	onlyName === undefined ? fixtures : fixtures.filter((fixture) => fixture.name === onlyName);
-if (selectedFixtures.length === 0) throw new Error(`Unknown gate fixture: ${onlyName ?? ''}`);
+	onlyName !== undefined
+		? fixtures.filter((fixture) => fixture.name === onlyName)
+		: groupName === undefined
+			? fixtures
+			: fixturesInGroup(fixtures, groupName);
+if (selectedFixtures.length === 0) {
+	throw new Error(
+		onlyName === undefined
+			? `Self-test group ${groupName ?? ''} has no fixtures. Known groups: ${selfTestGroupNames.join(', ')}.`
+			: `Unknown gate fixture: ${onlyName}`
+	);
+}
 
-async function run(cwd: string, command: string, args: string[]): Promise<number> {
-	const { exitCode } = await captureStatus(command, args, { cwd, env: fixtureEnv });
+async function run(
+	cwd: string,
+	command: string,
+	args: string[],
+	env: NodeJS.ProcessEnv = sharedEnv
+): Promise<number> {
+	const { exitCode } = await captureStatus(command, args, { cwd, env });
 	return exitCode;
 }
 
 async function runCaptured(
 	cwd: string,
 	command: string,
-	args: string[]
+	args: string[],
+	env: NodeJS.ProcessEnv
 ): Promise<{ exitCode: number; output: string }> {
-	return captureStatus(command, args, { cwd, env: fixtureEnv });
+	return captureStatus(command, args, { cwd, env });
 }
 
 /**
  * Each fixture is an independent tree copy, so they run in parallel, but each
- * spawns nested test runners of its own, so the pool is a quarter of the cores.
+ * spawns nested test runners of its own, so the pool is half the cores rather
+ * than one per core. It used to be a quarter, which is `1` on a four-core
+ * hosted runner -- the whole set in series, and the reason this job was the
+ * slowest in CI.
  */
-const concurrency = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 4)));
+const concurrency = Math.max(2, Math.min(6, Math.floor(availableParallelism() / 2)));
 
 /**
- * Sibling fixtures run concurrently, so a nested mutation run is capped at two
- * workers.
+ * An exclusive fixture runs with nothing beside it, so its nested mutation run
+ * gets the machine; a pooled one shares with `concurrency - 1` siblings and is
+ * held to two workers.
  */
-const fixtureEnv: NodeJS.ProcessEnv = {
+const sharedEnv: NodeJS.ProcessEnv = {
 	...process.env,
 	MUTATION_BASE: 'HEAD',
 	STRYKER_CONCURRENCY: '2'
 };
+const exclusiveEnv: NodeJS.ProcessEnv = {
+	...sharedEnv,
+	STRYKER_CONCURRENCY: String(Math.max(2, availableParallelism() - 1))
+};
+function envFor(fixture: GateFixture): NodeJS.ProcessEnv {
+	return fixture.exclusive === true ? exclusiveEnv : sharedEnv;
+}
 
 /** Fixtures mutate their workspace, so a workspace must never be the real tree. */
 function assertDisposable(workspace: string): void {
@@ -158,27 +195,33 @@ async function proveFixture(
 	}
 
 	assertDisposable(workspace);
-	await run(root, 'cp', ['-a', `${template}/.`, workspace]);
+	const env = envFor(fixture);
+	await run(root, 'cp', ['-a', `${template}/.`, workspace], env);
 	await fixture.apply(workspace);
 	if (fixture.baselinePaths !== undefined) {
-		await run(workspace, 'git', ['add', '--', ...fixture.baselinePaths]);
-		const committed = await run(workspace, 'git', [
-			'-c',
-			'user.name=Fit gate fixture',
-			'-c',
-			'user.email=fixture@example.test',
-			'commit',
-			'-m',
-			'fixture support test'
-		]);
+		await run(workspace, 'git', ['add', '--', ...fixture.baselinePaths], env);
+		const committed = await run(
+			workspace,
+			'git',
+			[
+				'-c',
+				'user.name=Fit gate fixture',
+				'-c',
+				'user.email=fixture@example.test',
+				'commit',
+				'-m',
+				'fixture support test'
+			],
+			env
+		);
 		if (committed !== 0) throw new Error(`Could not commit support files for ${fixture.name}.`);
 	}
 	// Scanners read tracked files, so fixtures are staged; one stays untracked
 	// on purpose to prove changed-file discovery finds untracked code.
-	if (fixture.stage !== false) await run(workspace, 'git', ['add', '-A']);
+	if (fixture.stage !== false) await run(workspace, 'git', ['add', '-A'], env);
 
 	for (const step of fixture.prepare ?? []) {
-		const prepareCode = await run(workspace, 'bun', ['run', step]);
+		const prepareCode = await run(workspace, 'bun', ['run', step], env);
 		if (prepareCode !== 0) {
 			return {
 				...base,
@@ -189,7 +232,7 @@ async function proveFixture(
 		}
 	}
 
-	const { exitCode, output } = await runCaptured(workspace, 'bun', ['run', fixture.gate]);
+	const { exitCode, output } = await runCaptured(workspace, 'bun', ['run', fixture.gate], env);
 	await rm(workspace, { recursive: true, force: true });
 	const intendedFailure =
 		fixture.failureIncludes === undefined || output.includes(fixture.failureIncludes);
@@ -208,7 +251,9 @@ async function proveFixture(
 }
 
 const root = await mkdtemp(path.join(tmpdir(), 'fit-self-test-'));
-console.log(`Gate self-test: ${selectedFixtures.length} fixtures, ${concurrency} at a time.\n`);
+console.log(
+	`Gate self-test${groupName === undefined ? '' : ` (${groupName})`}: ${selectedFixtures.length} fixtures, ${concurrency} at a time.\n`
+);
 
 let results: FixtureResult[];
 try {

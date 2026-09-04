@@ -1,6 +1,6 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { expect, type Browser, type Page } from '@playwright/test';
+import { test } from '../../tests/preview-server';
 import {
-	clearRegistrationThrottle,
 	freshUsername,
 	openEmptyJournal,
 	openLogSheetAndType,
@@ -18,8 +18,6 @@ import {
  */
 
 const PASSWORD = 'salt-and-pepper-mill';
-
-test.beforeEach(clearRegistrationThrottle);
 
 async function logTwoEggs(page: Page) {
 	await openLogSheetAndType(page, 'two eggs');

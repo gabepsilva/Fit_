@@ -1,9 +1,6 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import {
-	clearRegistrationThrottle,
-	freshUsername,
-	signOutThroughDrawer
-} from '../../../tests/e2e-support';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { test } from '../../../tests/preview-server';
+import { freshUsername, signOutThroughDrawer } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -52,8 +49,6 @@ async function attempt(page: Page, username: string, password: string) {
 	await page.getByLabel('Password').fill(password);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 }
-
-test.beforeEach(clearRegistrationThrottle);
 
 test.describe('the sign-in form', () => {
 	test.beforeEach(async ({ page }) => {

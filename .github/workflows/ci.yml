@@ -268,12 +268,31 @@ jobs:
           path: |
             reports/
 
+  # One job per browser project. Sharding was worth doing twice over: the suite
+  # runs four projects, and each job now installs the one engine it needs
+  # instead of all three. Inside a job the workers are parallel too -- see
+  # `tests/preview-server.ts` for the isolation that made that safe.
   e2e:
-    name: End-to-end
+    name: End-to-end (${{ matrix.project }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: mobile-chrome
+            browser: chromium
+          - project: mobile-safari
+            browser: webkit
+          - project: chromium
+            browser: chromium
+          - project: firefox
+            browser: firefox
     env:
-      E2E_ALL_BROWSERS: '1'
+      E2E_PROJECT: ${{ matrix.project }}
+      # Shards report a blob each; `e2e-report` merges them into the single
+      # HTML and JSON report an agent reads.
+      E2E_BLOB_REPORT: '1'
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -305,25 +324,89 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-chromium-firefox-webkit-${{ hashFiles('bun.lock') }}
+          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('bun.lock') }}
 
       - name: Install browser runtimes
-        run: bunx playwright install --with-deps chromium firefox webkit
+        run: bunx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Run end-to-end gate
         run: bun scripts/quality/gate.ts ci --job e2e
+
+      - name: Upload e2e blob report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-blob-${{ matrix.project }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            blob-report/
 
       - name: Upload e2e reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          name: e2e-${{ matrix.project }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 14
           path: |
-            playwright-report/
             reports/
             test-results/
+
+  # The shards' blobs, merged back into the one HTML report a human opens and
+  # the one `reports/quality/playwright.json` an agent reads.
+  e2e-report:
+    name: End-to-end report
+    if: always()
+    needs: [e2e]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Restore Bun package cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Collect shard blobs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: e2e-blob-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: all-blob-reports
+          merge-multiple: true
+
+      - name: Merge shard reports
+        run: bunx playwright merge-reports --config playwright.config.ts all-blob-reports
+
+      - name: Upload merged report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-merged-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            playwright-report/
+            reports/quality/playwright.json
 
   security:
     name: Security (blocking)
@@ -391,10 +474,30 @@ jobs:
           path: |
             reports/
 
+  # Three runners, split by what a fixture costs and what it needs installed:
+  # the nested Stryker runs, the nested browser runs, and everything else.
+  # `scripts/quality/self-test-groups.ts` owns that split and
+  # `check:ci-contract` proves this matrix still covers all of it, so a fixture
+  # added later cannot fall out of CI.
   self-test:
-    name: Gate self-test
+    name: Gate self-test (${{ matrix.group }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: mutation
+            docker: false
+            browser: true
+          - group: browser
+            docker: false
+            browser: true
+          - group: static
+            docker: true
+            browser: false
+    env:
+      SELF_TEST_GROUP: ${{ matrix.group }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -423,6 +526,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Restore scanner image and rule cache
+        if: matrix.docker
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Scoped to what this job populates: the pinned scanner images and
@@ -434,17 +538,20 @@ jobs:
           restore-keys: security-cache-${{ runner.os }}-
 
       - name: Warm pinned scanner images
+        if: matrix.docker
         run: bun run security:images actionlint gitleaks semgrep
 
       - name: Restore Playwright browser cache
+        if: matrix.browser
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ hashFiles('bun.lock') }}
 
-      # The self-test's e2e fixture runs the default matrix, which is mobile-chrome
-      # on the Chromium engine. Firefox and WebKit are only needed by the e2e job.
+      # The browser fixtures run the default project, which is mobile-chrome on
+      # the Chromium engine. Firefox and WebKit are only needed by the e2e job.
       - name: Install browser runtimes
+        if: matrix.browser
         run: bunx playwright install --with-deps chromium
 
       # Proves each gate rejects input it claims to reject. Without this, every
@@ -456,7 +563,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: self-test-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          name: self-test-reports-${{ matrix.group }}-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 14
           path: |
@@ -465,7 +572,7 @@ jobs:
   all-green:
     name: Quality and security
     if: always()
-    needs: [static, unit, mutation, build, e2e, security, self-test]
+    needs: [static, unit, mutation, build, e2e, e2e-report, security, self-test]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

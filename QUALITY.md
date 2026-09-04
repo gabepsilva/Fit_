@@ -50,9 +50,8 @@ died left an empty report directory and exit 1, and was read as surviving mutant
 `make ci` runs the exact steps the CI workflow runs, but arranges them for one machine
 instead of separate hosted runners: the static and security jobs run beside the browser
 gates, and mutation testing gets the machine to itself afterwards. It cannot be reordered
-freely — `build`, `test:e2e` and `test:gates` all contend for `build/` and port 4173, and
-`reuseExistingServer` in `playwright.config.ts` means a second Playwright would silently
-reuse the first one's server and prove nothing.
+freely — `build`, `test:e2e` and `test:gates` all contend for `build/` and for the preview
+port block that starts at 4173, one port per Playwright worker.
 
 **Where a tier runs is a cost decision, and the default is the hosted runners.** Measured
 2026-09-04: the hosted `ci` workflow finishes in about nine minutes across eight parallel

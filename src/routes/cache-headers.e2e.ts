@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { test } from '../../tests/preview-server';
 
 /**
  * That a deploy actually reaches a browser which already has the app open.
