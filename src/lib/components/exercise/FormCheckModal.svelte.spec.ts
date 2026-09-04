@@ -68,6 +68,38 @@ describe('FormCheckModal', () => {
 		await expect.element(page.getByText('A demonstration clip belongs here')).toBeInTheDocument();
 	});
 
+	it('does not show the honest placeholder for the one movement with a real clip', async () => {
+		await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
+		await expect
+			.element(page.getByText('A demonstration clip belongs here'))
+			.not.toBeInTheDocument();
+	});
+
+	it('plays the push-up demo clip from static, not the bundle, with an accessible label', async () => {
+		await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
+		const video = document.querySelector('video');
+		expect(video).not.toBeNull();
+		expect(video?.getAttribute('src')).toBe('/media/push-up-demo.mp4');
+		expect(video?.getAttribute('aria-label')?.toLowerCase()).toContain('push-up');
+	});
+
+	it('never fetches the clip until the modal is opened', async () => {
+		await render(FormCheckModal, { props: { open: false, name: 'Push-up', onclose: vi.fn() } });
+		expect(document.querySelector('video')).toBeNull();
+	});
+
+	it('does not eagerly preload the clip once opened', async () => {
+		await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
+		const video = document.querySelector('video');
+		expect(video?.getAttribute('preload')).toBe('none');
+	});
+
+	it('keeps the clip square, not the video-wide placeholder shape', async () => {
+		await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
+		const video = document.querySelector('video');
+		expect(video?.className).toContain('aspect-square');
+	});
+
 	it('tells whoever opened it when it is done with', async () => {
 		const onclose = vi.fn();
 		await render(FormCheckModal, { props: { open: true, name: 'Squat', onclose } });

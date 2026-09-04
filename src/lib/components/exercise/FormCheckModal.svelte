@@ -5,6 +5,7 @@
 	import Modal from '$lib/ui/Modal.svelte';
 
 	// The demo clip is a placeholder that says so: a fake player is worse than an honest gap.
+	// Push-up is the one movement with a real clip; every other name keeps the honest gap.
 	let {
 		open = $bindable(false),
 		name,
@@ -12,15 +13,40 @@
 	}: { open?: boolean; name: string; onclose: () => void } = $props();
 
 	const cues = $derived(formCues(name));
+	const hasDemo = $derived(name === 'Push-up');
+	const demoLabel =
+		'Demonstration: a push-up performed with hands under the shoulders, body in a straight line from head to heel, lowering the chest toward the floor, then pressing back up.';
 </script>
 
 <Modal bind:open title={name} description="Form check">
-	<div
-		class="bg-secondary text-foreground/70 mt-4 flex aspect-video flex-col items-center justify-center gap-2 rounded-2xl"
-	>
-		<Play class="size-6" />
-		<p class="text-xs">A demonstration clip belongs here</p>
-	</div>
+	{#if hasDemo}
+		<!--
+			Modal only mounts this markup once `open` is true (bits-ui's Dialog.Content
+			renders nothing while closed — see the "shows nothing until it is opened"
+			spec), so this <video> and its src never enter the DOM, and the clip never
+			loads, until the sheet is actually opened. preload="none" keeps it that way
+			even if that assumption ever changes.
+		-->
+		<video
+			class="bg-secondary mt-4 aspect-square w-full rounded-2xl object-cover"
+			src="/media/push-up-demo.mp4"
+			preload="none"
+			playsinline
+			muted
+			loop
+			controls
+			aria-label={demoLabel}
+		>
+			<p>{demoLabel}</p>
+		</video>
+	{:else}
+		<div
+			class="bg-secondary text-foreground/70 mt-4 flex aspect-video flex-col items-center justify-center gap-2 rounded-2xl"
+		>
+			<Play class="size-6" />
+			<p class="text-xs">A demonstration clip belongs here</p>
+		</div>
+	{/if}
 	<ul class="mt-4 flex flex-col gap-2.5">
 		<!-- Keyed by position: a repeated cue would be a duplicate key, and nothing reorders this list. -->
 		{#each cues as cue, i (i)}
