@@ -53,6 +53,7 @@
 		"test:mutation:changed:client": "bun scripts/quality/mutation-run.ts changed-client",
 		"test:mutation:full": "bun scripts/quality/mutation-run.ts full",
 		"test:mutation:fixture:full": "bun scripts/quality/mutation-verdict-check.ts full reports/mutation/fixture/scope.json reports/mutation/fixture/mutation.json reports/mutation/fixture/verdict.json",
+		"report:mutation-debt": "bun scripts/quality/mutation-debt.ts",
 		"test:gates": "bun scripts/quality/self-test.ts",
 		"test:e2e": "playwright test",
 		"test:e2e:all": "E2E_ALL_BROWSERS=1 playwright test",

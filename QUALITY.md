@@ -55,7 +55,7 @@ freely — `build`, `test:e2e` and `test:gates` all contend for `build/` and por
 reuse the first one's server and prove nothing.
 
 **Where a tier runs is a cost decision, and the default is the hosted runners.** Measured
-2026-09-04: the hosted `ci` workflow finishes in about nine minutes across ten parallel
+2026-09-04: the hosted `ci` workflow finishes in about nine minutes across eight parallel
 jobs, its critical path being the gate self-test at around 316s beside end-to-end at 276s,
 while the same suite run locally through `make ci` takes eight to eighteen minutes because
 one machine runs the lanes in sequence. Running both is paying twice for one answer, and
@@ -81,9 +81,11 @@ is listed in `all-green.needs`; a job outside that protected aggregator is not a
 `check:schedules` is the same proof for the lanes that deliberately do not gate a merge. A
 tier taken off the pull request only exists if a schedule still runs it, so this proves the
 `audit` and `nightly` tiers are each invoked by a workflow with a `cron`, and that the
-workflow can open an issue when the lane goes red. Deleting a cron line otherwise retires a
-whole tier with nothing turning red to say so. The fixtures `unscheduled-audit-lane` and
-`silent-scheduled-lane` prove both halves.
+workflow can open an issue about what it found. It also rejects the specific trap a
+non-blocking lane walks into: `continue-on-error: true` on every lane means the job always
+succeeds, so a reporting step gated on `if: failure()` can never fire and the run is green
+with the debt still there. Three fixtures prove the three halves —
+`unscheduled-audit-lane`, `silent-scheduled-lane` and `unreachable-schedule-report`.
 
 `bun run check:thresholds` guards the numbers that decide whether a gate passes: coverage,
 mutation score, bundle budgets, duplication, and the suppression baseline. Lowering any of
@@ -109,11 +111,10 @@ boundary a direct dependency declares against; record why here instead.
 
 ## Mutation lanes
 
-Pull requests run three lanes, all blocking: the complete Node-only server security closure,
-changed Node files, and changed client files. Every one of them judges the diff. The
-full-tree compatibility audit is the fourth lane and runs on a schedule instead — see
-"Where the full audit runs" below. Test, spec and end-to-end artifacts are never mutation
-targets. Untracked production files count as
+Pull requests run one lane, and it blocks: the complete Node-only server security closure.
+The other three — changed Node files, changed client files, and the full-tree compatibility
+audit — run once a day against `main` and report rather than gate. See "Where the mutation
+lanes run" below. Test, spec and end-to-end artifacts are never mutation targets. Untracked production files count as
 changes. Security-boundary specs belong exclusively to the always-on security lane; other
 changed tests, deleted or renamed inputs, and mutation-configuration changes broaden the
 affected lane rather than guessing narrowly.
@@ -166,28 +167,57 @@ Never copy an incremental file between lanes or publish one from a failed or can
 The scheduled audit forces a cold run and shares its cache with nobody, so it can neither
 duplicate nor race a pull-request lane.
 
-### Where the full audit runs
+### Where the mutation lanes run
 
-Decided 2026-09-04, by the product owner, to cut runner minutes — not wall clock. The
-full-tree lane left the pull-request matrix (`ci.yml`) for a daily schedule
-(`mutation-audit.yml`, 04:41 UTC on `main`).
+Decided 2026-09-04 by Gabriel, the product owner, to cut runner minutes — not wall clock,
+and not strictness.
 
-The reasoning is what the lane measures. The security and changed lanes judge the code in
-the diff, so they have to run on the diff; the full lane re-verifies code the diff never
-touched, and its answer changes only when the tree does. Paying for it per push bought a
-re-run of yesterday's answer, once per push rather than once per day. Measured on hosted
-runners, 2026-09-04: `Mutation (security)` ~34s, `Mutation (changed-node)` ~1m16,
-`Mutation (changed-client)` ~8m30, `Mutation (full)` ~17m cold. It was never the critical
-path — the self-test at ~316s and end-to-end at ~276s were — so removing it saves runner
-minutes and roughly no wall clock.
+| Lane                           | Cold  | Where it runs                | Blocks?     |
+| ------------------------------ | ----- | ---------------------------- | ----------- |
+| `test:mutation:security`       | 3m50  | every pull request           | yes         |
+| `test:mutation:changed:node`   | 2m34  | daily on `main`              | no, reports |
+| `test:mutation:changed:client` | 8m51  | daily on `main`              | no, reports |
+| `test:mutation:full`           | 18m07 | daily on `main`, forced cold | no, reports |
 
-Nothing about the lane got weaker. `quality/mutation-policy.json` and
-`quality/thresholds.json` are untouched, the 80 percent Stryker-compatible aggregate and its
-`mutation.break` still govern the full tree, and the schedule runs `--force-cold`, which is
-stricter than the incremental run a pull request used to get.
+Those are cold numbers. The sub-minute times some pull requests show are incremental cache
+hits, not the cost of the lane, and budgeting from them understates what a push actually
+buys. Removing the three moved lanes saves about 29.5 runner-minutes per pull-request run;
+they were never the critical path either — the gate self-test at ~316s and end-to-end at
+~276s are — so the wall clock a contributor waits is roughly unchanged.
 
-It is not a merge gate, so it has to be loud by itself: the run stays red — no
-`continue-on-error` — and a failing run opens, or comments on, one `quality`-labelled issue
-carrying the run URL. `check:schedules` proves both the schedule and that issue path still
-exist. What this trades away is honest: mutation debt in untouched code is now noticed
-within a day rather than on the next pull request that happened to push.
+**Why the security lane is the exception.** It stays blocking because the authentication
+boundary is the one place where a test that fails to assert is a security risk rather than a
+maintenance cost: a surviving mutant in `src/lib/server/users/` means a session, password or
+household check that nothing would notice breaking. Everywhere else, mutation debt is work
+owed, and work owed can be paid daily. It is also the cheapest of the four cold, so the
+exception costs 3m50 rather than the 29.5 minutes the rest would.
+
+**Why the other three do not block.** "Let's not fail the CI because of mutation — we will
+pay debt daily." A red daily lane that nobody is waiting on stops being a gate and becomes a
+report, so it is written as one: each lane runs under `continue-on-error`, and
+`scripts/quality/mutation-debt.ts` reads every `verdict.json` and `crash.json` afterwards and
+turns them into one Markdown report naming the mutants that were not killed. That report
+becomes warning annotations, the job summary, and — when there is debt — a single
+`quality`-labelled GitHub issue, opened once and commented on thereafter. A lane that
+swallowed its exit code and printed nothing would be worth less than not running it at all.
+
+**"Changed" on a schedule.** The changed lanes are defined against a diff, and a scheduled
+run on `main` has no base ref. Left alone, `resolveMutationBase` falls through to
+`origin/main`, whose merge-base with `HEAD` is `HEAD` — an empty scope, a lane that mutates
+nothing, and a green result that proves nothing. So the workflow resolves the base itself:
+the tip of `main` as it stood 24 hours earlier, which makes the lanes judge exactly what
+merged since the last audit, a day late but with the strict killed-only verdict intact. If
+nothing merged, the base resolves to `HEAD`, and the changed lanes are skipped with that
+said out loud in the job summary rather than reported clean over an empty scope. If no base
+resolves at all the audit fails there, because that is a broken audit rather than a quiet
+day. The full lane runs regardless.
+
+**Thresholds did not move.** `quality/mutation-policy.json` and `quality/thresholds.json` are
+untouched, the 80 percent Stryker-compatible aggregate and its `mutation.break` still govern
+the full tree, and the daily run forces a cold measurement — stricter than the incremental
+run a pull request used to get. Not blocking is not the same as not measuring: lowering a
+number would make the daily report understate the debt it exists to find, which is the one
+thing that would make the whole arrangement pointless.
+
+What this trades away is honest: mutation debt outside the security lane is now noticed
+within a day, in an issue, rather than at the moment it is introduced.

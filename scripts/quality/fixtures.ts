@@ -219,11 +219,11 @@ export const fixtures: GateFixture[] = [
 	{
 		name: 'missing-ci-job',
 		gate: 'check:ci-contract',
-		failureIncludes: 'CI workflow does not invoke declared jobs: mutation-client',
+		failureIncludes: 'CI workflow does not invoke declared jobs: mutation-security',
 		description: 'A declared CI job omitted from the hosted workflow.',
 		apply: (root) =>
 			edit(root, '.github/workflows/ci.yml', (content) =>
-				content.replace('            job: mutation-client\n', '')
+				content.replace('            job: mutation-security\n', '')
 			)
 	},
 	{
@@ -238,6 +238,19 @@ export const fixtures: GateFixture[] = [
 		apply: (root) =>
 			edit(root, '.github/workflows/mutation-audit.yml', (content) =>
 				content.replace("    - cron: '41 4 * * *'\n", '')
+			)
+	},
+	{
+		// The trap a non-blocking lane walks into: every step swallows its exit,
+		// so `if: failure()` never fires, the run is green, and the debt is
+		// invisible. Exactly the shape this workflow had to avoid.
+		name: 'unreachable-schedule-report',
+		gate: 'check:schedules',
+		failureIncludes: 'which can never fire',
+		description: 'A non-blocking scheduled lane reporting on a job failure that cannot happen.',
+		apply: (root) =>
+			edit(root, '.github/workflows/mutation-audit.yml', (content) =>
+				content.replace("if: steps.debt.outputs.debt == 'true'", 'if: failure()')
 			)
 	},
 	{

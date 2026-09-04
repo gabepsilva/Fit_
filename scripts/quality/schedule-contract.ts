@@ -58,6 +58,17 @@ function surfacesFailure(source: string): boolean {
 	return source.includes('issues: write') && source.includes('issues.create');
 }
 
+/**
+ * The trap a non-blocking lane walks into. `continue-on-error: true` means the
+ * job succeeds however the lane ended, so `if: failure()` on the reporting step
+ * can never fire and the run is green with the debt still there. A workflow
+ * that swallows its exits has to decide what to report on by reading a step's
+ * `outcome` or an output it wrote, never by asking whether the job failed.
+ */
+function reportsOnUnreachableFailure(source: string): boolean {
+	return source.includes('continue-on-error: true') && /if:\s*failure\(\)/.test(source);
+}
+
 const [packageJson, entries] = await Promise.all([
 	readFile(path.join(projectRoot, 'package.json'), 'utf8'),
 	readdir(workflowDirectory)
@@ -92,11 +103,17 @@ for (const tier of scheduledTiers) {
 		);
 		continue;
 	}
-	const silent = runners.filter((workflow) => !surfacesFailure(workflow.source));
-	for (const workflow of silent) {
-		failures.push(
-			`Scheduled workflow ${workflow.name} runs the "${tier}" tier but cannot surface a failure: it needs issues: write and an issues.create step.`
-		);
+	for (const workflow of runners) {
+		if (!surfacesFailure(workflow.source)) {
+			failures.push(
+				`Scheduled workflow ${workflow.name} runs the "${tier}" tier but cannot surface a failure: it needs issues: write and an issues.create step.`
+			);
+		}
+		if (reportsOnUnreachableFailure(workflow.source)) {
+			failures.push(
+				`Scheduled workflow ${workflow.name} runs the "${tier}" tier with continue-on-error and reports on if: failure(), which can never fire. Report on a step outcome or output instead.`
+			);
+		}
 	}
 	wired.push(`${tier} (${runners.map((workflow) => workflow.name).join(', ')})`);
 }
