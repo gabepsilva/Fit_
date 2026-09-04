@@ -64,6 +64,17 @@
 		cursor: pointer;
 	}
 
+	/*
+	 * A disabled filled button swaps its fill/text colors (see button-variants.ts) so it
+	 * reads unmistakably "off" without relying on hover or color discrimination alone —
+	 * but animating that swap lets the two independently-interpolating colors cross paths
+	 * mid-transition and briefly collapse to near-zero contrast (issue #46). Disabled
+	 * buttons snap to their end state instead.
+	 */
+	button:disabled {
+		transition: none;
+	}
+
 	h1,
 	h2,
 	h3 {
