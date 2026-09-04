@@ -122,7 +122,9 @@ then checks that an anonymous `GET /api/sessions/current` is refused as `unauthe
 registers a throwaway account and signs it out, in and out again, and confirms
 `/opt/fit/current` points at the commit under test. It writes `reports/deploy/smoke.json`.
 Add `--tunnel` to either command to reach the origin through an SSH port forward instead of
-through Cloudflare, for when the public name is the thing that is broken.
+through Cloudflare, for when the public name is the thing that is broken; that mode also
+stands in for the proxy's client-address header, which Cloudflare otherwise supplies and
+refuses to accept from a caller.
 
 ## Quality gates
 

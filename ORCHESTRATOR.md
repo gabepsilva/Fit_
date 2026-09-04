@@ -241,14 +241,17 @@ that was deployed. It writes `reports/deploy/smoke.json`, which is what the comm
 story being deployed is written from. It leaves the throwaway account behind — nothing
 deletes accounts yet — under a `smoke.` username. `--tunnel` on either command runs it
 through an SSH port forward to the origin instead of through Cloudflare, which is how a
-deploy is checked when the public name is the thing that is broken.
+deploy is checked when the public name is the thing that is broken. Only that mode sends
+the client-address header: Cloudflare sets it itself and answers 403 to a request that
+already carries one, while the origin reached directly has nothing else to learn an
+address from.
 
 Known, and Gabriel's to decide if either becomes a problem: the zone is on Cloudflare's
 Flexible SSL mode, so the hop from Cloudflare to the origin is unencrypted — moving to Full
 would mean a certificate and a proxy on the VM, and a different `HOST` and `PORT` in the
-environment file. And because Cloudflare rewrites `CF-Connecting-IP`, every smoke check run
-through the public name is throttled as one address; ten registrations an hour is the
-ceiling on deploys per hour.
+environment file. And because Cloudflare supplies `CF-Connecting-IP` itself, every smoke
+check run through the public name is throttled as one address — this machine's; ten
+registrations an hour is the ceiling on deploys per hour.
 
 The Android build is pointed at the same server by `FIT_CAPACITOR_SERVER_URL`, which must
 be `https://`.

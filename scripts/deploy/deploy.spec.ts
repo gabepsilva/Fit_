@@ -16,6 +16,7 @@ import {
 	shellQuote,
 	templateDirectory
 } from './config';
+import { standsInForProxy } from './smoke';
 
 /**
  * The two files this deploy installs on the machine have to agree with each
@@ -144,5 +145,18 @@ describe('the service unit', () => {
 describe('shellQuote', () => {
 	it('closes and reopens the quote around an embedded one', () => {
 		expect(shellQuote("it's")).toBe(String.raw`'it'\''s'`);
+	});
+});
+
+describe('the smoke check\u2019s client-address header', () => {
+	it('is left to Cloudflare on the public origin', () => {
+		// Cloudflare answers 403 to a request that already carries
+		// `CF-Connecting-IP`, so sending one turns every check into a proxy error.
+		expect(standsInForProxy(PUBLIC_ORIGIN)).toBe(false);
+	});
+
+	it('is supplied when the check reaches the origin directly', () => {
+		// Nothing else would set it, and `getClientAddress()` throws without it.
+		expect(standsInForProxy('http://127.0.0.1:41234')).toBe(true);
 	});
 });

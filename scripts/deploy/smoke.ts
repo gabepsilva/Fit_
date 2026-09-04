@@ -31,6 +31,20 @@ import { capture, projectRoot } from '../security/shared';
 /** Registration counts every attempt from one address, ten to the hour. */
 const DOCUMENTATION_PREFIX = '2001:db8::';
 
+/**
+ * Whether this run has to stand in for Cloudflare.
+ *
+ * `ADDRESS_HEADER` names a header the origin trusts, so the origin must never
+ * be reachable by anything but the proxy — and Cloudflare enforces the other
+ * half of that by refusing, with a 403 of its own, any request that arrives
+ * already carrying `CF-Connecting-IP`. Through the public name the proxy sets
+ * it; reaching the origin directly, this check has to, or `getClientAddress()`
+ * throws and every request is a 500 that proves nothing.
+ */
+export function standsInForProxy(base: string): boolean {
+	return base !== PUBLIC_ORIGIN;
+}
+
 /** Long enough for the password floor of 10, and never reused. */
 const PASSWORD_BYTES = 16;
 
@@ -152,19 +166,22 @@ type Client = {
 
 /**
  * The client Cloudflare would look like: the configured `Origin` on every
- * unsafe method, and the client-address header `ADDRESS_HEADER` names.
+ * unsafe method, and — only when this run is standing in for the proxy — the
+ * client-address header `ADDRESS_HEADER` names.
  *
- * `getClientAddress()` throws when that header is missing, so a request without
- * it is a 500 and proves nothing. The address is a fresh one from the
- * documentation range each run, because registration is throttled per address
- * and a fixed one would lock the eleventh deploy of the hour out of its own
- * smoke check.
+ * That address is a fresh one from the documentation range each run, because
+ * registration is throttled per address and a fixed one would lock the
+ * eleventh deploy of the hour out of its own smoke check. Through Cloudflare
+ * there is no such freedom: the address is this machine's, and ten deploys an
+ * hour is the ceiling.
  */
 function createClient(options: Options): Client {
-	const clientAddress = DOCUMENTATION_PREFIX + randomBytes(4).toString('hex');
+	const proxyHeaders = standsInForProxy(options.base)
+		? { 'cf-connecting-ip': DOCUMENTATION_PREFIX + randomBytes(4).toString('hex') }
+		: {};
 	let cookie: string | undefined;
 	const headers = (extra: Record<string, string>): Record<string, string> => ({
-		'cf-connecting-ip': clientAddress,
+		...proxyHeaders,
 		...(cookie === undefined ? {} : { cookie }),
 		...extra
 	});
