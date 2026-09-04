@@ -10,12 +10,12 @@ control inventory and the settled policy behind the gates. This file is the rule
 
 ## Map
 
-| Path                                 | What it is                                                                               | Tested by              |
-| ------------------------------------ | ---------------------------------------------------------------------------------------- | ---------------------- |
-| `src/lib/domain/`                    | Framework-free TypeScript: catalog, recipes, TDEE model, parser, import/export, training | `server`, in Node      |
-| `src/lib/server/`                    | `db.ts` (`node:sqlite` + migration list) and `users/` (accounts, sessions, households)   | `server`, in Node      |
-| `src/lib/state/tend.svelte.ts`       | The single rune-backed store; persists to `localStorage` behind an explicit `hydrate()`  | `client`               |
-| `src/lib/components/`, `src/lib/ui/` | Svelte 5 components on Tailwind 4 and `bits-ui`                                          | `client`, in a browser |
+| Path                                 | What it is                                                                                                                   | Tested by              |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `src/lib/domain/`                    | Framework-free TypeScript: catalog, recipes, TDEE model, parser, import/export, training                                     | `server`, in Node      |
+| `src/lib/server/`                    | `db.ts` (`node:sqlite` + migration list), `users/` (accounts, sessions, households), `catalog/` (the read-only food catalog) | `server`, in Node      |
+| `src/lib/state/tend.svelte.ts`       | The single rune-backed store; persists to `localStorage` behind an explicit `hydrate()`                                      | `client`               |
+| `src/lib/components/`, `src/lib/ui/` | Svelte 5 components on Tailwind 4 and `bits-ui`                                                                              | `client`, in a browser |
 
 Coverage follows that split: `client` measures everything under `src/lib` except `domain/`
 and `server/`; `server` measures `domain/` and `server/`.
