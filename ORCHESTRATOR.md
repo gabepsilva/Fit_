@@ -266,6 +266,33 @@ feature is built. There is no iOS shell.
 - Deleting user data — suspended until production by the development-only permissions at
   the top of this file, which is where it goes back on.
 
+## Changing the infrastructure
+
+The orchestrator holds a Cloudflare API token for the `psilva.org` zone from 2026-09-04,
+placed by Gabriel under `~/keys/` and read from a path in the environment. It is never
+printed, echoed, logged or committed, exactly like the Owen app key. The token can read and
+write that zone's settings, which is enough to turn Speed Brain on or off; it does not need
+DNS, Workers or cache access and should not be given them.
+
+Two rules govern using it, and they exist because edge configuration is the least safe thing
+either of us can touch. A code change is reviewed, gated by CI, and revertible from git
+history. A zone setting takes effect globally the moment it is written, with none of that. On
+2026-09-04 a single Cloudflare setting made the Android app unusable on every navigation, and
+nothing in this repository could have caught it.
+
+**Announce an infrastructure change on an issue, before and after.** Say what is about to
+change and why, then say what changed and what was observed. That comment is the only record
+such a change will ever have, so it stands in for the commit message, the diff and the
+review all at once.
+
+**Diagnosis is read-only.** Never change a setting to find out whether a change is possible.
+The orchestrator broke this rule the day it was written, by testing write access with a live
+`PATCH` that happened to be a no-op; a permission is confirmed by being asked for, not by
+being used. Where the effect of a setting can be observed from outside — Speed Brain is
+visible as a `speculation-rules` header on any response — prefer that check over the API,
+because it needs no credential and reports what the edge is actually doing rather than what
+the control plane believes.
+
 ## Deploy, as of 2026-09-03
 
 The app is live at <https://fit.psilva.org>. One command from a clean checkout deploys it:
