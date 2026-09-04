@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ROUTINE_TEMPLATES } from '$lib/domain/exercise-catalog';
 import { logFromFood } from '$lib/domain/log-entry';
 import { emptyProfile } from '$lib/domain/profile';
@@ -66,6 +66,23 @@ function reloaded() {
 	return store;
 }
 
+/**
+ * jsdom's `Storage` is a legacy platform object backed by its own internal
+ * bookkeeping, so a `vi.spyOn(localStorage, 'setItem')` is never actually
+ * reached: real writes still land, but the spy sees none of them. Spying on
+ * the store's own methods instead avoids that and reads on real behavior:
+ * `persist` for whether a write happened at all, `write` (private, hence the
+ * cast) for how many times the underlying storage call actually fired, which
+ * a debounced write cancelled too late can trigger a second time.
+ */
+function persistSpy() {
+	return vi.spyOn(TendStore.prototype, 'persist');
+}
+
+function writeSpy() {
+	return vi.spyOn(TendStore.prototype as unknown as { write: () => void }, 'write');
+}
+
 function customEntry(overrides: Partial<LogItem> = {}): LogItem {
 	return {
 		id: 'custom',
@@ -96,6 +113,7 @@ const dose: Omit<Injection, 'id'> = {
 };
 
 beforeEach(() => localStorage.clear());
+afterEach(() => vi.restoreAllMocks());
 
 describe('hydration', () => {
 	it('starts empty when there is nothing stored', () => {
@@ -172,6 +190,16 @@ describe('onboarding', () => {
 
 	it('builds a week of meals', () => {
 		expect(onboarded().state.weekPlan.length).toBeGreaterThan(0);
+	});
+
+	it('persists explicitly after generating the plan, not only through it', () => {
+		const spy = persistSpy();
+		onboarded({ name: 'Alex' });
+		expect(spy).toHaveBeenCalledTimes(2);
+		const persisted = stored();
+		expect(persisted.profiles.map((p) => p.name)).toContain('Alex');
+		expect(persisted.weekPlan.length).toBeGreaterThan(0);
+		spy.mockRestore();
 	});
 
 	it('adds a second person when a household is requested', () => {
@@ -477,6 +505,17 @@ describe('the week plan', () => {
 		]);
 		store.swapPlanned('2026-06-01', 'dinner');
 		expect(store.state.weekPlan[0]?.recipeId).toBe(fits[1]?.id);
+	});
+
+	it('leaves the slot alone when only one recipe still fits', () => {
+		// Vegan narrows dinner to a single recipe, so the "next" one is the one already there:
+		// the guard must skip the rebuild rather than replace it with an identical copy.
+		const store = onboarded({ restrictions: ['vegan'] });
+		const before = store.state.weekPlan;
+		const dinner = before.find((p) => p.meal === 'dinner');
+		if (!dinner) throw new Error('no dinner slot was planned');
+		store.swapPlanned(dinner.date, 'dinner');
+		expect(store.state.weekPlan).toBe(before);
 	});
 
 	it('adds a food', () => {
@@ -866,8 +905,12 @@ describe('the movements in a routine', () => {
 
 	it('adds nothing when nothing was picked', () => {
 		const store = withRoutine();
+		const spy = persistSpy();
 		store.addExercises('full-body', []);
 		expect(store.routine('full-body')?.exercises).toHaveLength(6);
+		// Nothing to add means nothing to save either, not a redundant write of the same list.
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
 	});
 
 	it('removes the row it was asked for', () => {
@@ -875,6 +918,21 @@ describe('the movements in a routine', () => {
 		store.removeExercise('full-body', 0);
 		expect(store.routine('full-body')?.exercises).toHaveLength(5);
 		expect(store.routine('full-body')?.exercises[0]?.name).toBe('Bench Press');
+	});
+
+	it('does nothing for a row that is not there', () => {
+		const store = withRoutine();
+		const spy = persistSpy();
+		store.removeExercise('full-body', 99);
+		expect(store.routine('full-body')?.exercises).toHaveLength(6);
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
+
+	it('does nothing for a routine that is not there', () => {
+		const store = freshStore();
+		expect(() => store.removeExercise('nope', 0)).not.toThrow();
+		expect(() => store.moveExerciseUp('nope', 1)).not.toThrow();
 	});
 
 	it('moves a row up past the one above it', () => {
@@ -893,6 +951,17 @@ describe('the movements in a routine', () => {
 		const before = store.routine('full-body')?.exercises.map((e) => e.name);
 		store.moveExerciseUp('full-body', 0);
 		expect(store.routine('full-body')?.exercises.map((e) => e.name)).toEqual(before);
+	});
+
+	it('leaves the row where it is for an index past the end of the routine', () => {
+		const store = withRoutine();
+		const spy = persistSpy();
+		const before = store.routine('full-body')?.exercises.map((e) => e.name);
+		// The bounds check is the only thing standing between this and splicing in `undefined`.
+		store.moveExerciseUp('full-body', 99);
+		expect(store.routine('full-body')?.exercises.map((e) => e.name)).toEqual(before);
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
 	});
 
 	it('steps only the row and the field it was pointed at', () => {
@@ -991,6 +1060,15 @@ describe('planning weeks', () => {
 		expect(store.state.trainingPlan).toEqual([{ year: 2026, week: 3, routineId: 'push' }]);
 	});
 
+	it('does not persist when no weeks were given', () => {
+		const store = freshStore();
+		store.planWeeks(2026, [3], 'push');
+		const spy = persistSpy();
+		store.planWeeks(2026, [], 'legs');
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
+
 	it('saves the plan as it is drawn', () => {
 		const store = freshStore();
 		store.planWeeks(2026, [3], 'push');
@@ -1005,6 +1083,7 @@ describe('running a session', () => {
 		expect(store.state.activeWorkout?.date).toBe(todayISO());
 		expect(store.state.activeWorkout?.exercises).toHaveLength(6);
 		expect(store.currentExercise?.name).toBe('Squat');
+		expect(store.state.activeWorkout?.id.startsWith('w-')).toBe(true);
 	});
 
 	it('writes out every prescribed set, none of them ticked', () => {
@@ -1060,6 +1139,13 @@ describe('running a session', () => {
 		expect(store.currentExercise?.sets[1]).toEqual({ reps: 8, load: 60, done: false });
 	});
 
+	it('saves a stepped set through the debounce', () => {
+		const store = inSession();
+		store.bumpSet(0, 'reps', 1);
+		store.flushPersist();
+		expect(stored().activeWorkout?.exercises[0]?.sets[0]?.reps).toBe(9);
+	});
+
 	it('adds a set at the last one’s numbers, waiting to be ticked', () => {
 		const store = inSession();
 		store.bumpSet(2, 'load', 1);
@@ -1084,6 +1170,12 @@ describe('running a session', () => {
 		expect(store.currentExercise?.group).toBe('Legs');
 		expect(store.currentExercise?.sets[0]?.done).toBe(true);
 		expect(store.state.activeWorkout?.exercises[1]?.name).toBe('Bench Press');
+	});
+
+	it('saves a swapped movement', () => {
+		const store = inSession();
+		store.swapExercise('Leg Press');
+		expect(stored().activeWorkout?.exercises[0]?.name).toBe('Leg Press');
 	});
 
 	it('will not swap in a movement the library does not know', () => {
@@ -1399,5 +1491,79 @@ describe('saving a session without paying for it on every tap', () => {
 		await vi.waitFor(() => expect(stored().activeWorkout?.exercises[0]?.sets[2]?.done).toBe(true));
 		const next = reloaded();
 		expect(next.currentExercise?.sets.map((s) => s.done)).toEqual([true, false, true]);
+	});
+});
+
+describe('debounced persistence internals', () => {
+	it('does not schedule a debounced write before the store is hydrated', () => {
+		const store = new TendStore();
+		const routine = store.createRoutine();
+		store.addExercises(routine.id, ['Deadlift']);
+		store.bumpRoutineExercise(routine.id, 0, 'load', 1);
+		// Hydrating afterward must not resurrect a write that was requested before it.
+		store.hydrate();
+		store.flushPersist();
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+	});
+
+	it('schedules only one debounced write for a burst of steps', async () => {
+		const store = inSession();
+		const spy = writeSpy();
+		store.bumpSet(0, 'reps', 1);
+		store.bumpSet(0, 'reps', 1);
+		store.bumpSet(0, 'reps', 1);
+		// Long enough for every timer a broken debounce would have left running to fire.
+		await new Promise((resolve) => setTimeout(resolve, 260));
+		expect(spy).toHaveBeenCalledTimes(1);
+		spy.mockRestore();
+	});
+
+	it('does nothing when flushed with no debounced write pending', () => {
+		const store = onboarded();
+		const spy = persistSpy();
+		store.flushPersist();
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
+
+	it('cancels a pending debounced write when persisted immediately', async () => {
+		const store = inSession();
+		const spy = writeSpy();
+		store.bumpSet(0, 'reps', 1);
+		store.persist();
+		expect(spy).toHaveBeenCalledTimes(1);
+		// If the debounced timer was not actually cancelled it fires here and writes again.
+		await new Promise((resolve) => setTimeout(resolve, 260));
+		expect(spy).toHaveBeenCalledTimes(1);
+		spy.mockRestore();
+	});
+
+	it('does not touch clearTimeout when there is no debounced write to cancel', () => {
+		const store = onboarded();
+		const spy = vi.spyOn(globalThis, 'clearTimeout');
+		store.persist();
+		expect(spy).not.toHaveBeenCalled();
+		spy.mockRestore();
+	});
+
+	it('binds the lifecycle flush listeners only once across repeated debounced writes', () => {
+		const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+		const store = inSession();
+		store.bumpSet(0, 'reps', 1);
+		store.bumpSet(0, 'reps', 1);
+		// One for `pagehide`, one for `visibilitychange` — never more, however many times it is asked.
+		expect(addEventListenerSpy).toHaveBeenCalledTimes(2);
+		addEventListenerSpy.mockRestore();
+	});
+
+	it('does not touch addEventListener when it is not available', () => {
+		const store = inSession();
+		vi.stubGlobal('addEventListener', undefined);
+		try {
+			expect(() => store.toggleSet(0)).not.toThrow();
+			expect(store.currentExercise?.sets[0]?.done).toBe(true);
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 });
