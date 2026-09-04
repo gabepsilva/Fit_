@@ -39,11 +39,28 @@
 	// the stored figure.
 	function saveHeight(event: SubmitEvent) {
 		event.preventDefault();
+		if (!profile) return;
 		const data = new FormData(event.currentTarget as HTMLFormElement);
-		const cm =
-			tend.state.units === 'imperial'
-				? heightFromFeetInches(Number(data.get('height-ft')), Number(data.get('height-in')))
-				: Number(data.get('height-cm'));
+		const stored = profile.heightCm;
+		let cm: number;
+		if (tend.state.units === 'imperial') {
+			const feet = Number(data.get('height-ft'));
+			const inches = Number(data.get('height-in'));
+			const displayed = heightToFeetInches(stored);
+			// An untouched form re-submits the *rounded* ft/in reading, which
+			// would otherwise re-derive and overwrite an exact stored cm with a
+			// lossy one (e.g. 180.5 cm displays as 5′11″, and
+			// heightFromFeetInches(5, 11) reads back as 180.34, not 180.5). Only
+			// a genuinely edited reading may change the stored value.
+			cm =
+				feet === displayed.feet && inches === displayed.inches
+					? stored
+					: heightFromFeetInches(feet, inches);
+		} else {
+			const entered = Number(data.get('height-cm'));
+			// Same guard for metric: an untouched form resubmits Math.round(stored).
+			cm = entered === Math.round(stored) ? stored : entered;
+		}
 		// A height has to be a positive number to mean anything; a blank or
 		// non-numeric field, or zero or negative, is left unsaved.
 		if (!Number.isFinite(cm) || cm <= 0) return;

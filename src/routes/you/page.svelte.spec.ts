@@ -91,6 +91,35 @@ describe('the Height field', () => {
 		expect(tend.profile?.heightCm).toBe(heightFromFeetInches(5, 9));
 	});
 
+	it('leaves a fractional stored cm untouched when the metric form is submitted unedited', async () => {
+		// 175.26 cm displays rounded to 175 in the metric field. Submitting
+		// without editing must not truncate the stored value to that rounded
+		// display — the same rounding-leaks-into-storage bug PR #73 caught for
+		// weight, in reverse (display rounds, save must not adopt the rounding).
+		tend.patchActive((p) => ({ ...p, heightCm: 175.26 }));
+		await render(YouPage);
+		await expect.element(page.getByLabelText('Height in centimeters')).toHaveValue('175');
+		await page.getByRole('button', { name: 'Save height' }).click();
+		expect(tend.profile?.heightCm).toBe(175.26);
+	});
+
+	it('leaves a stored cm untouched when the imperial form is submitted unedited', async () => {
+		// 180.5 cm is not an exact number of inches: its ft/in display (5′11″)
+		// rounds to the nearest inch, and heightFromFeetInches(5, 9) reads back
+		// as 180.34 cm — not 180.5. Submitting the imperial form untouched must
+		// not re-derive and overwrite the exact stored cm from that rounded
+		// ft/in reading.
+		const stored = 180.5;
+		tend.patchActive((p) => ({ ...p, heightCm: stored }));
+		tend.state.units = 'imperial';
+		await render(YouPage);
+		const { feet, inches } = heightToFeetInches(stored);
+		await expect.element(page.getByLabelText('Height, feet')).toHaveValue(String(feet));
+		await expect.element(page.getByLabelText('Height, inches')).toHaveValue(String(inches));
+		await page.getByRole('button', { name: 'Save height' }).click();
+		expect(tend.profile?.heightCm).toBe(stored);
+	});
+
 	it('round-trips the stored height through imperial and back with no drift', async () => {
 		// 175 cm is not an exact number of inches: reading it as feet + inches
 		// rounds to the nearest inch for display. Only entering a new value
