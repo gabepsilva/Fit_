@@ -270,6 +270,25 @@ describe('LogSheet', () => {
 		expect(add).toHaveBeenCalled();
 	});
 
+	it('logs the calories in the volume that was typed, not in one serving', async () => {
+		// Olive oil is served by the tablespoon: 14 g, 119 kcal. Two tablespoons is
+		// two servings, and logging one of them would be half the calories eaten.
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('2 tbsp olive oil');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		const [logged] = add.mock.calls[0] ?? [];
+		expect(logged?.[0]).toMatchObject({ name: 'Olive oil', servings: 2, kcal: 238 });
+	});
+
+	it('says how many millilitres the food’s serving is', async () => {
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('2 tbsp olive oil');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await expect.element(page.getByText('1 tbsp (15 ml)')).toBeInTheDocument();
+	});
+
 	it('closes after committing', async () => {
 		vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
 		await openSheet();

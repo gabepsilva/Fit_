@@ -26,6 +26,8 @@ type FixtureRow = {
 	sources: number;
 	barcode: string | null;
 	alias: string | null;
+	/** `food_serving` rows, as free text with the weight the source gave. */
+	servings?: [label: string, grams: number][];
 };
 
 const FIXTURE_FOODS: FixtureRow[] = [
@@ -67,7 +69,15 @@ const FIXTURE_FOODS: FixtureRow[] = [
 		quality: 90,
 		sources: 247,
 		barcode: null,
-		alias: 'whole milk'
+		alias: 'whole milk',
+		// A volume the label states outright, a competing row for the same unit,
+		// and two the parser must refuse.
+		servings: [
+			['1 cup', 244],
+			['2 cup', 500],
+			['1 PUDDING CUP', 99],
+			['100 g', 100]
+		]
 	},
 	// Same name as row 3 under another dairy: without the duplicate-name pass a
 	// person searching "milk" sees one food twice.
@@ -135,7 +145,11 @@ const FIXTURE_FOODS: FixtureRow[] = [
 		quality: 94,
 		sources: 4,
 		barcode: '00000000000103',
-		alias: null
+		alias: null,
+		servings: [
+			['2 Tbsp', 32],
+			['1 tsp', 5.3]
+		]
 	},
 	{
 		id: 11,
@@ -168,6 +182,8 @@ create table food (
 	sodium double, saturated_fat double, quality bigint, n_sources bigint
 );
 create table food_alias (food_id bigint, alias varchar);
+create table food_serving (food_id bigint, label varchar, grams double, is_default bigint);
+create index idx_serving_food on food_serving (food_id);
 create unique index idx_food_id on food (food_id);
 create index idx_food_gtin on food (gtin14);
 create virtual table food_fts using fts5(
@@ -186,12 +202,16 @@ export function createFixtureCatalog(): DatabaseSync {
 			100.0, 5.0, 3.0, 12.0, 4.0, 1.0, 50.0, 1.0, ?, ?)`
 	);
 	const alias = db.prepare('insert into food_alias (food_id, alias) values (?, ?)');
+	const serving = db.prepare(
+		'insert into food_serving (food_id, label, grams, is_default) values (?, ?, ?, 0)'
+	);
 	const indexed = db.prepare(
 		'insert into food_fts (rowid, name, brand, aliases) values (?, ?, ?, ?)'
 	);
 	for (const row of FIXTURE_FOODS) {
 		food.run(row.id, row.barcode, row.name, row.brand, row.kind, row.quality, row.sources);
 		if (row.alias !== null) alias.run(row.id, row.alias);
+		for (const [label, grams] of row.servings ?? []) serving.run(row.id, label, grams);
 		indexed.run(row.id, row.name, row.brand ?? '', row.alias ?? '');
 	}
 	return db;

@@ -1,6 +1,7 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import type { CatalogFoodPayload } from '$lib/domain/catalog-food';
 import { text } from '../users/rows';
+import { withPortions } from './portions';
 import { searchTerms, singular } from './query';
 import { searchSql } from './ranking';
 
@@ -91,7 +92,7 @@ export function pageSize(requested: string | null): number {
 export function searchFoods(db: DatabaseSync, typed: string, limit: number): CatalogFood[] {
 	const terms = searchTerms(typed);
 	if (terms === null) return [];
-	return db
+	const found = db
 		.prepare(searchSql(FOOD_COLUMNS))
 		.all({
 			match: terms.match,
@@ -101,6 +102,7 @@ export function searchFoods(db: DatabaseSync, typed: string, limit: number): Cat
 			limit
 		})
 		.map(toFood);
+	return withPortions(db, found);
 }
 
 /**
@@ -109,8 +111,9 @@ export function searchFoods(db: DatabaseSync, typed: string, limit: number): Cat
  * wrong food silently. The caller is handed all of them and has to choose.
  */
 export function foodsByBarcode(db: DatabaseSync, barcode: string): CatalogFood[] {
-	return db
+	const found = db
 		.prepare(`select ${FOOD_COLUMNS} from food f where f.gtin14 = ? order by f.quality desc`)
 		.all(barcode)
 		.map(toFood);
+	return withPortions(db, found);
 }

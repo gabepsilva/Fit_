@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { withVolumeHint } from '$lib/domain/portions';
 	import type { LogItem } from '$lib/domain/types';
 	import { tend } from '$lib/state/tend.svelte';
 	import QuantityStepper from './QuantityStepper.svelte';
@@ -16,7 +17,7 @@
 		tend.updateLog(item.id, { servings: n });
 	}
 
-	const portion = $derived(`${item.servings} × ${item.servingLabel}`);
+	const portion = $derived(`${item.servings} × ${withVolumeHint(item.servingLabel)}`);
 </script>
 
 <li class="bg-card rounded-2xl px-3 py-2.5 shadow-border">

@@ -1,3 +1,4 @@
+import { gramsPerVolumeUnit } from './portions';
 import type { Food, ProposedItem } from './types';
 
 /**
@@ -6,9 +7,10 @@ import type { Food, ProposedItem } from './types';
  * `serving` covers a bare number and the per-item words ("2 slices", "1 scoop"):
  * one of those is one catalog serving, so the number carries straight through.
  * `mass` resolves against the food's own serving weight, which every `Food`
- * carries as `grams`. `volume` cannot be resolved at all — the catalog stores
- * mass and no density, and a cup of milk and a cup of flour are different
- * masses — so a volume is reported back to the person rather than guessed at.
+ * carries as `grams`. `volume` resolves only against the food itself: a cup of
+ * milk and a cup of flour are different masses, so `portions.ts` reads the
+ * weight off the food's own portion rows or its own serving label, and a food
+ * that names neither still has its volume reported back rather than guessed at.
  */
 export type QuantityKind = 'serving' | 'mass' | 'volume';
 
@@ -16,10 +18,11 @@ const OUNCE = 28.349523125;
 const POUND = 453.59237;
 
 /**
- * Grams in one of each unit the parser accepts, with `0` for the units of volume
- * it cannot convert: the catalog stores mass and no density, so those are listed
- * to be refused knowingly rather than guessed at. Mass conversions are exact by
- * definition of the international pound.
+ * Grams in one of each unit the parser accepts, with `0` for the units of
+ * volume, whose weight is a property of the food rather than of the unit and so
+ * is never listed here — `portions.ts` reads it off the food. The zero is what
+ * `classifyUnit` reads to tell the two kinds apart. Mass conversions are exact
+ * by definition of the international pound.
  */
 const UNIT_GRAMS: Record<string, number> = {
 	g: 1,
@@ -63,8 +66,12 @@ export type ResolvedQuantity = {
 	declined: QuantitySpec | null;
 };
 
-/** Only `grams` is read, so a caller need not hold a whole catalog row. */
-type ServingWeight = Pick<Food, 'grams'>;
+/**
+ * A serving weight to divide by, and whatever the food says about volume.
+ * Everything past `grams` is optional, so a caller resolving a mass need hold
+ * no more of a catalog row than it did before.
+ */
+type ServingWeight = Pick<Food, 'grams'> & Partial<Pick<Food, 'servingLabel' | 'portions'>>;
 
 export function classifyUnit(unit: string): QuantityKind {
 	// `Object.hasOwn`, not a lookup: "constructor" and "toString" are on every object.
@@ -83,6 +90,19 @@ function roundServings(n: number): number {
 	return rounded > 0 ? rounded : n;
 }
 
+/**
+ * The grams a quantity comes to, or `null` when the food does not say.
+ *
+ * A mass is arithmetic on the unit alone. A volume is arithmetic on the food:
+ * only the food knows what one of its cups weighs, and `null` is the answer
+ * when it has never been told.
+ */
+function gramsTyped(spec: QuantitySpec, food: ServingWeight | null | undefined): number | null {
+	if (spec.kind !== 'volume') return spec.amount * (UNIT_GRAMS[spec.unit.toLowerCase()] ?? 1);
+	const perUnit = gramsPerVolumeUnit(spec.unit, food);
+	return perUnit === null ? null : spec.amount * perUnit;
+}
+
 export function resolveQuantity(
 	spec: QuantitySpec,
 	food: ServingWeight | null | undefined
@@ -92,12 +112,12 @@ export function resolveQuantity(
 	const declined: ResolvedQuantity = { servings: 1, declined: spec };
 	if (!Number.isFinite(spec.amount)) return declined;
 	if (spec.kind === 'serving') return { servings: spec.amount, declined: null };
-	if (spec.kind === 'volume') return declined;
 	// Guards the division: an absent, zero, negative or non-finite serving weight
 	// would otherwise yield Infinity or NaN servings and log a meaningless entry.
 	const perServing = food?.grams ?? 0;
 	if (!Number.isFinite(perServing) || perServing <= 0) return declined;
-	const grams = spec.amount * (UNIT_GRAMS[spec.unit.toLowerCase()] ?? 1);
+	const grams = gramsTyped(spec, food);
+	if (grams === null) return declined;
 	return { servings: roundServings(grams / perServing), declined: null };
 }
 

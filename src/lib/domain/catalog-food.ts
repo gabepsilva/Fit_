@@ -1,3 +1,4 @@
+import { UNIT_ML, type Portion } from './portions';
 import type { Food, Provenance } from './types';
 import { ZERO_MICROS } from './types';
 import { round1 } from './utils';
@@ -42,6 +43,12 @@ export type CatalogFoodPayload = {
 	barcode: string | null;
 	license: string;
 	serving: { label: string | null; grams: number | null };
+	/**
+	 * What one of each volume unit weighs for this food, read off the catalog's
+	 * `food_serving` rows. Optional: a deployment without the portions query, or
+	 * a food the catalog gave no household measure for, simply sends none.
+	 */
+	portions?: readonly Portion[] | undefined;
 	/** Per 100 g or 100 ml, which is how the catalog stores every nutrient. */
 	per100g: {
 		kcal: number;
@@ -93,6 +100,28 @@ function namesAFood(row: Record<string, unknown>): boolean {
 	);
 }
 
+/**
+ * One household measure. A unit outside the table would be a unit no client can
+ * convert, so it is a rejection rather than a value carried through unread.
+ */
+function namesAPortion(value: unknown): boolean {
+	const portion = fieldsOf(value);
+	return (
+		typeof portion.unit === 'string' &&
+		Object.hasOwn(UNIT_ML, portion.unit) &&
+		typeof portion.grams === 'number'
+	);
+}
+
+/**
+ * The household measures, when the payload carries any. Absent is valid — the
+ * field was added after the contract — but present and malformed is not.
+ */
+function namesPortions(value: unknown): boolean {
+	if (value === undefined) return true;
+	return Array.isArray(value) && value.every(namesAPortion);
+}
+
 /** The serving the nutrients will be scaled onto. */
 function namesAServing(serving: Record<string, unknown>): boolean {
 	return isOptionalNumber(serving.grams) && isOptionalText(serving.label);
@@ -115,6 +144,7 @@ export function isCatalogFoodPayload(value: unknown): value is CatalogFoodPayloa
 	return (
 		namesAFood(row) &&
 		namesAServing(fieldsOf(row.serving)) &&
+		namesPortions(row.portions) &&
 		carriesNutrients(fieldsOf(row.per100g))
 	);
 }
@@ -160,6 +190,10 @@ export function catalogFoodToFood(payload: CatalogFoodPayload): Food {
 		provenance: provenanceOf(payload),
 		servingLabel: payload.serving.label ?? `${grams} g`,
 		grams,
+		// Dropped when empty rather than carried as an empty array: `undefined` is
+		// what every bundled food says, so a catalog food that named no measure
+		// reads the same as one that never could.
+		...(payload.portions?.length ? { portions: payload.portions } : {}),
 		kcal: Math.round(per.kcal * factor),
 		protein: scaled(per.protein),
 		carbs: scaled(per.carbs),

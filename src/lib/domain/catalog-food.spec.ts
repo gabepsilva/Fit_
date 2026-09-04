@@ -155,6 +155,38 @@ describe('isCatalogFoodPayload', () => {
 			false
 		);
 	});
+
+	it('accepts a row carrying household measures, and one carrying none', () => {
+		expect(isCatalogFoodPayload({ ...CEREAL, portions: [{ unit: 'cup', grams: 49 }] })).toBe(true);
+		expect(isCatalogFoodPayload({ ...CEREAL, portions: [] })).toBe(true);
+		expect(isCatalogFoodPayload(CEREAL)).toBe(true);
+	});
+
+	it.each([
+		['a unit no client can convert', [{ unit: 'handful', grams: 49 }]],
+		['a unit that is not text', [{ unit: 4, grams: 49 }]],
+		// `["cup"]` is a JSON value whose property key is "cup": without the text
+		// check the table lookup accepts it and the client scales by a list.
+		['a unit wrapped in a list', [{ unit: ['cup'], grams: 49 }]],
+		['a weight that is not a number', [{ unit: 'cup', grams: '49' }]],
+		['a measure that is not a pair of columns', ['1 cup']],
+		['a list that is not a list', { cup: 49 }],
+		[
+			'one bad measure among good ones',
+			[
+				{ unit: 'cup', grams: 49 },
+				{ unit: 'jar', grams: 400 }
+			]
+		]
+	])('rejects household measures carrying %s', (_reason, portions) => {
+		expect(isCatalogFoodPayload({ ...CEREAL, portions })).toBe(false);
+	});
+
+	it('rejects an inherited property name where a unit belongs', () => {
+		expect(isCatalogFoodPayload({ ...CEREAL, portions: [{ unit: 'toString', grams: 49 }] })).toBe(
+			false
+		);
+	});
 });
 
 describe('catalogFoodToFood', () => {
@@ -171,6 +203,18 @@ describe('catalogFoodToFood', () => {
 		const food = catalogFoodToFood(CEREAL);
 		expect(food.servingLabel).toBe('3/4 cup');
 		expect(food.grams).toBe(37);
+	});
+
+	it('carries the household measures the catalog named', () => {
+		const portions = [{ unit: 'cup' as const, grams: 49 }];
+		expect(catalogFoodToFood({ ...CEREAL, portions }).portions).toEqual(portions);
+	});
+
+	it('names no measures at all rather than an empty list of them', () => {
+		// `undefined` is what every bundled food says, so a catalog food the
+		// catalog gave no measure for reads the same as one that never could.
+		expect(catalogFoodToFood(CEREAL).portions).toBeUndefined();
+		expect(catalogFoodToFood({ ...CEREAL, portions: [] }).portions).toBeUndefined();
 	});
 
 	it('scales the micronutrients the catalog carries', () => {

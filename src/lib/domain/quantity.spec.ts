@@ -115,9 +115,52 @@ describe('resolveQuantity', () => {
 		});
 	});
 
-	it('refuses to turn a volume into servings, and says which quantity it declined', () => {
+	it('refuses to turn a volume into servings when the food names none of it', () => {
 		const cups = spec(2, 'cups');
 		expect(resolveQuantity(cups, serving(244))).toEqual({ servings: 1, declined: cups });
+	});
+
+	it('reads a volume off the food’s own portion row for that unit', () => {
+		// 13.5 g in a tablespoon of oil against a 14 g serving: 27 g is 1.93 of one.
+		const oil = {
+			grams: 14,
+			servingLabel: '1 tbsp',
+			portions: [{ unit: 'tbsp' as const, grams: 13.5 }]
+		};
+		expect(resolveQuantity(spec(2, 'tbsp'), oil)).toEqual({ servings: 1.93, declined: null });
+	});
+
+	it('reads a volume off the food’s own serving label when no portion row names the unit', () => {
+		// Issue #94: a serving is one cup, so two cups is two servings.
+		const milk = { grams: 244, servingLabel: '1 cup' };
+		expect(resolveQuantity(spec(2, 'cups'), milk)).toEqual({ servings: 2, declined: null });
+		expect(resolveQuantity(spec(0.5, 'cup'), milk)).toEqual({ servings: 0.5, declined: null });
+	});
+
+	it('scales a volume against a serving the label counts differently', () => {
+		// A serving is two tablespoons of peanut butter, so one is half of it.
+		const peanutButter = { grams: 32, servingLabel: '2 tbsp' };
+		expect(resolveQuantity(spec(1, 'tbsp'), peanutButter)).toEqual({
+			servings: 0.5,
+			declined: null
+		});
+	});
+
+	it.each([
+		// A label that does not state a volume outright is not read for one.
+		['1/2 cup dry', 40, 'cups'],
+		['170 g cup', 170, 'cups'],
+		['1 oz (23 nuts)', 28, 'cups'],
+		['1 bottle (414 ml)', 414, 'ml'],
+		// The unit typed is not the unit the label names.
+		['1 cup', 244, 'tbsp'],
+		['1 tbsp', 21, 'tsp']
+	])('declines %s against a food whose serving is "%s"', (servingLabel, grams, unit) => {
+		const quantity = spec(2, unit);
+		expect(resolveQuantity(quantity, { grams, servingLabel })).toEqual({
+			servings: 1,
+			declined: quantity
+		});
 	});
 
 	it.each([
