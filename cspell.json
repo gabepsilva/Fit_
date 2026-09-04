@@ -101,6 +101,7 @@
 		"onplay",
 		"onremove",
 		"onretry",
+		"onsearch",
 		"onstep",
 		"ontype",
 		"opencode",

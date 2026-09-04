@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import { catalogFoodToFood } from '$lib/domain/catalog-food';
 import { FOOD_BY_ID } from '$lib/domain/foods';
 import type { QuantifiedItem } from '$lib/domain/quantity';
 import ProposalRow from './ProposalRow.svelte';
@@ -15,6 +16,36 @@ const matched: QuantifiedItem = {
 };
 
 const unmatched: QuantifiedItem = { ...matched, foodId: null, name: 'gruel', confidence: 0 };
+
+/** A scanned food from the server catalog: real, but not in `FOOD_BY_ID`. */
+const scanned: QuantifiedItem = {
+	...matched,
+	foodId: 'catalog-4213',
+	name: 'HONEY NUT CHEERIOS',
+	servings: 1,
+	confidence: 1
+};
+
+const cereal = catalogFoodToFood({
+	id: 4213,
+	name: 'HONEY NUT CHEERIOS',
+	brand: 'GENERAL MILLS',
+	kind: 'branded',
+	category: 'Breakfast Cereals',
+	barcode: '00016000275287',
+	license: 'PDDL-1.0',
+	serving: { label: '3/4 cup', grams: 37 },
+	per100g: {
+		kcal: 375,
+		protein: 8.1,
+		fat: 4.5,
+		carbs: 78.4,
+		sugar: 24.3,
+		fiber: 8.1,
+		sodium: 500,
+		saturatedFat: 0.7
+	}
+});
 
 const handlers = {
 	onmatch: vi.fn(),
@@ -125,5 +156,28 @@ describe('ProposalRow', () => {
 		});
 		await page.getByRole('button', { name: /Remove/ }).click();
 		expect(onremove).toHaveBeenCalled();
+	});
+
+	it('shows the serving of a resolved food that is not in the bundled catalog', async () => {
+		await render(ProposalRow, {
+			props: { item: scanned, step: 0.5, matching: false, resolved: cereal, ...handlers }
+		});
+		await expect.element(page.getByText('3/4 cup')).toBeInTheDocument();
+	});
+
+	it('does not ask for a catalog match for a food that was already resolved', async () => {
+		await render(ProposalRow, {
+			props: { item: scanned, step: 0.5, matching: false, resolved: cereal, ...handlers }
+		});
+		expect(document.body.textContent).not.toContain('Match to catalog');
+	});
+
+	it('still asks for a match when no food was resolved', async () => {
+		await render(ProposalRow, {
+			props: { item: scanned, step: 0.5, matching: false, ...handlers }
+		});
+		await expect
+			.element(page.getByRole('button', { name: 'Match to catalog' }))
+			.toBeInTheDocument();
 	});
 });

@@ -7,8 +7,8 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import { toast } from 'svelte-sonner';
-	import { FOOD_BY_BARCODE, FOOD_BY_ID } from '$lib/domain/foods';
-	import { logFromFood } from '$lib/domain/log-entry';
+	import { FOOD_BY_ID } from '$lib/domain/foods';
+	import { logFromCatalogFood, logFromFood } from '$lib/domain/log-entry';
 	import { guessMeal, hydrateProposal, parseLocalText } from '$lib/domain/parse-text';
 	import { defaultServings, servingStep } from '$lib/domain/profile';
 	import { matchToFood, type QuantifiedItem } from '$lib/domain/quantity';
@@ -21,6 +21,7 @@
 	import Sheet from '$lib/ui/Sheet.svelte';
 	import Textarea from '$lib/ui/Textarea.svelte';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
+	import BarcodeScan from './BarcodeScan.svelte';
 	import FoodSearch from './FoodSearch.svelte';
 	import PhotoCapture from './PhotoCapture.svelte';
 	import ProposalRow from './ProposalRow.svelte';
@@ -41,6 +42,12 @@
 	let proposals = $state<QuantifiedItem[]>([]);
 	let matchIndex = $state<number | null>(null);
 	let dictation: Dictation | null = null;
+	/**
+	 * Foods a scan found in the server catalog, by the id `propose` put on the
+	 * proposal. They are not in `FOOD_BY_ID` and never will be, so `commit` has
+	 * to resolve them from here or it would drop what the person just scanned.
+	 */
+	let scanned = $state<Record<string, Food>>({});
 
 	const step = $derived(servingStep(tend.profile));
 	const servings = $derived(defaultServings(tend.profile));
@@ -50,6 +57,7 @@
 		text = '';
 		matchIndex = null;
 		listening = false;
+		scanned = {};
 		logUi.tab = 'type';
 	}
 
@@ -109,32 +117,28 @@
 		listening = true;
 	}
 
-	function scanBarcode(raw: string) {
-		const food = FOOD_BY_BARCODE[raw.replace(/\s/g, '')];
-		if (!food) {
-			toast('No catalog match for that barcode yet.');
-			return;
-		}
-		propose(food, 0.99);
+	function scannedFood(food: Food) {
+		// A bundled food keeps its own id; a catalog one is remembered here.
+		if (!FOOD_BY_ID[food.id]) scanned = { ...scanned, [food.id]: food };
+		propose(food, 1);
 	}
 
 	function commit() {
 		const date = todayISO();
 		// Drop unmatched proposals: with no catalog food there is no nutrition to log.
-		const items = proposals.flatMap((p) =>
-			p.foodId && FOOD_BY_ID[p.foodId]
-				? [
-						logFromFood({
-							foodId: p.foodId,
-							servings: p.servings,
-							meal: p.meal,
-							date,
-							source: 'text',
-							note: p.note
-						})
-					]
-				: []
-		);
+		const items = proposals.flatMap((p) => {
+			if (!p.foodId) return [];
+			const context = {
+				servings: p.servings,
+				meal: p.meal,
+				date,
+				source: 'text' as const,
+				note: p.note
+			};
+			if (FOOD_BY_ID[p.foodId]) return [logFromFood({ foodId: p.foodId, ...context })];
+			const fromCatalog = scanned[p.foodId];
+			return fromCatalog ? [logFromCatalogFood(fromCatalog, context)] : [];
+		});
 		if (!items.length) {
 			toast('Match each item to a catalog food first.');
 			return;
@@ -213,13 +217,7 @@
 				</Button>
 			</div>
 		{:else if logUi.tab === 'scan'}
-			<div class="bg-background flex flex-col items-center gap-3 rounded-3xl px-4 py-8 text-center">
-				<ScanBarcode class="text-primary size-8" />
-				<p class="text-muted-foreground max-w-xs text-sm">
-					Packaged foods with a barcode. Type the digits into Search, or use the demo scan.
-				</p>
-				<Button onclick={() => scanBarcode('602652171032')}>Demo scan</Button>
-			</div>
+			<BarcodeScan onpick={scannedFood} onsearch={() => (logUi.tab = 'search')} />
 		{:else}
 			<FoodSearch onpick={(food: Food) => propose(food, 1)} />
 		{/if}
@@ -236,6 +234,7 @@
 							item={p}
 							{step}
 							matching={matchIndex === i}
+							resolved={p.foodId ? scanned[p.foodId] : undefined}
 							onmatch={() => (matchIndex = matchIndex === i ? null : i)}
 							onpickmatch={(food: Food) => {
 								proposals = proposals.map((x, idx) => (idx === i ? matchToFood(x, food) : x));

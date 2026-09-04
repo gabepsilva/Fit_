@@ -24,6 +24,7 @@
 export const DOM_FREE_CLIENT_SPECS = [
 	'src/lib/auth/api.svelte.spec.ts',
 	'src/lib/auth/wording.svelte.spec.ts',
+	'src/lib/catalog/barcode-lookup.svelte.spec.ts',
 	'src/lib/components/auth/auth-routes.svelte.spec.ts',
 	'src/lib/components/exercise/plan-options.svelte.spec.ts',
 	'src/lib/components/exercise/routine-tone.svelte.spec.ts',
@@ -31,6 +32,7 @@ export const DOM_FREE_CLIENT_SPECS = [
 	'src/lib/state/session.svelte.spec.ts',
 	'src/lib/state/sync.svelte.spec.ts',
 	'src/lib/state/tend.svelte.spec.ts',
+	'src/lib/ui/barcode-reader.svelte.spec.ts',
 	'src/lib/ui/cn.svelte.spec.ts',
 	'src/lib/ui/dictation.svelte.spec.ts',
 	'src/lib/ui/download.svelte.spec.ts'

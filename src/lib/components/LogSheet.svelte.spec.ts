@@ -8,6 +8,29 @@ import { tend } from '$lib/state/tend.svelte';
 import LogSheet from './LogSheet.svelte';
 
 const DEMO_BARCODE = '602652171032';
+const OFF_SHELF = '00016000275287';
+
+/** One catalog row in the shape `/api/foods/barcode` sends it. */
+const CEREAL = {
+	id: 4213,
+	name: 'HONEY NUT CHEERIOS',
+	brand: 'GENERAL MILLS',
+	kind: 'branded',
+	category: 'Breakfast Cereals',
+	barcode: '00016000275287',
+	license: 'PDDL-1.0',
+	serving: { label: '3/4 cup', grams: 37 },
+	per100g: {
+		kcal: 375,
+		protein: 8.1,
+		fat: 4.5,
+		carbs: 78.4,
+		sugar: 24.3,
+		fiber: 8.1,
+		sodium: 500,
+		saturatedFat: 0.7
+	}
+};
 
 /** A stream with real frames: a canvas can produce one without a camera. */
 function fakeStream() {
@@ -132,13 +155,46 @@ describe('LogSheet', () => {
 		await expect.element(page.getByRole('button', { name: 'Start listening' })).toBeInTheDocument();
 	});
 
-	it('proposes the catalog match for a scanned barcode', async () => {
+	it('proposes the bundled food a typed barcode names', async () => {
 		await openSheet();
 		await page.getByRole('button', { name: 'Scan' }).click();
-		await page.getByRole('button', { name: 'Demo scan' }).click();
+		await page.getByLabelText('Barcode digits').fill(DEMO_BARCODE);
+		await page.getByRole('button', { name: 'Look it up' }).click();
 		await expect
 			.element(page.getByText(FOOD_BY_BARCODE[DEMO_BARCODE]?.name ?? '').first())
 			.toBeInTheDocument();
+	});
+
+	it('no longer offers a hard-coded demo scan', async () => {
+		await openSheet();
+		await page.getByRole('button', { name: 'Scan' }).click();
+		await expect.element(page.getByLabelText('Barcode digits')).toBeInTheDocument();
+		expect(document.body.textContent).not.toContain('Demo scan');
+	});
+
+	it('logs a scanned food the server catalog knows and the bundled foods do not', async () => {
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+			Promise.resolve(
+				new Response(JSON.stringify({ barcode: OFF_SHELF, ambiguous: false, foods: [CEREAL] }), {
+					status: 200,
+					headers: { 'content-type': 'application/json' }
+				})
+			)
+		);
+		await openSheet();
+		await page.getByRole('button', { name: 'Scan' }).click();
+		await page.getByLabelText('Barcode digits').fill(OFF_SHELF);
+		await page.getByRole('button', { name: 'Look it up' }).click();
+		await expect.element(page.getByText('HONEY NUT CHEERIOS').first()).toBeInTheDocument();
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add).toHaveBeenCalledOnce();
+		// The catalog's own id is not stored: the entry carries its own macros.
+		expect(add.mock.calls[0]?.[0]?.[0]).toMatchObject({
+			foodId: null,
+			name: 'HONEY NUT CHEERIOS',
+			kcal: 139
+		});
 	});
 
 	it('offers the catalog on the search tab', async () => {
