@@ -71,6 +71,20 @@ describe('searchFoods', () => {
 		expect(ranked.indexOf('Milk, dried')).toBeGreaterThan(ranked.indexOf('Milk, whole'));
 	});
 
+	it('answers "chicken" with chicken rather than with feet and giblets', () => {
+		expect(names('chicken')).toEqual([
+			'Chicken',
+			'Chicken, ground, raw',
+			'Chicken, stewing, meat only, raw',
+			'Chicken, feet, boiled',
+			'Chicken, stewing, giblets, raw'
+		]);
+	});
+
+	it('still answers "chicken feet" with chicken feet: this is a demotion, not a filter', () => {
+		expect(names('chicken feet')).toEqual(['Chicken, feet, boiled']);
+	});
+
 	it('matches a plural catalog name from a singular query', () => {
 		expect(names('banana')).toEqual(['Bananas, raw', 'Banana, baked', 'BANANA BREAD MIX']);
 	});

@@ -55,6 +55,7 @@
 		"test:mutation:fixture:full": "bun scripts/quality/mutation-verdict-check.ts full reports/mutation/fixture/scope.json reports/mutation/fixture/mutation.json reports/mutation/fixture/verdict.json",
 		"report:mutation-debt": "bun scripts/quality/mutation-debt.ts",
 		"test:gates": "bun scripts/quality/self-test.ts",
+		"search:eval": "node scripts/eval/search-eval.ts",
 		"test:e2e": "playwright test",
 		"test:e2e:all": "E2E_ALL_BROWSERS=1 playwright test",
 		"test:e2e:security": "bun scripts/security/zap.ts",

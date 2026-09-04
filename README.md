@@ -191,6 +191,24 @@ fast and makes a mobile viewport the default thing under test.
 WebKit engine iOS uses) plus desktop Chrome and Firefox as a responsive-regression backstop.
 CI runs the full matrix.
 
+### Search relevance
+
+Ranking is judged by measurement rather than by argument. `data/eval/search-queries.json`
+holds forty queries in three groups — ones the ranking answers badly, ones it answers well
+and must keep answering well, and ones that ask for offal on purpose and must still find it
+— each with the names a person means and the names that must not reach the top five.
+
+```bash
+FIT_CATALOG_PATH=… bun run search:eval -- --label before
+FIT_CATALOG_PATH=… bun run search:eval -- --label after --baseline reports/eval/search-before.json
+```
+
+It reports precision@3, mean reciprocal rank, forbidden names in the top five, and cold and
+warm latency, and writes `reports/eval/search-<label>.json`. It is deliberately not a gate:
+it needs the 1.4 GB catalog, which is neither in the repository nor in CI, and its verdict
+is a judgement about food rather than a threshold. Run it either side of a ranking change
+and put the table in the pull request.
+
 Generated reports are written under `coverage/`, `playwright-report/`, and `reports/`. They are
 ignored by Git and uploaded by GitHub Actions.
 

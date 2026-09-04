@@ -1,3 +1,9 @@
+// The extension is explicit because `scripts/eval/search-eval.ts` imports this
+// module under plain Node, which does not resolve a specifier that omits its
+// extension the way Vite does. `rewriteRelativeImportExtensions` rewrites it on the way
+// out, so the built server sees `./byproducts.js`.
+import { byproductSql, namePartsSql } from './byproducts.ts';
+
 /**
  * How a catalog row is scored against a query.
  *
@@ -51,9 +57,11 @@ const RANK_WEIGHTS = {
 	 */
 	quality: 0.5,
 	/**
-	 * Subtracted. A preserved or substitute form is a real food but is almost
-	 * never what a bare food word means, and those rows crowd out the plain one
-	 * because their names are short.
+	 * Subtracted. A preserved or substitute form, or a part of an animal rather
+	 * than the animal, is a real food but is almost never what a bare food word
+	 * means, and those rows crowd out the plain one because their names are
+	 * short. One penalty rather than two: a row that is both dried and offal is
+	 * still only one wrong answer.
 	 */
 	processedForm: 1
 } as const;
@@ -98,9 +106,16 @@ function singularSql(column: string): string {
 				then substr(${column}, 1, length(${column}) - 1) else ${column} end`;
 }
 
-function processedFormSql(column: string): string {
-	const tests = PROCESSED_FORM_WORDS.map((word) => `instr(lower(${column}), '${word}') > 0`);
-	return `case when ${tests.join(' or ')} then 1.0 else 0.0 end`;
+/**
+ * The demotion, over both lists.
+ *
+ * A form word is matched anywhere in the name, because "powder" and "powdered"
+ * are the same claim about the food. A part is matched as a whole name segment
+ * against `parts`, for the reason `byproducts.ts` gives.
+ */
+function processedFormSql(column: string, parts: string): string {
+	const forms = PROCESSED_FORM_WORDS.map((word) => `instr(lower(${column}), '${word}') > 0`);
+	return `case when ${forms.join(' or ')} or ${byproductSql(parts)} then 1.0 else 0.0 end`;
 }
 
 /**
@@ -144,8 +159,9 @@ function nameTermsSql(): string {
  * terms already say directly.
  *
  * Two passes. The first scores every matched row on terms that cost a
- * comparison each. The second applies the processed-form penalty and collapses
- * duplicate names, over 500 rows rather than all of them: without that pass
+ * comparison each. The second splits each name into its comma-separated parts,
+ * applies the processed-form and byproduct penalty and collapses duplicate
+ * names, over 500 rows rather than all of them: without that pass
  * "milk" answers with five dairies' rows all named "MILK" and a person sees one
  * food five times.
  */
@@ -183,13 +199,21 @@ shortlist as (
 	order by score desc, row_quality desc
 	limit ${SHORTLIST}
 ),
+-- MATERIALIZED, and measured: the byproduct test names this CTE's column 33
+-- times, and without the hint SQLite flattens the CTE and rebuilds the parts
+-- string once per mention. That cost 21 ms a query on the live catalog, against
+-- 5 ms with the hint.
+segmented as materialized (
+	select food_id, name, row_quality, score, ${namePartsSql('name')} as name_parts
+	from shortlist
+),
 ranked as (
 	select
 		food_id,
-		score - ${w.processedForm} * ${processedFormSql('name')} as score,
+		score - ${w.processedForm} * ${processedFormSql('name', 'name_parts')} as score,
 		${singularSql('lower(trim(name))')} as dedup_key,
 		row_quality
-	from shortlist
+	from segmented
 ),
 deduplicated as (
 	select

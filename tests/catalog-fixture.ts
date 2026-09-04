@@ -147,6 +147,60 @@ const FIXTURE_FOODS: FixtureRow[] = [
 		barcode: '00000000000103',
 		alias: null
 	},
+	// The live catalog answers "chicken" with chicken, ground chicken, then feet
+	// and two lots of giblets. These five rows carry the real quality and source
+	// counts of those rows, so the byproduct demotion is asserted against the
+	// numbers it has to overcome rather than against invented ones.
+	{
+		id: 13,
+		name: 'Chicken',
+		brand: null,
+		kind: 'generic',
+		quality: 88,
+		sources: 4,
+		barcode: null,
+		alias: null
+	},
+	{
+		id: 14,
+		name: 'Chicken, ground, raw',
+		brand: null,
+		kind: 'generic',
+		quality: 91,
+		sources: 121,
+		barcode: null,
+		alias: null
+	},
+	{
+		id: 15,
+		name: 'Chicken, feet, boiled',
+		brand: null,
+		kind: 'generic',
+		quality: 92,
+		sources: 2,
+		barcode: null,
+		alias: null
+	},
+	{
+		id: 16,
+		name: 'Chicken, stewing, giblets, raw',
+		brand: null,
+		kind: 'generic',
+		quality: 92,
+		sources: 2,
+		barcode: null,
+		alias: null
+	},
+	{
+		id: 17,
+		name: 'Chicken, stewing, meat only, raw',
+		brand: null,
+		kind: 'generic',
+		quality: 92,
+		sources: 2,
+		barcode: null,
+		alias: null
+	},
 	// Found only through its alias, which is a separate FTS column.
 	{
 		id: 12,
