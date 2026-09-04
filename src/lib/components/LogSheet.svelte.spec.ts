@@ -165,6 +165,17 @@ describe('LogSheet', () => {
 			.toHaveAttribute('aria-pressed', 'true');
 	});
 
+	it('selects a meal chip in the same tone as every other selected pill', async () => {
+		// Regression: this chip used tone="inverse" (black) while every other
+		// selected pill in the app (Metric, household member, Search tab) uses the
+		// default dark-green primary tone.
+		await openSheet();
+		await page.getByRole('button', { name: 'dinner' }).click();
+		const chip = page.getByRole('button', { name: 'dinner' });
+		await expect.element(chip).toHaveClass(/bg-primary/);
+		await expect.element(chip).not.toHaveClass(/bg-foreground/);
+	});
+
 	it('commits proposals to the log', async () => {
 		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
 		await openSheet();

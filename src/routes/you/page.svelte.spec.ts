@@ -53,3 +53,20 @@ describe('the Preferences section', () => {
 		expect(tend.state.restSeconds).toBe(105);
 	});
 });
+
+describe('the Privacy section', () => {
+	it('does not claim logs stay only on the device now that they sync', async () => {
+		// Regression: this used to say "Nothing is sent anywhere — there is no
+		// server yet", which became false once /api/state started syncing logs.
+		await render(YouPage);
+		const privacy = document.body.querySelector('ul');
+		const text = privacy?.textContent ?? '';
+		expect(text).not.toMatch(/nothing is sent anywhere/i);
+		expect(text).not.toMatch(/no server/i);
+	});
+
+	it('says the logs sync to the server for the account', async () => {
+		await render(YouPage);
+		await expect.element(page.getByText(/sync to the server/i)).toBeInTheDocument();
+	});
+});

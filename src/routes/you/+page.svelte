@@ -247,8 +247,11 @@
 		<section class="bg-card rounded-3xl p-4 shadow-border">
 			<h2 class="font-display text-xl tracking-tight">Privacy</h2>
 			<ul class="text-muted-foreground mt-3 flex flex-col gap-2 text-sm">
-				<li>No ad SDKs. No data brokers. No account required.</li>
-				<li>Logs live in this browser. Nothing is sent anywhere — there is no server yet.</li>
+				<li>No ad SDKs. No data brokers.</li>
+				<li>
+					Logs sync to the server for your account, so they follow you across every device you sign
+					in on.
+				</li>
 				<li>
 					USDA entries stay public-domain; Open Food Facts entries stay ODbL, never mixed inside one
 					row.
