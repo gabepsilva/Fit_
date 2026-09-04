@@ -8,6 +8,7 @@ export const EXERCISE_LIBRARY: readonly LibraryExercise[] = [
 	{ name: 'Dumbbell Fly', group: 'Chest' },
 	{ name: 'Pec Deck', group: 'Chest' },
 	{ name: 'Cable Cross-over', group: 'Chest' },
+	{ name: 'Push-up', group: 'Chest' },
 	{ name: 'Lat Pulldown', group: 'Back' },
 	{ name: 'Seated Row', group: 'Back' },
 	{ name: 'Pull-up', group: 'Back' },
@@ -65,6 +66,11 @@ export const FORM_CUES: Readonly<Record<string, readonly string[]>> = {
 		'Upper arms locked to the ribs.',
 		'Extend fully, then release slowly.',
 		'Wrists neutral, no swinging from the hips.'
+	],
+	'Push-up': [
+		'Hands under shoulders, body one straight line head to heel.',
+		'Elbows track back at about 45°, not flared to the sides.',
+		'Chest to just above the floor, then press up without sagging the hips.'
 	]
 };
 
