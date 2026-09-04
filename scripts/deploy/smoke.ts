@@ -15,6 +15,7 @@ import {
 	shellQuote
 } from './config';
 import { removeSmokeAccountScript, removedAccounts, smokeUsername } from './smoke-account';
+import { REVALIDATE } from '../../src/lib/server/cache-policy';
 import { capture, projectRoot } from '../security/shared';
 
 /**
@@ -229,6 +230,31 @@ async function checkSignInPage(client: Client): Promise<void> {
 	);
 }
 
+/**
+ * That this deploy will reach the phones already running the last one.
+ *
+ * The header is set in `hooks.server.ts` and unit-tested there, and the
+ * end-to-end run asserts it against a built server. Neither of those sees
+ * Cloudflare, and Cloudflare is the half that was never in evidence: the zone
+ * carries a four-hour Browser Cache TTL, which it applies to any response it
+ * caches whose own lifetime is shorter. A page is `DYNAMIC` today so the header
+ * should arrive untouched — but "should" is what left a phone on a morning
+ * build for a whole day, and this check is where the edge either honours the
+ * origin or the deploy fails saying it did not.
+ *
+ * Through `--tunnel` this asserts the origin instead, which is the same
+ * assertion with Cloudflare taken out of it.
+ */
+async function checkShellRevalidates(client: Client): Promise<void> {
+	const response = await client.get('/');
+	const policy = response.headers.get('cache-control');
+	check(
+		'the page shell must be revalidated before it is reused',
+		policy === REVALIDATE,
+		`GET / -> cache-control: ${policy ?? '(none)'}`
+	);
+}
+
 async function checkUnauthenticated(client: Client): Promise<void> {
 	const response = await client.get('/api/sessions/current');
 	const body = await jsonOf(response);
@@ -346,6 +372,7 @@ async function runChecks(options: Options): Promise<void> {
 	const client = createClient(options);
 	const credentials = throwawayCredentials();
 	await checkSignInPage(client);
+	await checkShellRevalidates(client);
 	await checkUnauthenticated(client);
 	await checkRoundTrip(client, credentials);
 	await checkRelease(options.commit);
