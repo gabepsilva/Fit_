@@ -62,7 +62,12 @@ const testProjects = [
 			name: 'server',
 			environment: 'node',
 			...(process.env.FIT_MUTATION_RUN ? { pool: 'threads' as const } : {}),
-			include: ['src/**/*.{test,spec}.{js,ts}', 'scripts/**/*.{test,spec}.ts'],
+			include: [
+				'src/**/*.{test,spec}.{js,ts}',
+				'scripts/**/*.{test,spec}.ts',
+				// The end-to-end harness lives here; its pure parts are unit-tested like any other.
+				'tests/**/*.spec.ts'
+			],
 			exclude: ['src/**/*.svelte.{test,spec}.{js,ts}']
 		}
 	}

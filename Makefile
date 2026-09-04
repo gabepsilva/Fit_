@@ -62,12 +62,15 @@ ci-unit: ; @$(GATE) ci --job unit
 ci-security: ; @$(GATE) ci --job security
 ci-mutation-security: ; @$(GATE) ci --job mutation-security
 
-# One lane, because all three contend for the same two things: `build/` and
-# port 4173. The self-test belongs here too — one of its fixtures runs the
-# end-to-end gate, and `reuseExistingServer` in playwright.config.ts means a
-# Playwright already listening on 4173 gets reused. The fixture would then prove
-# its point against the *other* lane's app, pass when it should fail, and report
-# the e2e gate as broken. Measured, after it happened.
+# One lane, because all three contend for the same two things: `build/` and the
+# preview port block that starts at 4173 — one port per Playwright worker. The
+# self-test belongs here too, because one of its fixtures runs the end-to-end
+# gate. That used to be a silent wrong answer: `reuseExistingServer` meant a
+# Playwright already listening on 4173 was reused, so the fixture proved its
+# point against the *other* lane's app, passed when it should have failed, and
+# reported the e2e gate as broken. Measured, after it happened. The servers are
+# per worker now and every one of them is `--strictPort`, so a second lane on
+# the same block fails to start instead — loud, but still a failure.
 ci-browser:
 	@$(GATE) ci --job build
 	@$(GATE) ci --job e2e

@@ -1,12 +1,7 @@
-import { expect, test } from '@playwright/test';
-import {
-	clearRegistrationThrottle,
-	openLogSheetAndType,
-	signInThroughApi
-} from '../../tests/e2e-support';
+import { expect } from '@playwright/test';
+import { test } from '../../tests/preview-server';
+import { openLogSheetAndType, signInThroughApi } from '../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
-
-test.beforeEach(clearRegistrationThrottle);
 
 test.describe('arriving without an account', () => {
 	test('opens on the sign-in form rather than on the app', async ({ page }) => {

@@ -80,6 +80,16 @@ export default defineConfig(
 		}
 	},
 	{
+		// Playwright derives a fixture's dependencies from the destructuring
+		// pattern of its first parameter, so a fixture that depends on nothing is
+		// written `async ({}, use)`. That is the runner's interface, not a
+		// mistake, and `no-empty-pattern` has an option for exactly it.
+		files: ['tests/preview-server.ts'],
+		rules: {
+			'no-empty-pattern': ['error', { allowObjectPatternsAsParameters: true }]
+		}
+	},
+	{
 		files: ['**/*.e2e.{js,ts}'],
 		...playwright.configs['flat/recommended'],
 		rules: {

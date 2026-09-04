@@ -1,10 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
-import {
-	clearRegistrationThrottle,
-	openEmptyJournal,
-	openLogSheet,
-	signInThroughApi
-} from '../../tests/e2e-support';
+import { expect, type Page } from '@playwright/test';
+import { test } from '../../tests/preview-server';
+import { openEmptyJournal, openLogSheet, signInThroughApi } from '../../tests/e2e-support';
 
 /**
  * PR #90 replaced the Scan tab's hard-coded demo button with a real reader.
@@ -55,8 +51,6 @@ function catalogFood(id: number, name: string) {
 		}
 	};
 }
-
-test.beforeEach(clearRegistrationThrottle);
 
 async function openScanTab(page: Page) {
 	await openLogSheet(page);

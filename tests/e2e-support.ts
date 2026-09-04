@@ -2,19 +2,21 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, type Page } from '@playwright/test';
-import { E2E_DATABASE_PATH } from '../playwright.config';
 
 /**
- * The suite makes exactly ten registration attempts (the throttle limit) per address.
- * Clears only the `registration` scope — per-username and per-address scopes are left intact
- * so intentional sign-in failures still count against the throttle.
+ * Reset one worker's registration allowance: the suite makes more than the ten attempts an
+ * hour the policy allows from one address, and every worker registers from 127.0.0.1.
+ *
+ * `databasePath` is the calling worker's own database, so this touches nothing another
+ * worker can see. Clears only the `registration` scope — per-username and per-address scopes
+ * are left intact so intentional sign-in failures still count against the throttle.
  */
-export function clearRegistrationThrottle(): void {
+export function clearRegistrationThrottle(databasePath: string): void {
 	// `data/runtime` is gitignored and created lazily by the server; if absent, nothing has been counted.
-	if (!existsSync(E2E_DATABASE_PATH)) return;
-	const database = new DatabaseSync(E2E_DATABASE_PATH);
+	if (!existsSync(databasePath)) return;
+	const database = new DatabaseSync(databasePath);
 	try {
-		// Parallel workers and the preview server share this file; avoids SQLITE_BUSY flakes.
+		// The worker and its preview server share this file; avoids SQLITE_BUSY flakes.
 		database.exec('pragma busy_timeout = 5000');
 		// Schema is created lazily by the server; no table means nothing was counted.
 		const created = database

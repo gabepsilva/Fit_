@@ -3,6 +3,9 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import process from 'node:process';
 import { ciJobs } from './gates';
+import { e2eProjects } from './e2e-projects';
+import { fixtures } from './fixtures';
+import { groupRequirements, selfTestGroupNames } from './self-test-groups';
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
 const [workflow, makefile] = await Promise.all([
@@ -49,6 +52,33 @@ function neededJobs(job: string): Set<string> {
 	);
 }
 
+/**
+ * Sharded jobs are the third way this contract can break. A declared job can be
+ * present and protected while the matrix that fans it out has quietly lost an
+ * entry -- a browser project nobody runs any more, or a self-test group whose
+ * fixtures stopped proving anything -- and the check would still be green,
+ * because the job name and the gate command are both still there.
+ */
+function matrixValues(job: string, key: string): Set<string> {
+	return new Set(
+		[...job.matchAll(new RegExp(`^ {10,}(?:- )?${key}:\\s*([a-z][a-z0-9-]*)\\s*$`, 'gm'))].map(
+			(match) => match[1] ?? ''
+		)
+	);
+}
+
+/** The `docker:`/`browser:` flags declared beside one matrix entry's `group:`. */
+function selfTestMatrixFlags(job: string, group: string): { docker: boolean; browser: boolean } {
+	const entry = new RegExp(`^ {10}- group: ${group}\\s*$\\n((?: {12}\\w+: .*\\s*$\\n)*)`, 'm').exec(
+		job
+	);
+	const body = entry?.[1] ?? '';
+	return {
+		docker: /^ {12}docker: true\s*$/m.test(body),
+		browser: /^ {12}browser: true\s*$/m.test(body)
+	};
+}
+
 const expected = Object.keys(ciJobs).sort();
 const workflowJobs = referencedJobs(workflow);
 const makeJobs = referencedJobs(makefile);
@@ -61,6 +91,19 @@ const protectedJobs = neededJobs(workflowSections.get('all-green') ?? '');
 const missingWorkflow = expected.filter((job) => !workflowJobs.has(job));
 const missingMake = expected.filter((job) => !makeJobs.has(job));
 const missingProtection = hostedGateJobs.filter((job) => !protectedJobs.has(job));
+const e2eJob = workflowSections.get('e2e') ?? '';
+const runProjects = matrixValues(e2eJob, 'project');
+const missingProjects = Object.keys(e2eProjects).filter((project) => !runProjects.has(project));
+const selfTestJob = workflowSections.get('self-test') ?? '';
+const runGroups = matrixValues(selfTestJob, 'group');
+const missingGroups = selfTestGroupNames.filter((group) => !runGroups.has(group));
+const wronglySetUpGroups = selfTestGroupNames
+	.filter((group) => runGroups.has(group))
+	.filter((group) => {
+		const declared = selfTestMatrixFlags(selfTestJob, group);
+		const needed = groupRequirements(fixtures, group);
+		return declared.docker !== needed.docker || declared.browser !== needed.browser;
+	});
 const failures = [
 	...(missingWorkflow.length === 0
 		? []
@@ -70,12 +113,23 @@ const failures = [
 		: [`Makefile does not invoke declared jobs: ${missingMake.join(', ')}`]),
 	...(missingProtection.length === 0
 		? []
-		: [`all-green.needs does not protect hosted gate jobs: ${missingProtection.join(', ')}`])
+		: [`all-green.needs does not protect hosted gate jobs: ${missingProtection.join(', ')}`]),
+	...(missingProjects.length === 0
+		? []
+		: [`CI workflow does not run every end-to-end project: ${missingProjects.join(', ')}`]),
+	...(missingGroups.length === 0
+		? []
+		: [`CI workflow does not run every gate self-test group: ${missingGroups.join(', ')}`]),
+	...(wronglySetUpGroups.length === 0
+		? []
+		: [
+				`Gate self-test matrix declares the wrong setup for: ${wronglySetUpGroups.join(', ')}. Compare scripts/quality/self-test-groups.ts.`
+			])
 ];
 
 if (failures.length === 0) {
 	console.log(
-		`CI contract: ${expected.length} declared jobs are wired locally and ${hostedGateJobs.length} hosted jobs are protected by all-green.`
+		`CI contract: ${expected.length} declared jobs are wired locally, ${hostedGateJobs.length} hosted jobs are protected by all-green, and the matrices run ${runProjects.size} end-to-end projects and ${runGroups.size} self-test groups.`
 	);
 } else {
 	for (const failure of failures) console.error(failure);

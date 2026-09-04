@@ -1,8 +1,7 @@
-import { expect, test, type Page } from '@playwright/test';
-import { clearRegistrationThrottle, signInThroughApi } from '../../tests/e2e-support';
+import { expect, type Page } from '@playwright/test';
+import { test } from '../../tests/preview-server';
+import { signInThroughApi } from '../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
-
-test.beforeEach(clearRegistrationThrottle);
 
 /** Onboarding seeds meals but no training, so every run starts from an empty rotation. */
 async function onboard(page: Page, baseURL: string) {

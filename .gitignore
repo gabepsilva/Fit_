@@ -24,6 +24,8 @@ vite.config.ts.timestamp-*
 # Playwright
 test-results
 playwright-report
+blob-report
+all-blob-reports
 
 # Coverage
 coverage
