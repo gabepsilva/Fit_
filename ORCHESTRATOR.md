@@ -175,8 +175,11 @@ Agreed order:
 
 1. **Data persists per account and comes back after sign-in.** One JSON document per
    account on the server, versioned; the store loads it at sign-in and pushes after every
-   write; a stale device is told rather than allowed to overwrite. Device-local fields
-   (onboarded, active profile) are split out of the synced document first. Conflict
+   write; a stale device is told rather than allowed to overwrite. The whole
+   TendState document syncs, including onboarded and activeProfileId, because
+   with one account per household both are properties of the account rather
+   than the device; activeProfileId becomes device-local only when household
+   unparks. Conflict
    handling is versioned last-write-wins with a forced reload; merging is a later story.
 2. **A real food catalog from the server.** A read-only connection to the ETL database,
    search and barcode endpoints, the bundled list kept as the offline fallback.
