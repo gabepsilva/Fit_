@@ -22,6 +22,20 @@ and `server/`; `server` measures `domain/` and `server/`.
 
 ## Working rules
 
+**Gates: run `verify:fast` locally, let the hosted runners do the rest.** Before you push,
+run `bun scripts/quality/gate.ts verify:fast` — about twenty-five seconds, and it catches
+the formatting, lint, spelling and typecheck failures that account for most red builds.
+Then push and read the verdict from `gh pr checks`. Do not run the full `ci` tier locally
+just to be sure: it takes eight to eighteen minutes on one machine to produce the answer
+eleven parallel hosted jobs give in nine, and waiting on it is the single most wasteful
+thing an agent does. Run `gate.ts ci --job <name>` when you are iterating on one failing
+lane, and run things locally when they need this machine, such as the deploy scripts.
+
+**Never end your turn waiting on a gate.** Block on it in the same turn — a `bash` loop on
+the process or the report file, with a timeout — then read the result and finish the work.
+An agent that backgrounds a gate and returns "waiting" has to be woken repeatedly, costs
+tokens on every wake, and usually has to be taken over. Report a verdict, not a wait.
+
 - Run `bun run verify:fast` after each change; it needs no Docker and no browser.
 - Run `bun run verify` before declaring implementation work complete.
 - Run `bun run verify:deep` when changing user-facing behavior or reusable domain logic.

@@ -46,6 +46,27 @@ freely — `build`, `test:e2e` and `test:gates` all contend for `build/` and por
 `reuseExistingServer` in `playwright.config.ts` means a second Playwright would silently
 reuse the first one's server and prove nothing.
 
+**Where a tier runs is a cost decision, and the default is the hosted runners.** Measured
+2026-09-04: the hosted `ci` workflow finishes in about nine minutes across eleven parallel
+jobs, its critical path being the gate self-test at around 316s beside end-to-end at 276s,
+while the same suite run locally through `make ci` takes eight to eighteen minutes because
+one machine runs the lanes in sequence. Running both is paying twice for one answer, and
+the local half is the expensive one: an agent waiting on it is billing tokens to poll a
+process that a hosted runner is about to repeat for free.
+
+So the rule is: run `verify:fast` before pushing — it takes about twenty-five seconds and
+catches formatting, lint, spelling and typecheck, which is what actually fails most often —
+then push and let the hosted matrix run the full tier. Read the verdict from
+`gh pr checks`, not from a local report. Two exceptions stay local: the deploy scripts,
+which need the real machine, and tight iteration on one failing lane, where
+`gate.ts ci --job <name>` beats a nine-minute round trip.
+
+This changes where the gates run, never what they enforce. Every threshold, every lane and
+every fixture is unchanged, and a red hosted check blocks a merge exactly as a red local
+one did. The trade accepted deliberately is that a mutation or end-to-end failure is caught
+after the push rather than before it; since a local full run costs more wall clock than the
+hosted one, that costs no time, only the tidiness of never pushing red.
+
 `check:ci-contract` proves every declared local CI slice is hosted and every hosted gate job
 is listed in `all-green.needs`; a job outside that protected aggregator is not a merge gate.
 
