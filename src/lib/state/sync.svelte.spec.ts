@@ -983,6 +983,182 @@ describe('while a request is in the air', () => {
 	});
 });
 
+describe('when the next account signs in before the last answer lands', () => {
+	/**
+	 * The window `AccountMenu` opens: `flush()` has returned, the sign-out round
+	 * trip is still going, and a retry on `online` or `visibilitychange` has put
+	 * a request in the air that nothing cancels. On a shared device the next
+	 * person can be signed in before it answers.
+	 */
+	function handOver(sync: SyncStore): Promise<void> {
+		sync.forget();
+		return sync.start('h-2');
+	}
+
+	it('never takes one account’s document into the next account’s store', async () => {
+		const store = journal();
+		let reads = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method === 'PUT') return stored(8);
+			reads += 1;
+			if (reads === 1) {
+				await gate.promise;
+				return documentAnswer(7, remoteState('AccountA'));
+			}
+			return documentAnswer(0, null);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(reads).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(store.state.profiles).toEqual([]);
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+	});
+
+	it('never records the last account’s version against the next one', async () => {
+		const store = journal();
+		let reads = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method === 'PUT') return stored(8);
+			reads += 1;
+			if (reads === 1) {
+				await gate.promise;
+				return documentAnswer(7, remoteState('AccountA'));
+			}
+			return documentAnswer(0, null);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(reads).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(record()).toEqual({ householdId: 'h-2', version: 0, dirty: false });
+		expect(sync.version).toBe(0);
+	});
+
+	it('reads the next account’s own document rather than waiting on the last one’s', async () => {
+		const store = journal();
+		let reads = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method === 'PUT') return stored(8);
+			reads += 1;
+			if (reads === 1) {
+				await gate.promise;
+				return documentAnswer(7, remoteState('AccountA'));
+			}
+			return documentAnswer(3, remoteState('AccountB'));
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(reads).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(reads).toBe(2);
+		expect(store.state.profiles[0]?.name).toBe('AccountB');
+		expect(sync.version).toBe(3);
+	});
+
+	it('does not let the last account’s exchange close the one under way', async () => {
+		const store = journal();
+		let reads = 0;
+		const leaving = deferred();
+		const arriving = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method === 'PUT') return stored(1);
+			reads += 1;
+			if (reads === 1) {
+				await leaving.promise;
+				return documentAnswer(7, remoteState('AccountA'));
+			}
+			await arriving.promise;
+			return documentAnswer(0, null);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(reads).toBe(1));
+		const second = handOver(sync);
+		await vi.waitFor(() => expect(reads).toBe(2));
+		// The account that left finishes while the new one is still reading.
+		leaving.release();
+		await first;
+
+		// Something asks again in that moment; the read already in the air is
+		// the answer, not a reason to open a second one.
+		store.hydrate();
+		store.togglePantry('oats');
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(reads).toBe(2);
+
+		arriving.release();
+		await second;
+	});
+
+	it('never claims the version one account’s write created for the next one', async () => {
+		const store = journal();
+		let puts = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method !== 'PUT') return documentAnswer(0, null);
+			puts += 1;
+			if (puts === 1) {
+				await gate.promise;
+				return stored(9);
+			}
+			return stored(1);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(puts).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(record()).toEqual({ householdId: 'h-2', version: 0, dirty: false });
+		expect(sync.version).toBe(0);
+	});
+
+	it('never adopts a document one account’s write was refused with', async () => {
+		const store = journal();
+		let puts = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method !== 'PUT') return documentAnswer(0, null);
+			puts += 1;
+			if (puts === 1) {
+				await gate.promise;
+				return stale(6, remoteState('AccountA'));
+			}
+			return stored(1);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(puts).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(store.state.profiles).toEqual([]);
+		expect(announced).toEqual([]);
+		expect(record()).toEqual({ householdId: 'h-2', version: 0, dirty: false });
+	});
+});
+
 describe('the retry listeners', () => {
 	it('are bound once, however many times syncing starts', async () => {
 		const store = journal();

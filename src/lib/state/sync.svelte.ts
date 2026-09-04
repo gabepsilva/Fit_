@@ -63,6 +63,18 @@ type ReadOutcome = RemoteDocument | NoDocument;
 /** A write answers with a version too; `stale` says whose it is. */
 type WriteOutcome = ({ stale: boolean } & RemoteDocument) | NoDocument;
 
+/**
+ * What an adoption puts into the store, bundled rather than positional:
+ * `max-params` caps a function at four, and the household it belongs to is not
+ * an argument any of them can afford to lose.
+ */
+type Adoption = {
+	version: number;
+	body: Record<string, unknown>;
+	hadOwnWork: boolean;
+	householdId: string;
+};
+
 type Answer = { status: number; body: unknown };
 
 /**
@@ -182,7 +194,14 @@ export class SyncStore {
 	/** The household whose document has been read; `null` until a read lands. */
 	private pulledFor: string | null = null;
 
-	private inFlight: Promise<void> | null = null;
+	/**
+	 * The exchange under way and whose it is. Every request records the household
+	 * it was issued for, because "am I still signed in" is not the question an
+	 * answer has to survive: signing out and straight back in as somebody else
+	 * leaves a request in the air whose answer describes the previous account.
+	 */
+	private inFlight: { householdId: string; done: Promise<void> } | null = null;
+
 	private retryBound = false;
 
 	constructor(store: TendStore) {
@@ -214,7 +233,7 @@ export class SyncStore {
 		}
 		this.store.watch(() => this.changed());
 		this.bindRetries();
-		this.save();
+		this.save(householdId);
 		await this.schedule();
 	}
 
@@ -255,9 +274,10 @@ export class SyncStore {
 	 * device that has signed out stops counting what it writes as unsent.
 	 */
 	private changed(): void {
-		if (this.householdId === null) return;
+		const householdId = this.householdId;
+		if (householdId === null) return;
 		this.dirty = true;
-		this.save();
+		this.save(householdId);
 		void this.schedule();
 	}
 
@@ -278,19 +298,32 @@ export class SyncStore {
 	}
 
 	/**
-	 * One conversation at a time. `Promise.resolve().then` defers the work by a
-	 * microtask so `inFlight` is set before it starts, and anything raised while
-	 * it runs waits on the same promise rather than opening a second one.
+	 * One exchange at a time per household. `Promise.resolve().then` defers the
+	 * work by a microtask so `inFlight` is set before it starts, and anything
+	 * raised while it runs waits on the same promise rather than opening a second
+	 * one.
+	 *
+	 * Only for the same household, though. An exchange left over from the account
+	 * that has just signed out is not this account's read, and waiting on it
+	 * would leave the new one having never read its own document while believing
+	 * it had.
 	 */
 	private schedule(): Promise<void> {
-		if (this.householdId === null) return Promise.resolve();
-		if (this.inFlight !== null) return this.inFlight;
-		this.inFlight = Promise.resolve()
-			.then(() => this.drain())
+		const householdId = this.householdId;
+		if (householdId === null) return Promise.resolve();
+		if (this.inFlight !== null && this.inFlight.householdId === householdId) {
+			return this.inFlight.done;
+		}
+		const done: Promise<void> = Promise.resolve()
+			.then(() => this.drain(householdId))
 			.finally(() => {
-				this.inFlight = null;
+				// Only while it is still the current one: an exchange the next
+				// account replaced must not clear that account's handle on its way
+				// out.
+				if (this.inFlight?.done === done) this.inFlight = null;
 			});
-		return this.inFlight;
+		this.inFlight = { householdId, done };
+		return done;
 	}
 
 	/**
@@ -299,12 +332,14 @@ export class SyncStore {
 	 * later stays marked dirty and rides the next trigger, so this is bounded
 	 * rather than a loop a fast writer could spin.
 	 */
-	private async drain(): Promise<void> {
-		if (this.pulledFor !== this.householdId) await this.pull();
-		// A read that never landed leaves the household unread, and writing from
-		// a version this device only guessed at is what the version check exists
-		// to prevent.
-		if (this.pulledFor !== this.householdId) return;
+	private async drain(householdId: string): Promise<void> {
+		if (this.pulledFor !== householdId) await this.pull(householdId);
+		// A read that never landed — or one that answered for a household this
+		// device has since left — leaves this household unread, and writing from
+		// a version it only guessed at is what the version check exists to
+		// prevent. Compared against the household this exchange was opened for,
+		// so it is this rule that stops it rather than a coincidence of nulls.
+		if (this.pulledFor !== householdId) return;
 		// A device the read was refused for is not one a write will be accepted
 		// from either.
 		if (this.status === 'error') return;
@@ -314,7 +349,7 @@ export class SyncStore {
 		// A device that signed out while the send was in the air never gets here:
 		// `changed()` stops counting its writes, so there is nothing newer to
 		// send and the emptied store is never offered to the account just left.
-		if (this.dirty && (await this.push())) await this.push();
+		if (this.dirty && (await this.push(householdId))) await this.push(householdId);
 	}
 
 	/**
@@ -323,19 +358,24 @@ export class SyncStore {
 	 * device, not the document, and asking again at once would only be refused
 	 * again — but not when nothing arrived at all.
 	 */
-	private async pull(): Promise<void> {
+	private async pull(householdId: string): Promise<void> {
 		this.status = 'loading';
 		const result = await readRemote();
+		// Signed out — or signed in as somebody else — while this was in the air.
+		// The answer describes a household that is no longer the one on this
+		// device, so nothing in it is this device's business any more, and it
+		// leaves the household that is here unread rather than falsely read.
+		if (this.householdId !== householdId) return;
 		if (result === 'unreachable') {
 			this.status = this.dirty ? 'waiting' : 'idle';
 			return;
 		}
-		this.pulledFor = this.householdId;
+		this.pulledFor = householdId;
 		if (result === 'refused') {
 			this.status = 'error';
 			return;
 		}
-		this.receive(result, this.dirty || hasLocalDocument());
+		this.receive(result, this.dirty || hasLocalDocument(), householdId);
 	}
 
 	/**
@@ -344,11 +384,15 @@ export class SyncStore {
 	 * false for the one extra attempt a refusal can earn, so a server that
 	 * refuses cannot be talked into an unbounded exchange.
 	 */
-	private async push(again = true): Promise<boolean> {
+	private async push(householdId: string, again = true): Promise<boolean> {
 		const body = $state.snapshot(this.store.state);
 		this.status = 'saving';
 		this.dirty = false;
 		const result = await writeRemote(this.version, body);
+		// The account this write was for is no longer the one signed in here, so
+		// neither the version it created nor the document it was refused with
+		// belongs to whoever is.
+		if (this.householdId !== householdId) return false;
 		if (result === 'unreachable' || result === 'refused') {
 			// Nothing was accepted, so nothing was sent, whichever it was. The
 			// record is left as it stands: it already says this device is holding
@@ -358,16 +402,16 @@ export class SyncStore {
 			return false;
 		}
 		if (result.stale) {
-			this.receive(result, true);
+			this.receive(result, true, householdId);
 			// Adopting leaves nothing to send, so this is the other case: a
 			// refusal carrying no document, meaning the version written from no
 			// longer exists. `receive` has recorded the one the server does hold,
 			// and the document goes out again from there.
-			if (this.dirty && again) await this.push(false);
+			if (this.dirty && again) await this.push(householdId, false);
 			return false;
 		}
 		this.version = result.version;
-		this.save();
+		this.save(householdId);
 		this.status = 'idle';
 		return this.dirty;
 	}
@@ -381,22 +425,18 @@ export class SyncStore {
 	 * loud, while a device merely receiving the account's document for the first
 	 * time is not interrupted.
 	 */
-	private receive(remote: RemoteDocument, hadOwnWork: boolean): void {
-		// Signed out while this answer was in the air: it describes an account
-		// that is no longer on this device, and putting it into the store would
-		// hand the next person the last one's journal.
-		if (this.householdId === null) return;
+	private receive(remote: RemoteDocument, hadOwnWork: boolean, householdId: string): void {
 		if (remote.body === null) {
 			// Nothing stored for this household. This device's document, if it has
 			// one, becomes the first version; it is never emptied to match.
 			this.version = remote.version;
 			if (hasLocalDocument()) this.dirty = true;
-			this.save();
+			this.save(householdId);
 			this.status = 'idle';
 			return;
 		}
 		if (remote.version > this.version) {
-			this.adopt(remote.version, remote.body, hadOwnWork);
+			this.adopt({ version: remote.version, body: remote.body, hadOwnWork, householdId });
 			return;
 		}
 		// The server is at or behind the version this device recorded, so what is
@@ -404,7 +444,7 @@ export class SyncStore {
 		// other way round.
 		if (remote.version < this.version) this.dirty = true;
 		this.version = remote.version;
-		this.save();
+		this.save(householdId);
 		this.status = 'idle';
 	}
 
@@ -413,18 +453,21 @@ export class SyncStore {
 	 * the store's own write is not reported back as a local change and pushed
 	 * straight out again.
 	 */
-	private adopt(version: number, body: Record<string, unknown>, announce: boolean): void {
-		this.store.replace(body);
-		this.version = version;
+	private adopt(taken: Adoption): void {
+		this.store.replace(taken.body);
+		this.version = taken.version;
 		this.dirty = false;
-		this.save();
-		this.status = announce ? 'stale' : 'idle';
-		if (announce) toast(BEHIND_MESSAGE);
+		this.save(taken.householdId);
+		this.status = taken.hadOwnWork ? 'stale' : 'idle';
+		if (taken.hadOwnWork) toast(BEHIND_MESSAGE);
 	}
 
-	private save(): void {
-		const householdId = this.householdId;
-		if (householdId === null) return;
+	/**
+	 * Record where this household has got to. The household is passed in rather
+	 * than read off the field, so a record can only ever be written for the
+	 * account whose answer produced it.
+	 */
+	private save(householdId: string): void {
 		const record: SyncRecord = { householdId, version: this.version, dirty: this.dirty };
 		globalThis.localStorage?.setItem(SYNC_STORAGE_KEY, JSON.stringify(record));
 	}
