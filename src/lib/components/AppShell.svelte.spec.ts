@@ -59,6 +59,36 @@ function stubFetch() {
 		.mockImplementation(() => Promise.resolve(new Response(null, { status: 401 })));
 }
 
+/**
+ * A `/api/state` request that hangs until released, answering with the given
+ * document once it is. Anything else — the session refresh `AppShell` fires on
+ * mount among it — is refused with a dropped connection, the same default the
+ * outer `beforeEach` sets up, so a held read is the only thing about the
+ * exchange this changes.
+ */
+function heldStateFetch() {
+	let release: (response: Response) => void = () => {};
+	const answered = new Promise<Response>((resolve) => {
+		release = resolve;
+	});
+	vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+		// Every call in this app passes a string path, `resolve()`'s own return
+		// type; anything else is not a request this held mock recognizes.
+		const url = typeof input === 'string' ? input : '';
+		if (url.includes('/api/state')) return answered;
+		return Promise.reject(new TypeError('Failed to fetch'));
+	});
+	return {
+		release: (version: number, body: Record<string, unknown> | null) =>
+			release(
+				new Response(JSON.stringify({ version, format: 'tend.v1', body, updatedAt: null }), {
+					status: 200,
+					headers: { 'content-type': 'application/json' }
+				})
+			)
+	};
+}
+
 beforeEach(() => {
 	goto.mockClear();
 	at('/');
@@ -183,6 +213,54 @@ describe('AppShell, signed in', () => {
 		seedSessionStorage();
 		await render(AppShellHarness, { props: { body: 'Page body' } });
 		await expect.element(page.getByText('A quieter tracker')).toBeInTheDocument();
+	});
+
+	it('shows a loading state instead of onboarding while a fresh device is still pulling', async () => {
+		// No document on this device: `tend.state.onboarded` reads `false` exactly
+		// as it would for someone who has genuinely never used the app, so the
+		// held read is what stands between the two, not local storage.
+		seedSessionStorage();
+		const state = heldStateFetch();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+
+		await expect.element(page.getByText('Loading your data…')).toBeInTheDocument();
+		expect(document.body.textContent).not.toContain('A quieter tracker');
+
+		state.release(0, null);
+		await expect.element(page.getByText('A quieter tracker')).toBeInTheDocument();
+	});
+
+	it('lands on the pulled document rather than onboarding, once the pull settles', async () => {
+		// The server holds an onboarded household this device has never seen.
+		// Onboarding must never appear even for the one tick before the document
+		// lands — this is the disorienting flash the issue is about.
+		seedSessionStorage();
+		const state = heldStateFetch();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+
+		state.release(3, {
+			onboarded: true,
+			activeProfileId: 'p1',
+			profiles: [],
+			weekPlan: [],
+			pantry: []
+		});
+
+		await expect.element(page.getByText('Page body')).toBeInTheDocument();
+		expect(document.body.textContent).not.toContain('A quieter tracker');
+	});
+
+	it('does not hold a returning device with its own document behind a spinner', async () => {
+		// This device already has its own onboarded document; the quiet
+		// background refresh a returning visit gets must not be interrupted by
+		// the loading screen meant for a device with nothing of its own.
+		seedReturningVisit();
+		const state = heldStateFetch();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+
+		await expect.element(page.getByText('Page body')).toBeInTheDocument();
+		expect(document.body.textContent).not.toContain('Loading your data…');
+		state.release(0, null);
 	});
 
 	it('does not show the page content during onboarding', async () => {

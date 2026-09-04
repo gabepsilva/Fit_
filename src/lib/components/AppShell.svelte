@@ -9,9 +9,11 @@
 	import { sync } from '$lib/state/sync.svelte';
 	import { tend } from '$lib/state/tend.svelte';
 	import { AUTH_ROUTES, signInPath } from './auth/auth-routes';
+	import InitialSync from './InitialSync.svelte';
 	import LogSheet from './LogSheet.svelte';
 	import Onboarding from './Onboarding.svelte';
 	import SideNav from './SideNav.svelte';
+	import SyncStatusBadge from './SyncStatusBadge.svelte';
 	import TopBar from './TopBar.svelte';
 
 	let { children }: { children: Snippet } = $props();
@@ -43,6 +45,19 @@
 
 	/** Both stores read `localStorage`, and neither answers anything before it has. */
 	const restored = $derived(tend.hydrated && session.hydrated);
+
+	/**
+	 * A device with no document of its own is, until its first pull settles,
+	 * indistinguishable from one that has genuinely never onboarded — both read
+	 * `tend.state.onboarded` as `false`. Showing Onboarding in that window would
+	 * tell someone with months of history that it is gone; this is the moment
+	 * that gate is held open instead.
+	 *
+	 * Only the very first pull for a household counts: once it has settled,
+	 * `onboarded` is whatever it is, and any later reload rides quietly in the
+	 * background the way it does for a returning device today.
+	 */
+	const awaitingFirstPull = $derived(!tend.state.onboarded && sync.status === 'loading');
 
 	const pathname = $derived(page.url?.pathname ?? '/');
 	const onAuthRoute = $derived(AUTH_ROUTES.some((route) => resolve(route) === pathname));
@@ -153,7 +168,9 @@
 				{@render children()}
 			</div>
 		{:else if session.signedIn}
-			{#if tend.state.onboarded}
+			{#if awaitingFirstPull}
+				<InitialSync />
+			{:else if tend.state.onboarded}
 				<div class="bg-background flex min-h-dvh w-full max-w-lg flex-col">
 					<TopBar
 						{menuOpen}
@@ -161,6 +178,7 @@
 						onphoto={() => logUi.show('photo')}
 						onlog={() => logUi.show()}
 					/>
+					<SyncStatusBadge />
 					<div class="flex-1 px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
 						{@render children()}
 					</div>

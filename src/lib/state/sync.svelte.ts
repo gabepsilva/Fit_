@@ -220,6 +220,12 @@ export class SyncStore {
 		if (this.householdId === householdId) return;
 		this.householdId = householdId;
 		this.pulledFor = null;
+		// Set before the first read is even scheduled, not after it begins: the
+		// schedule below defers by a microtask, and a caller that renders on the
+		// state set here — such as the gate that decides between Onboarding and a
+		// loading screen — must never see the household as freshly started but not
+		// yet loading.
+		this.status = 'loading';
 		const record = readRecord();
 		if (record !== null && record.householdId !== householdId) {
 			this.store.clear();

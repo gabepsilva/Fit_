@@ -900,6 +900,21 @@ describe('while a request is in the air', () => {
 		await started;
 	});
 
+	it('is already loading the instant start is called, before any request lands', () => {
+		// A caller that renders off `status` right after calling `start` — the
+		// gate between a loading screen and Onboarding — must never catch a tick
+		// where the household is set but the read has not been marked under way.
+		// This is checked with no `await` at all: the assertion runs before the
+		// microtask that issues the request has even had a chance to.
+		const gate = held(documentAnswer(0, null));
+		const sync = syncFor(blankDevice());
+
+		void sync.start(HOUSEHOLD);
+
+		expect(sync.status).toBe('loading');
+		gate.release();
+	});
+
 	it('says it is saving while it saves', async () => {
 		const server = heldWrites(documentAnswer(0, null));
 		const sync = syncFor(journal());
