@@ -348,10 +348,16 @@ def export_sqlite(con: duckdb.DuckDBPyConnection, path: Path, where: str, label:
 
     con.execute(f"ATTACH '{path}' AS out (TYPE sqlite)")
     con.execute(f"CREATE TABLE out.food AS SELECT * FROM food WHERE {where}")
+    # Filter against the in-memory `food` table, not `out.food`: DuckDB's
+    # sqlite scanner opens its own read handle on the attached file to
+    # satisfy a JOIN, which collides with the write transaction still open
+    # on `out` from the CREATE TABLE above and fails with "database is
+    # locked". Filtering with an uncorrelated subquery over `food` never
+    # reads the attached database, so no lock conflict is possible.
     con.execute("CREATE TABLE out.food_alias AS SELECT a.* FROM food_alias a "
-                "JOIN out.food f USING (food_id)")
+                f"WHERE a.food_id IN (SELECT food_id FROM food WHERE {where})")
     con.execute("CREATE TABLE out.food_serving AS SELECT s.* FROM food_serving s "
-                "JOIN out.food f USING (food_id)")
+                f"WHERE s.food_id IN (SELECT food_id FROM food WHERE {where})")
     con.execute("""CREATE TABLE out.source AS SELECT * FROM source_registry""")
     con.execute("DETACH out")
 
