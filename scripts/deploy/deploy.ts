@@ -23,6 +23,7 @@ import {
 } from './config';
 import { activationScript } from './activation';
 import { activateAndPrune, describeActivationFailure } from './rollout';
+import { ASSET_GENERATIONS, pruneReleasesScript, retainAssetsScript } from './retention';
 import { smoke } from './smoke';
 import { capture, projectRoot, run } from '../security/shared';
 
@@ -269,12 +270,33 @@ async function activate(release: string, previous: string | null): Promise<void>
 
 /** Everything older than the releases worth keeping, and never the live one. */
 async function pruneReleases(): Promise<void> {
-	await remote(`
-cd ${RELEASES_ROOT}
-live=$(basename "$(readlink -f ${CURRENT_LINK})")
-stale=$(ls -1dt */ 2>/dev/null | sed 's#/$##' | grep -vx "$live" | tail -n +${RELEASES_KEPT} || true)
-for directory in $stale; do rm -rf -- "$directory"; done
-`);
+	await remote(
+		pruneReleasesScript({
+			releasesRoot: RELEASES_ROOT,
+			currentLink: CURRENT_LINK,
+			kept: RELEASES_KEPT,
+			generations: ASSET_GENERATIONS
+		})
+	);
+}
+
+/**
+ * The hashed assets a client that is still holding an older shell will ask
+ * for, put where the release about to go live can serve them.
+ *
+ * Before the symlink moves, and that ordering is load-bearing: adapter-node
+ * serves `build/client` through `sirv`, which outside dev mode walks the
+ * directory once at startup and answers from that map. An asset linked in
+ * after the restart would be on disk and still 404.
+ */
+async function retainAssets(release: string): Promise<void> {
+	await remote(
+		retainAssetsScript({
+			target: `${RELEASES_ROOT}/${release}`,
+			releasesRoot: RELEASES_ROOT,
+			generations: ASSET_GENERATIONS
+		})
+	);
 }
 
 export async function deploy(argv: string[]): Promise<boolean> {
@@ -289,6 +311,7 @@ export async function deploy(argv: string[]): Promise<boolean> {
 	await prepareMachine(version);
 	const previous = await liveRelease();
 	await shipRelease(release, previous);
+	await retainAssets(release);
 	try {
 		await activateAndPrune(() => activate(release, previous), pruneReleases);
 	} catch (error) {

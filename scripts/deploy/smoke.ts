@@ -14,6 +14,7 @@ import {
 	remote,
 	shellQuote
 } from './config';
+import { describeRemoval, runAndRemove } from './smoke-cleanup';
 import { removeSmokeAccountScript, removedAccounts, smokeUsername } from './smoke-account';
 import { REVALIDATE } from '../../src/lib/server/cache-policy';
 import { capture, projectRoot } from '../security/shared';
@@ -278,20 +279,12 @@ function throwawayCredentials(): Credentials {
 /**
  * The account this run created, taken back out.
  *
- * A reported check rather than a best-effort cleanup: a removal that quietly
+ * A reported number rather than a best-effort cleanup: a removal that quietly
  * failed would put the table back on the unbounded path it was on, and nobody
- * would learn that until someone counted the rows. It runs last, after the
- * release check, so a deploy that fails here has already been shown to be
- * serving — the operator has a row to prune, not an outage.
+ * would learn that until someone counted the rows.
  */
-async function checkAccountRemoved(credentials: Credentials): Promise<void> {
-	const output = await remote(removeSmokeAccountScript(credentials.username));
-	const removed = removedAccounts(output);
-	check(
-		'the smoke account is removed again',
-		removed === 1,
-		`deleted ${removed} account row for ${credentials.username}`
-	);
+async function removeAccount(credentials: Credentials): Promise<number> {
+	return removedAccounts(await remote(removeSmokeAccountScript(credentials.username)));
 }
 
 async function checkRoundTrip(client: Client, credentials: Credentials): Promise<void> {
@@ -368,15 +361,38 @@ async function writeReport(ok: boolean, failure: string | undefined): Promise<vo
 	await writeFile(path.join(directory, 'smoke.json'), `${JSON.stringify(report, null, 2)}\n`);
 }
 
+/**
+ * Every check, wrapped in the removal of the account they needed.
+ *
+ * The removal used to be the last check in the line, which made it the one
+ * step a failure anywhere above it skipped — see `smoke-cleanup.ts` for the
+ * rows that reached production that way. It is now what the checks run
+ * inside, and it is still asserted: a run that passed every check and then
+ * could not take its row back out is not a clean deploy.
+ */
 async function runChecks(options: Options): Promise<void> {
 	const client = createClient(options);
 	const credentials = throwawayCredentials();
-	await checkSignInPage(client);
-	await checkShellRevalidates(client);
-	await checkUnauthenticated(client);
-	await checkRoundTrip(client, credentials);
-	await checkRelease(options.commit);
-	await checkAccountRemoved(credentials);
+	const outcome = await runAndRemove(
+		async () => {
+			await checkSignInPage(client);
+			await checkShellRevalidates(client);
+			await checkUnauthenticated(client);
+			await checkRoundTrip(client, credentials);
+			await checkRelease(options.commit);
+		},
+		() => removeAccount(credentials)
+	);
+	if (outcome.failure !== undefined) {
+		throw new SmokeFailure(
+			`${outcome.failure} — ${describeRemoval(credentials.username, outcome)}`
+		);
+	}
+	check(
+		'the smoke account is removed again',
+		outcome.removed === 1,
+		`deleted ${outcome.removed} account row for ${credentials.username}`
+	);
 }
 
 export async function smoke(argv: string[]): Promise<boolean> {
