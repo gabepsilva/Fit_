@@ -14,6 +14,7 @@ import {
 	remote,
 	shellQuote
 } from './config';
+import { removeSmokeAccountScript, removedAccounts, smokeUsername } from './smoke-account';
 import { capture, projectRoot } from '../security/shared';
 
 /**
@@ -23,9 +24,9 @@ import { capture, projectRoot } from '../security/shared';
  * The registration and sign-in round trip is the point: it is the only path
  * that touches SQLite, the migration list, scrypt and the session cookie at
  * once, so it fails when any of those is misconfigured on the machine. The
- * throwaway account it leaves behind is named for the clock and some
- * randomness so it is identifiable; nothing deletes accounts yet, and inventing
- * a destructive query for the production database is not this script's job.
+ * throwaway account it creates is then removed again — see `smoke-account.ts`
+ * for what that is allowed to touch and why a row per deploy is not acceptable
+ * as the alternative.
  */
 
 /** Registration counts every attempt from one address, ten to the hour. */
@@ -243,9 +244,28 @@ type Credentials = { username: string; password: string };
 
 function throwawayCredentials(): Credentials {
 	return {
-		username: `smoke.${Date.now()}.${randomBytes(3).toString('hex')}`,
+		username: smokeUsername(),
 		password: randomBytes(PASSWORD_BYTES).toString('base64url')
 	};
+}
+
+/**
+ * The account this run created, taken back out.
+ *
+ * A reported check rather than a best-effort cleanup: a removal that quietly
+ * failed would put the table back on the unbounded path it was on, and nobody
+ * would learn that until someone counted the rows. It runs last, after the
+ * release check, so a deploy that fails here has already been shown to be
+ * serving — the operator has a row to prune, not an outage.
+ */
+async function checkAccountRemoved(credentials: Credentials): Promise<void> {
+	const output = await remote(removeSmokeAccountScript(credentials.username));
+	const removed = removedAccounts(output);
+	check(
+		'the smoke account is removed again',
+		removed === 1,
+		`deleted ${removed} account row for ${credentials.username}`
+	);
 }
 
 async function checkRoundTrip(client: Client, credentials: Credentials): Promise<void> {
@@ -324,10 +344,12 @@ async function writeReport(ok: boolean, failure: string | undefined): Promise<vo
 
 async function runChecks(options: Options): Promise<void> {
 	const client = createClient(options);
+	const credentials = throwawayCredentials();
 	await checkSignInPage(client);
 	await checkUnauthenticated(client);
-	await checkRoundTrip(client, throwawayCredentials());
+	await checkRoundTrip(client, credentials);
 	await checkRelease(options.commit);
+	await checkAccountRemoved(credentials);
 }
 
 export async function smoke(argv: string[]): Promise<boolean> {

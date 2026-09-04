@@ -121,6 +121,14 @@ describe('the environment file the deploy installs', () => {
 		expect(directive('ProtectSystem')).toBe('strict');
 	});
 
+	it('creates that database private to the service user', () => {
+		// db.ts narrows app.sqlite and its -wal and -shm to 0600, but only after
+		// SQLite has created them under systemd's default 0022 umask. Today only
+		// the 0700 on the directory closes that window; one `chmod o+x` on it
+		// would publish password hashes. The unit creates them private instead.
+		expect(directive('UMask')).toBe('0077');
+	});
+
 	it('binds the port the deploy waits on', () => {
 		expect(Number(environmentTemplate()['PORT'])).toBe(APP_PORT);
 	});

@@ -24,6 +24,12 @@ NoNewPrivileges=true
 # The database is the one thing on this machine the app may write.
 ProtectSystem=strict
 ReadWritePaths=/var/lib/fit
+# systemd's default umask is 0022, so app.sqlite and the -wal and -shm beside
+# it are born 0644 and only then narrowed to 0600 by src/lib/server/db.ts.
+# 0700 on /var/lib/fit is what makes that window harmless, which makes the
+# directory mode the only thing standing between the password hashes and every
+# local account. This is the second wall: the files are created private.
+UMask=0077
 ProtectHome=true
 PrivateTmp=true
 PrivateDevices=true

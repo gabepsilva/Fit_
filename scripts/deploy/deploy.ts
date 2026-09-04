@@ -21,6 +21,7 @@ import {
 	templateDirectory,
 	UNIT_FILE
 } from './config';
+import { activationScript } from './activation';
 import { smoke } from './smoke';
 import { capture, projectRoot, run } from '../security/shared';
 
@@ -151,11 +152,22 @@ async function rsyncTo(
 	]);
 }
 
-async function shipRelease(release: string): Promise<void> {
+/**
+ * The release `current` points at, or `null` when nothing is live yet.
+ *
+ * Read before anything is shipped, because it is both what `--link-dest`
+ * reuses and what a failed activation goes back to, and after the switch it is
+ * no longer readable from the machine.
+ */
+async function liveRelease(): Promise<string | null> {
+	const live = (await remote(`readlink -f ${CURRENT_LINK} 2>/dev/null || true`)).trim();
+	return live === '' ? null : live;
+}
+
+async function shipRelease(release: string, previous: string | null): Promise<void> {
 	const target = `${RELEASES_ROOT}/${release}`;
 	await remote(`install -d -o root -g root -m 0755 ${target}`);
-	const previous = (await remote(`readlink -f ${CURRENT_LINK} 2>/dev/null || true`)).trim();
-	const reusable = previous === '' || previous === target ? null : previous;
+	const reusable = previous === null || previous === target ? null : previous;
 	for (const directory of SHIPPED_DIRECTORIES) {
 		const source = directory === 'build' ? projectRoot : STAGING;
 		await rsyncTo(
@@ -187,6 +199,11 @@ const ROOT_OWNED = 'root:root';
  *
  * It is one parenthesised group because the caller puts it on the right of
  * `||`, where a bare `&&` chain would run its tail regardless of the test.
+ * The group is also what scopes the `EXIT` trap: `mktemp` creates the staged
+ * file, so every step after it that fails would otherwise leave a
+ * world-readable-by-root fragment of a config file beside the real one, named
+ * closely enough to be mistaken for it. The trap runs on the way out either
+ * way; after a successful `mv` there is nothing left at that path to remove.
  */
 export function installFile(
 	contents: string,
@@ -196,40 +213,57 @@ export function installFile(
 ): string {
 	const encoded = Buffer.from(contents, 'utf8').toString('base64');
 	return (
-		`( staged=$(mktemp ${destination}.XXXXXX) && echo ${encoded} | base64 -d > "$staged"` +
+		`( staged=$(mktemp ${destination}.XXXXXX) && trap 'rm -f "$staged"' EXIT` +
+		` && echo ${encoded} | base64 -d > "$staged"` +
 		` && chown ${owner} "$staged" && chmod ${mode} "$staged"` +
 		` && mv -f "$staged" ${destination} )`
 	);
 }
 
 /**
- * Switch the symlink, restart, and wait for the server to answer.
+ * Everything the machine needs in place before the symlink moves: the release
+ * owned by root, the unit file, and the environment file.
  *
  * The environment file is written only when it is absent. It is where secrets
  * go when there are any, and a deploy that overwrote it would delete them — so
  * the repository owns the template and the machine owns the file.
+ *
+ * Separate from the switch on purpose: a bad unit file or an unreadable
+ * release should stop the deploy while the previous release is still live,
+ * rather than become something to roll back from.
  */
-async function activate(release: string): Promise<void> {
-	const target = `${RELEASES_ROOT}/${release}`;
+async function prepareRelease(target: string): Promise<void> {
 	await remote(`
 chown -R root:root ${target}
 chmod -R go-w ${target}
 test -f ${ENV_FILE} || ${installFile(template('fit.env.example'), ENV_FILE, '0600')}
 ${installFile(template('fit.service'), UNIT_FILE, '0644')}
-ln -sfnT ${target} ${CURRENT_LINK}
 systemctl daemon-reload
 systemctl enable ${SERVICE_NAME}
-systemctl restart ${SERVICE_NAME}
-
-for _ in $(seq 60); do
-	if curl -fsS -o /dev/null http://127.0.0.1:${APP_PORT}/signin; then exit 0; fi
-	if ! systemctl is-active --quiet ${SERVICE_NAME}; then break; fi
-	sleep 1
-done
-echo "${SERVICE_NAME} did not answer on 127.0.0.1:${APP_PORT}" >&2
-journalctl -u ${SERVICE_NAME} --no-pager --lines=40 >&2 || true
-exit 1
 `);
+}
+
+/** How long a release has to answer before it is judged not to have started. */
+const HEALTH_ATTEMPTS = 60;
+
+/** A path only this app serves, and the one the smoke check reads first. */
+const HEALTH_PATH = '/signin';
+
+/** Switch the symlink, restart, wait — and go back if it never answered. */
+async function activate(release: string, previous: string | null): Promise<void> {
+	const target = `${RELEASES_ROOT}/${release}`;
+	await prepareRelease(target);
+	await remote(
+		activationScript({
+			target,
+			previous: previous === target ? null : previous,
+			currentLink: CURRENT_LINK,
+			serviceName: SERVICE_NAME,
+			port: APP_PORT,
+			healthPath: HEALTH_PATH,
+			attempts: HEALTH_ATTEMPTS
+		})
+	);
 }
 
 /** Everything older than the releases worth keeping, and never the live one. */
@@ -252,8 +286,9 @@ export async function deploy(argv: string[]): Promise<boolean> {
 	await run('bun', ['run', 'build']);
 	await stageRuntimeDependencies();
 	await prepareMachine(version);
-	await shipRelease(release);
-	await activate(release);
+	const previous = await liveRelease();
+	await shipRelease(release, previous);
+	await activate(release, previous);
 	await pruneReleases();
 
 	console.log(`Live: ${CURRENT_LINK} -> ${RELEASES_ROOT}/${release}`);
