@@ -119,6 +119,23 @@ async function createTemplate(root: string): Promise<string> {
 	return template;
 }
 
+function proofReason(
+	fixture: GateFixture,
+	exitCode: number,
+	output: string,
+	intendedFailure: boolean,
+	intendedStatus: boolean
+): string {
+	if (exitCode === 0) return 'the gate accepted input it claims to reject';
+	if (!intendedStatus) {
+		return `gate exited ${exitCode}, not the ${String(fixture.expectedExitCode)} this failure mode must report\n${output.slice(-10_000)}`;
+	}
+	if (!intendedFailure) {
+		return `gate failed without expected evidence: ${fixture.failureIncludes ?? ''}\n${output.slice(-10_000)}`;
+	}
+	return 'gate failed as required';
+}
+
 async function proveFixture(
 	fixture: GateFixture,
 	template: string,
@@ -176,17 +193,16 @@ async function proveFixture(
 	await rm(workspace, { recursive: true, force: true });
 	const intendedFailure =
 		fixture.failureIncludes === undefined || output.includes(fixture.failureIncludes);
+	// A gate that reports two kinds of red has to be proven on the status too:
+	// the message alone cannot show that a crash is not filed as a finding.
+	const intendedStatus =
+		fixture.expectedExitCode === undefined || exitCode === fixture.expectedExitCode;
 
 	return {
 		...base,
-		proven: exitCode !== 0 && intendedFailure,
+		proven: exitCode !== 0 && intendedFailure && intendedStatus,
 		exitCode,
-		reason:
-			exitCode === 0
-				? 'the gate accepted input it claims to reject'
-				: intendedFailure
-					? 'gate failed as required'
-					: `gate failed without expected evidence: ${fixture.failureIncludes ?? ''}\n${output.slice(-10_000)}`,
+		reason: proofReason(fixture, exitCode, output, intendedFailure, intendedStatus),
 		durationMs: Date.now() - startedAt
 	};
 }

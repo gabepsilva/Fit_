@@ -39,6 +39,14 @@ Every tier runs to completion rather than stopping at the first failure, and wri
 machine-readable artifact. `README.md` has the tier table; `make` lists local shortcuts for
 the same tiers.
 
+**A gate that did not run is not a gate that failed.** Exit 1 is a verdict about the change;
+a runner that died before measuring anything exits 97 instead, and `scripts/quality/run-outcome.ts`
+is the one definition of that contract. The gate report files such a step under `crashed`
+rather than `failed` and marks its `outcome`, and a tier whose only red steps crashed exits
+97 itself. This is reporting, not tolerance: a crash is still red, still blocks, and is never
+a threshold to relax. It cost half an hour once, when a mutation lane whose Stryker dry run
+died left an empty report directory and exit 1, and was read as surviving mutants.
+
 `make ci` runs the exact steps the CI workflow runs, but arranges them for one machine
 instead of separate hosted runners: the static and security jobs run beside the browser
 gates, and mutation testing gets the machine to itself afterwards. It cannot be reordered
@@ -132,6 +140,12 @@ instead: it is harder than the break on every file it judges, and it holds uncha
 files to the same 80 in their own pool. Leaving the break on would re-impose the whole-file
 debt an excused file was just relieved of, from a pool that is often a single file. The break
 remains the governing rule for the full-tree lane, and `mutation.break` is unchanged.
+
+A lane that produces no report produced no verdict. It writes `crash.json` where `verdict.json`
+would sit, prints the missing artifact, Stryker's exit code and the underlying error, and exits 97. Nothing about that run says a mutant survived, because no mutant was judged; the fixtures
+`crashed-mutation-run` and `security-surviving-mutant` prove the same lane reports the two
+endings differently. The crash the wording answers to is a worker race in the shared Vite
+optimizer cache, which is unfixed and tracked separately.
 
 `bun run test:mutation:full` preserves the pre-existing Stryker-compatible aggregate score and
 80 percent merge threshold while legacy files are remediated. It remains blocking and

@@ -4,8 +4,10 @@ import path from 'node:path';
 import process from 'node:process';
 import { captureStatus } from '../security/shared';
 import { prepareMutationCache, recordMutationCache } from './mutation-cache';
+import { describeMutationCrash, formatMutationCrash, recordMutationCrash } from './mutation-crash';
 import { buildMutationScope } from './mutation-scope';
 import { parseMutationPolicy, type MutationLane } from './mutation-types';
+import { CRASH_EXIT_CODE } from './run-outcome';
 import {
 	mutationReviewLedgerFailures,
 	verifyMutationFiles,
@@ -70,7 +72,7 @@ async function clearStrykerSandboxes(root: string): Promise<void> {
 export async function resetMutationResultArtifacts(directory: string): Promise<void> {
 	await mkdir(directory, { recursive: true });
 	await Promise.all(
-		['scope.json', 'mutation.json', 'verdict.json'].map((file) =>
+		['scope.json', 'mutation.json', 'verdict.json', 'crash.json'].map((file) =>
 			rm(path.join(directory, file), { force: true })
 		)
 	);
@@ -81,6 +83,7 @@ export async function runMutation(options: Arguments): Promise<number> {
 	const scopePath = path.join(directory, 'scope.json');
 	const reportPath = path.join(directory, 'mutation.json');
 	const verdictPath = path.join(directory, 'verdict.json');
+	const crashPath = path.join(directory, 'crash.json');
 	const incrementalPath = path.join(directory, 'incremental.json');
 	const metadataPath = path.join(directory, 'cache.json');
 	const policyPath = path.join(projectRoot, 'quality', 'mutation-policy.json');
@@ -147,9 +150,20 @@ export async function runMutation(options: Arguments): Promise<number> {
 			startedAt
 		});
 	} catch (error) {
+		// The verdict could not be computed at all, so this run measured nothing.
+		// Reporting it as exit 1 would put it in the same box as surviving
+		// mutants, which is the confusion this path exists to end.
 		await Promise.all([rm(incrementalPath, { force: true }), rm(metadataPath, { force: true })]);
-		console.error(error instanceof Error ? error.message : String(error));
-		return 1;
+		const crash = await describeMutationCrash({
+			projectRoot,
+			lane: options.lane,
+			reportPath,
+			strykerExitCode: strykerExit,
+			error
+		});
+		await recordMutationCrash(crashPath, crash);
+		console.error(formatMutationCrash(crash, path.relative(projectRoot, crashPath)));
+		return CRASH_EXIT_CODE;
 	}
 
 	if (strykerExit !== 0 || !verdict.ok) {

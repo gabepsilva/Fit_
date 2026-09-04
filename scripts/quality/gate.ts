@@ -7,6 +7,7 @@ import type { GateStep } from './gates';
 import { ciJobs, isCiJobName, isTierName, tiers } from './gates';
 import { gateLogDirectory, gateReportPath } from './gate-paths';
 import { pooled } from './pool';
+import { stepOutcome, summarizeOutcomes, summaryExitCode, type StepOutcome } from './run-outcome';
 import { captureStatus } from '../security/shared';
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -18,6 +19,11 @@ interface StepResult {
 	purpose: string;
 	command: string;
 	ok: boolean;
+	/**
+	 * `failed` is a verdict against the change; `crashed` means the step never
+	 * reached one, so it proves nothing in either direction.
+	 */
+	outcome: StepOutcome;
 	exitCode: number;
 	durationMs: number;
 	log: string;
@@ -93,6 +99,7 @@ async function runStep(
 			purpose: step.purpose,
 			command: `bun run ${step.name}`,
 			ok: exitCode === 0,
+			outcome: stepOutcome(exitCode),
 			exitCode,
 			durationMs: Date.now() - startedAt,
 			log: path.relative(projectRoot, logPath),
@@ -128,7 +135,11 @@ async function syncGeneratedTypes(): Promise<void> {
 function printFailure(result: StepResult, output: string): void {
 	const lines = output.split('\n');
 	const tail = lines.length > failureLogLines ? lines.slice(-failureLogLines) : lines;
-	console.error(`\n--- ${result.name} failed (exit ${result.exitCode}) ---`);
+	const headline =
+		result.outcome === 'crashed'
+			? `${result.name} CRASHED without a verdict (exit ${result.exitCode}) — not a finding`
+			: `${result.name} failed (exit ${result.exitCode})`;
+	console.error(`\n--- ${headline} ---`);
 	if (lines.length > tail.length) {
 		console.error(`[${lines.length - tail.length} earlier lines in ${result.log}]`);
 	}
@@ -186,9 +197,8 @@ async function execute(step: GateStep): Promise<void> {
 		return;
 	}
 	runs.set(step.name, run);
-	console.log(
-		`${run.result.ok ? 'pass' : 'FAIL'}  ${formatDuration(run.result.durationMs)}  ${run.result.name}`
-	);
+	const status = { passed: 'pass', failed: 'FAIL', crashed: 'CRASH' }[run.result.outcome];
+	console.log(`${status}  ${formatDuration(run.result.durationMs)}  ${run.result.name}`);
 	if (!run.result.ok && options.bail) {
 		bailed = true;
 		cancellation.abort();
@@ -226,27 +236,34 @@ for (const step of selected) {
 	if (!run.result.ok) failureOutput.set(run.result.name, run.output);
 }
 
-const failed = results.filter((result) => !result.ok);
+const summary = summarizeOutcomes(results);
+const notOk = results.filter((result) => !result.ok);
 const report = {
 	tier: options.tier,
 	job: options.job,
-	ok: failed.length === 0,
+	ok: summary.ok,
 	startedAt: startedAt.toISOString(),
 	durationMs: Date.now() - started,
 	stepsRun: results.length,
 	stepsPlanned: selected.length,
-	failed: failed.map((result) => result.name),
+	failed: summary.failed,
+	/** Steps that never produced a verdict. Never evidence about the change. */
+	crashed: summary.crashed,
 	steps: results
 };
 
 await writeFile(gateReportPath(reportDirectory, label), `${JSON.stringify(report, null, 2)}\n`);
 
-for (const result of failed) printFailure(result, failureOutput.get(result.name) ?? '');
+for (const result of notOk) printFailure(result, failureOutput.get(result.name) ?? '');
 
 console.log(
-	`\nGate ${label}: ${results.length - failed.length}/${results.length} passed in ${formatDuration(report.durationMs)}.`
+	`\nGate ${label}: ${results.length - notOk.length}/${results.length} passed in ${formatDuration(report.durationMs)}.`
 );
-if (failed.length > 0) {
-	console.error(`Failed steps: ${failed.map((result) => result.name).join(', ')}`);
-	process.exitCode = 1;
+if (summary.failed.length > 0) console.error(`Failed steps: ${summary.failed.join(', ')}`);
+if (summary.crashed.length > 0) {
+	console.error(
+		`Crashed steps, which produced no verdict and say nothing about the change: ${summary.crashed.join(', ')}`
+	);
 }
+// An interrupted run has already set 130; leaving it alone keeps that signal.
+if (!summary.ok) process.exitCode = summaryExitCode(summary);
