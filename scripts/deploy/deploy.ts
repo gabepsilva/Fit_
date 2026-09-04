@@ -22,6 +22,7 @@ import {
 	UNIT_FILE
 } from './config';
 import { activationScript } from './activation';
+import { activateAndPrune, describeActivationFailure } from './rollout';
 import { smoke } from './smoke';
 import { capture, projectRoot, run } from '../security/shared';
 
@@ -288,8 +289,12 @@ export async function deploy(argv: string[]): Promise<boolean> {
 	await prepareMachine(version);
 	const previous = await liveRelease();
 	await shipRelease(release, previous);
-	await activate(release, previous);
-	await pruneReleases();
+	try {
+		await activateAndPrune(() => activate(release, previous), pruneReleases);
+	} catch (error) {
+		console.error(describeActivationFailure(error, release, previous));
+		return false;
+	}
 
 	console.log(`Live: ${CURRENT_LINK} -> ${RELEASES_ROOT}/${release}`);
 	console.log(`Environment: ${ENV_FILE} (edit on the machine; the deploy never overwrites it).`);
