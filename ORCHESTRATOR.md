@@ -94,8 +94,10 @@ read when a session starts, so a session older than a definition falls back to
 | `reviewer` | opus   | high   | Review of a builder's or solver's change before it reaches `main`             |
 
 Each rung names a capability, not a vendor. The `mechanic` and `builder` rungs go to an
-OpenCode free model first, run headless in the slice's worktree with `opencode run --dir
-<worktree> -m <provider/model> "<prompt>"`. Free at the time of writing:
+OpenCode free model first, run headless from inside the slice's worktree with `cd
+<worktree> && opencode run -m <provider/model> "<prompt>"`. The `--dir` flag must not be
+used because an absolute worktree path falls outside OpenCode's trusted root and its file
+tools are rejected before the model reads anything. Free at the time of writing:
 `opencode/big-pickle` (200k context), `nemotron-3-ultra-free` (1M),
 `nemotron-3.5-lightning-free` (262k), `muse-spark-1.3-contributor-free` (1M),
 `mimo-v2.5-free`, `ling-3.0-flash-fin-free`, and the local `ai1` provider. Paid
@@ -173,8 +175,11 @@ Agreed order:
 
 1. **Data persists per account and comes back after sign-in.** One JSON document per
    account on the server, versioned; the store loads it at sign-in and pushes after every
-   write; a stale device is told rather than allowed to overwrite. Device-local fields
-   (onboarded, active profile) are split out of the synced document first. Conflict
+   write; a stale device is told rather than allowed to overwrite. The whole
+   TendState document syncs, including onboarded and activeProfileId, because
+   with one account per household both are properties of the account rather
+   than the device; activeProfileId becomes device-local only when household
+   unparks. Conflict
    handling is versioned last-write-wins with a forced reload; merging is a later story.
 2. **A real food catalog from the server.** A read-only connection to the ETL database,
    search and barcode endpoints, the bundled list kept as the offline fallback.

@@ -128,15 +128,15 @@
 			"location": {
 				"end": {
 					"column": 79,
-					"line": 73
+					"line": 75
 				},
 				"start": {
 					"column": 23,
-					"line": 73
+					"line": 75
 				}
 			},
-			"sourceHash": "7fb3a229635fc8ba4b5125feebe3cfad30cf32ec133bec492223ebb355bd60e0",
-			"fingerprint": "85983ea9723b1c4f02394a6c693e632a6690b7dfe8f5780174214494b2f4a3ce",
+			"sourceHash": "d79ee839dbbe776cc3826eb781859dbff5452d0ed0a7091b36fee598431acdf8",
+			"fingerprint": "b800dfc23f030c017bb32ab0b937dfac71b93b7e985332d40ae42e3f726ad710",
 			"classification": "equivalent",
 			"rationale": "String.prototype.split always returns at least one element, so the element at index 0 is never null or undefined and the optional access before trim can only ever take its defined branch.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -148,15 +148,15 @@
 			"location": {
 				"end": {
 					"column": 3,
-					"line": 82
+					"line": 84
 				},
 				"start": {
 					"column": 10,
-					"line": 79
+					"line": 81
 				}
 			},
-			"sourceHash": "7fb3a229635fc8ba4b5125feebe3cfad30cf32ec133bec492223ebb355bd60e0",
-			"fingerprint": "5900c93dc3a7d18c863eebaed26bcdcbb4f06ab8c28e53c88ed280b77946bf50",
+			"sourceHash": "d79ee839dbbe776cc3826eb781859dbff5452d0ed0a7091b36fee598431acdf8",
+			"fingerprint": "f5ba1c49eeec023e27a3acb3665081dbb762fa7d7ce64ace4dde6fe8d18caff2",
 			"classification": "equivalent",
 			"rationale": "Emptying the catch leaves parsed as undefined, which textFieldsOf already refuses because it is not an object, so a malformed body still answers null on both the guarded and the unguarded path.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -188,15 +188,15 @@
 			"location": {
 				"end": {
 					"column": 24,
-					"line": 154
+					"line": 166
 				},
 				"start": {
 					"column": 3,
-					"line": 153
+					"line": 165
 				}
 			},
-			"sourceHash": "a5826dc80f7dc43b65dd2956a6a57db164085954ea7b770dc36ca8a6f57c4b8d",
-			"fingerprint": "18efc282640df66b3565de90b74cf3f5efc07efb42de8c5f77bd6fc94b069e99",
+			"sourceHash": "c793496769c3775f705860a550400d3a53eca9cc97f9fbe3437abbf9eb503b8e",
+			"fingerprint": "668f70ed43764345c0182068fbfc3b8f406337d31812e6774bb6bd1a92245ad2",
 			"classification": "host-specific-defense-in-depth",
 			"rationale": "On POSIX, a newly created directory is already restricted by mode 0700; for an existing directory mkdirSync returns undefined, so this composite replacement cannot change the observable permission verdict.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -208,15 +208,15 @@
 			"location": {
 				"end": {
 					"column": 24,
-					"line": 154
+					"line": 166
 				},
 				"start": {
 					"column": 3,
-					"line": 153
+					"line": 165
 				}
 			},
-			"sourceHash": "a5826dc80f7dc43b65dd2956a6a57db164085954ea7b770dc36ca8a6f57c4b8d",
-			"fingerprint": "7461e69fb921ef1515379175e5b1cc4f3bb1482fc35420db420bad759f790544",
+			"sourceHash": "c793496769c3775f705860a550400d3a53eca9cc97f9fbe3437abbf9eb503b8e",
+			"fingerprint": "3932fec047b3615baf3bf8ee5eba4c59575d86d50c5267d0db9a42553e247ea5",
 			"classification": "host-specific-defense-in-depth",
 			"rationale": "On POSIX, the OR differs only for a newly created directory, whose requested 0700 mode already makes the outer permission check false; existing directories take the same branch.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -228,15 +228,15 @@
 			"location": {
 				"end": {
 					"column": 31,
-					"line": 153
+					"line": 165
 				},
 				"start": {
 					"column": 3,
-					"line": 153
+					"line": 165
 				}
 			},
-			"sourceHash": "a5826dc80f7dc43b65dd2956a6a57db164085954ea7b770dc36ca8a6f57c4b8d",
-			"fingerprint": "19637d860dafd31c0e4e3cbdaf2712107454661dc34010d4582032e6f60bfa08",
+			"sourceHash": "c793496769c3775f705860a550400d3a53eca9cc97f9fbe3437abbf9eb503b8e",
+			"fingerprint": "f798227e1f565208466d6f34b88c51f8b7d1ae4b747524a21619c4f2e0cfc99e",
 			"classification": "host-specific-defense-in-depth",
 			"rationale": "This platform guard is always true on the Linux host where POSIX permission enforcement and this mutation are observable; Windows deliberately does not implement POSIX mode enforcement.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -248,15 +248,15 @@
 			"location": {
 				"end": {
 					"column": 31,
-					"line": 153
+					"line": 165
 				},
 				"start": {
 					"column": 24,
-					"line": 153
+					"line": 165
 				}
 			},
-			"sourceHash": "a5826dc80f7dc43b65dd2956a6a57db164085954ea7b770dc36ca8a6f57c4b8d",
-			"fingerprint": "ed111e9700fadb12a1a2557da70d45af501e3618d0bab457fdde286bf4fbee6c",
+			"sourceHash": "c793496769c3775f705860a550400d3a53eca9cc97f9fbe3437abbf9eb503b8e",
+			"fingerprint": "01569da4d149c0830c15f5c2814e546a48dfc547254ec1b979cb192d7fdb3fe3",
 			"classification": "host-specific-defense-in-depth",
 			"rationale": "Changing the Windows platform sentinel to this exact empty string is observationally identical on the Linux security-test host; the classification is host-specific and fingerprinted to this replacement.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -268,15 +268,15 @@
 			"location": {
 				"end": {
 					"column": 24,
-					"line": 154
+					"line": 166
 				},
 				"start": {
 					"column": 3,
-					"line": 154
+					"line": 166
 				}
 			},
-			"sourceHash": "a5826dc80f7dc43b65dd2956a6a57db164085954ea7b770dc36ca8a6f57c4b8d",
-			"fingerprint": "4eb01604f44161e9df93605e350fe0e03d6888b07b1630da177f72daa98980b4",
+			"sourceHash": "c793496769c3775f705860a550400d3a53eca9cc97f9fbe3437abbf9eb503b8e",
+			"fingerprint": "cb91ac73154f23a32bc6cf69d214763f130325ec08c4755e0f29c09286ac06cf",
 			"classification": "equivalent",
 			"rationale": "mkdirSync returns undefined for an existing directory; a newly created directory receives mode 0700, so forcing this condition true cannot change the outer permission verdict.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"
@@ -288,15 +288,15 @@
 			"location": {
 				"end": {
 					"column": 9,
-					"line": 196
+					"line": 208
 				},
 				"start": {
 					"column": 7,
-					"line": 196
+					"line": 208
 				}
 			},
-			"sourceHash": "a5826dc80f7dc43b65dd2956a6a57db164085954ea7b770dc36ca8a6f57c4b8d",
-			"fingerprint": "7b747de842990b2052283930b41568c38f56a4415af3df0921d7fbb64cd096a8",
+			"sourceHash": "c793496769c3775f705860a550400d3a53eca9cc97f9fbe3437abbf9eb503b8e",
+			"fingerprint": "7c8cdfee72e3b9964a7a1f90527960bef58782d103058bd7ff09433934fe18f8",
 			"classification": "equivalent",
 			"rationale": "When database creation fails before assignment, forcing the db guard true only throws inside the deliberately swallowing close-error try/catch; the original opening error and file-hardening behavior remain identical.",
 			"review": "https://github.com/gabepsilva/Fit_/pull/5"

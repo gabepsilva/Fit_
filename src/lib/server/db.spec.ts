@@ -106,6 +106,33 @@ describe('migrate', () => {
 		]);
 	});
 
+	it('creates the household state table the sync endpoints store into', () => {
+		const db = new DatabaseSync(':memory:');
+		migrate(db);
+		expect(tableNames(db)).toContain('household_state');
+	});
+
+	it('cascades household deletion onto its stored state document', () => {
+		const db = openDatabase(':memory:');
+		const stamp = '2026-08-29T00:00:00.000Z';
+		db.prepare('insert into household (id, name, created_at) values (?, ?, ?)').run(
+			'h1',
+			'Home',
+			stamp
+		);
+		db.prepare(
+			`insert into account (id, username, display_name, password_hash, created_at, updated_at)
+			 values (?, ?, ?, ?, ?, ?)`
+		).run('a1', 'jordan', 'Jordan', 'hash', stamp, stamp);
+		db.prepare(
+			`insert into household_state (household_id, format, body, version, updated_at, updated_by)
+			 values (?, ?, ?, ?, ?, ?)`
+		).run('h1', 'tend.v1', '{}', 1, stamp, 'a1');
+
+		db.prepare('delete from household where id = ?').run('h1');
+		expect(db.prepare('select count(*) as n from household_state').get()?.['n']).toBe(0);
+	});
+
 	it('leaves the expiry index in place after that rebuild', () => {
 		const db = new DatabaseSync(':memory:');
 		migrate(db);

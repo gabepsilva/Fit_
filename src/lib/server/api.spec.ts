@@ -23,6 +23,7 @@ describe('apiError', () => {
 		['unauthenticated', 401],
 		['forbidden-origin', 403],
 		['username-taken', 409],
+		['stale-version', 409],
 		['too-many-attempts', 429]
 	] as const)('answers %s with status %i', async (code, status) => {
 		const response = apiError(code);
