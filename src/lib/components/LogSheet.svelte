@@ -43,11 +43,12 @@
 	let matchIndex = $state<number | null>(null);
 	let dictation: Dictation | null = null;
 	/**
-	 * Foods a scan found in the server catalog, by the id `propose` put on the
+	 * Foods the server catalog answered with, by the id `propose` put on the
 	 * proposal. They are not in `FOOD_BY_ID` and never will be, so `commit` has
-	 * to resolve them from here or it would drop what the person just scanned.
+	 * to resolve them from here or it would drop what the person just chose --
+	 * which is every result search now returns beyond the bundled 96.
 	 */
-	let scanned = $state<Record<string, Food>>({});
+	let fromCatalog = $state<Record<string, Food>>({});
 
 	const step = $derived(servingStep(tend.profile));
 	const servings = $derived(defaultServings(tend.profile));
@@ -57,7 +58,7 @@
 		text = '';
 		matchIndex = null;
 		listening = false;
-		scanned = {};
+		fromCatalog = {};
 		logUi.tab = 'type';
 	}
 
@@ -117,9 +118,13 @@
 		listening = true;
 	}
 
-	function scannedFood(food: Food) {
-		// A bundled food keeps its own id; a catalog one is remembered here.
-		if (!FOOD_BY_ID[food.id]) scanned = { ...scanned, [food.id]: food };
+	/** A bundled food keeps its own id; a catalog one is remembered here. */
+	function remember(food: Food) {
+		if (!FOOD_BY_ID[food.id]) fromCatalog = { ...fromCatalog, [food.id]: food };
+	}
+
+	function pickFood(food: Food) {
+		remember(food);
 		propose(food, 1);
 	}
 
@@ -136,8 +141,8 @@
 				note: p.note
 			};
 			if (FOOD_BY_ID[p.foodId]) return [logFromFood({ foodId: p.foodId, ...context })];
-			const fromCatalog = scanned[p.foodId];
-			return fromCatalog ? [logFromCatalogFood(fromCatalog, context)] : [];
+			const catalogFood = fromCatalog[p.foodId];
+			return catalogFood ? [logFromCatalogFood(catalogFood, context)] : [];
 		});
 		if (!items.length) {
 			toast('Match each item to a catalog food first.');
@@ -216,9 +221,9 @@
 				</Button>
 			</div>
 		{:else if logUi.tab === 'scan'}
-			<BarcodeScan onpick={scannedFood} onsearch={() => (logUi.tab = 'search')} />
+			<BarcodeScan onpick={pickFood} onsearch={() => (logUi.tab = 'search')} />
 		{:else}
-			<FoodSearch onpick={(food: Food) => propose(food, 1)} />
+			<FoodSearch onpick={pickFood} />
 		{/if}
 
 		{#if proposals.length > 0}
@@ -233,9 +238,12 @@
 							item={p}
 							{step}
 							matching={matchIndex === i}
-							resolved={p.foodId ? scanned[p.foodId] : undefined}
+							resolved={p.foodId ? fromCatalog[p.foodId] : undefined}
 							onmatch={() => (matchIndex = matchIndex === i ? null : i)}
 							onpickmatch={(food: Food) => {
+								// Matching a proposal reaches the same search, so a catalog
+								// food arrives here too and has to be remembered the same way.
+								remember(food);
 								proposals = proposals.map((x, idx) => (idx === i ? matchToFood(x, food) : x));
 								matchIndex = null;
 							}}

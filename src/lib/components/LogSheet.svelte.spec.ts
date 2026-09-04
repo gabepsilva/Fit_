@@ -205,6 +205,35 @@ describe('LogSheet', () => {
 			.toBeInTheDocument();
 	});
 
+	it('logs a food search found only in the server catalog', async () => {
+		// Regression: search handed a catalog food straight to `propose`, which
+		// stores its id and nothing else. `commit` then found no bundled food
+		// behind that id and dropped the item, so nothing past the bundled 96
+		// could be logged at all, and the sheet said only "match it first".
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+			Promise.resolve(
+				new Response(JSON.stringify({ foods: [CEREAL] }), {
+					status: 200,
+					headers: { 'content-type': 'application/json' }
+				})
+			)
+		);
+		await openSheet();
+		await page.getByRole('button', { name: 'Search' }).click();
+		await page.getByLabelText('Search foods, brands, barcodes').fill('kumquat');
+		const hit = page.getByRole('button', { name: /HONEY NUT CHEERIOS/ });
+		await expect.element(hit, { timeout: 4000 }).toBeInTheDocument();
+		await hit.click();
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add).toHaveBeenCalledOnce();
+		expect(add.mock.calls[0]?.[0]?.[0]).toMatchObject({
+			foodId: null,
+			name: 'HONEY NUT CHEERIOS',
+			kcal: 139
+		});
+	});
+
 	it('proposes a food chosen from search', async () => {
 		await openSheet();
 		await page.getByRole('button', { name: 'Search' }).click();
