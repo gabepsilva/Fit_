@@ -2,7 +2,7 @@ export type ButtonVariant = 'default' | 'secondary' | 'ghost' | 'outline' | 'qui
 export type ButtonSize = 'default' | 'sm' | 'lg' | 'icon' | 'icon-round';
 
 export const BUTTON_BASE =
-	'inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition-[transform,background-color,opacity,box-shadow,color] duration-150 ease-out active:not-disabled:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background';
+	'inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium transition-[transform,opacity,box-shadow] duration-150 ease-out active:not-disabled:scale-[0.96] disabled:pointer-events-none disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background';
 
 // Filled (`default`) buttons get an explicit disabled treatment rather than opacity:
 // fading a filled button's background and foreground together toward the page background
@@ -10,8 +10,12 @@ export const BUTTON_BASE =
 // the `secondary` pair — a light, muted fill with dark text — precisely because it reads
 // as unmistakably "off" against the dark-green enabled fill from its lightness alone, not
 // from a color a person has to discriminate or a hover/cursor a touch screen doesn't have.
-// (The color swap itself doesn't animate — see the `button:disabled` rule in app.css —
-// so the transition can't cross the two color pairs through a low-contrast midpoint.)
+// `background-color` and `color` are deliberately absent from BUTTON_BASE's transition
+// list (below): animating between two color pairs necessarily crosses low-contrast
+// intermediate frames in either direction, disabled-to-enabled included, and a control
+// whose contrast matters can't afford that mid-transition dip (issue #46 regression).
+// `transform`, `opacity` and `box-shadow` stay animated since neither can produce a
+// contrast violation between two already-accessible states.
 // The other variants sit on transparent/light backgrounds already, where a plain opacity
 // fade keeps its target ratio.
 export const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
