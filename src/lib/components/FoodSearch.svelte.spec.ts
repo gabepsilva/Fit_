@@ -51,4 +51,19 @@ describe('FoodSearch', () => {
 		await page.getByLabelText(SEARCH).fill('chicken breast');
 		await expect.element(page.getByText(/kcal/).first()).toBeInTheDocument();
 	});
+
+	it('keeps the provenance badge from wrapping when the name truncates', async () => {
+		// Regression: a long name (e.g. "Caffè latte, 12 oz whole milk") and a
+		// two-word badge ("Brand published") shared a row with no min-w-0 on the
+		// name or shrink-0 on the badge, so the badge wrapped to two lines and
+		// made that row taller than its neighbors.
+		await render(FoodSearch, { props: { onpick: vi.fn() } });
+		await page.getByLabelText(SEARCH).fill('latte');
+		const name = document.body.querySelector<HTMLElement>('p.truncate');
+		expect(name?.className).toMatch(/\bmin-w-0\b/);
+		const badge = page.getByText('Brand published');
+		await expect.element(badge).toBeInTheDocument();
+		const badgeWrapper = badge.element().closest('span.shrink-0');
+		expect(badgeWrapper).not.toBeNull();
+	});
 });

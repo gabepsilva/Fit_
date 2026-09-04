@@ -45,4 +45,17 @@ describe('MiniStat', () => {
 		await expect.element(page.getByText('60/120 g')).toBeInTheDocument();
 		expect(document.body.querySelector<HTMLElement>('.bg-primary')?.style.width).toBe('50%');
 	});
+
+	it('keeps a gap between the label and the value so they cannot touch', async () => {
+		// Regression: `flex justify-between` with no `gap` let a short label and a
+		// wide value abut directly at narrow widths — rendering "Protein73/80 g".
+		await render(MiniStat, { props: { label: 'Protein', value: 73, target: 80, unit: 'g' } });
+		const row = document.body.querySelector<HTMLElement>('.justify-between');
+		expect(row?.className).toMatch(/\bgap-\d/);
+	});
+
+	it('keeps the value from shrinking so it never wraps mid-number', async () => {
+		await render(MiniStat, { props: { label: 'Protein', value: 73, target: 80, unit: 'g' } });
+		await expect.element(page.getByText('73/80 g')).toHaveClass(/shrink-0/);
+	});
 });

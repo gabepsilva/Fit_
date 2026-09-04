@@ -44,8 +44,10 @@
 				>
 					<div class="min-w-0 flex-1">
 						<div class="flex items-center gap-2">
-							<p class="truncate font-medium">{food.name}</p>
-							<ProvenanceBadge provenance={food.provenance} />
+							<p class="min-w-0 truncate font-medium">{food.name}</p>
+							<span class="shrink-0">
+								<ProvenanceBadge provenance={food.provenance} />
+							</span>
 						</div>
 						<p class="text-muted-foreground truncate text-xs">{summary}</p>
 					</div>

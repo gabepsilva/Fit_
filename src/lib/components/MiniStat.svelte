@@ -10,9 +10,9 @@
 </script>
 
 <div>
-	<div class="flex justify-between text-xs">
-		<span class="text-muted-foreground">{label}</span>
-		<span class="tabular">{Math.round(value)}/{Math.round(target)} {unit}</span>
+	<div class="flex justify-between gap-2 text-xs">
+		<span class="text-muted-foreground truncate">{label}</span>
+		<span class="tabular shrink-0">{Math.round(value)}/{Math.round(target)} {unit}</span>
 	</div>
 	<ProgressBar {value} {target} class="mt-1" />
 </div>

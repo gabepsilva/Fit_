@@ -177,7 +177,6 @@
 			{#each MEALS as m (m)}
 				<ToggleButton
 					pressed={meal === m}
-					tone="inverse"
 					onclick={() => (meal = m)}
 					resting="bg-secondary text-muted-foreground"
 					class="h-8 flex-1 rounded-full text-xs capitalize"
