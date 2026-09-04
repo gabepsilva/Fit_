@@ -36,22 +36,34 @@ export type ParsedStateBody =
 	| { ok: false; code: 'invalid-body' }
 	| { ok: false; code: 'invalid-input'; field: string; reason: string };
 
+/**
+ * Whether the request declares JSON. The media type is the text before any
+ * parameter and is compared case-insensitively, so `application/json` and
+ * `APPLICATION/JSON ; charset=utf-8` both count. A request that declares no
+ * content type at all is not JSON.
+ */
 function hasJsonContentType(request: Request): boolean {
-	const declaredType = request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
-	return declaredType === JSON_CONTENT_TYPE;
+	const header = request.headers.get('content-type');
+	if (header === null) return false;
+	const separator = header.indexOf(';');
+	const declaredType = separator === -1 ? header : header.slice(0, separator);
+	return declaredType.trim().toLowerCase() === JSON_CONTENT_TYPE;
 }
 
-/** The text of the body, or `null` for a stream that failed or ran past the ceiling. */
-async function readBodyText(request: Request): Promise<string | null> {
+/**
+ * The body as a JSON object, or `null` for a stream that failed, a body past
+ * the ceiling, or text that is not a JSON object. The three share one answer
+ * because the caller reports one `invalid-body` for all of them; splitting the
+ * read from the parse only produced an intermediate no caller could observe.
+ */
+async function readJsonObject(request: Request): Promise<Record<string, unknown> | null> {
+	let raw: string;
 	try {
-		const raw = await request.text();
-		return raw.length > MAX_STATE_BODY_BYTES ? null : raw;
+		raw = await request.text();
 	} catch {
 		return null;
 	}
-}
-
-function parseJsonObject(raw: string): Record<string, unknown> | null {
+	if (raw.length > MAX_STATE_BODY_BYTES) return null;
 	try {
 		const parsed: unknown = JSON.parse(raw);
 		return isPlainObject(parsed) ? parsed : null;
@@ -60,8 +72,14 @@ function parseJsonObject(raw: string): Record<string, unknown> | null {
 	}
 }
 
-function isInvalidVersion(value: unknown): boolean {
-	return typeof value !== 'number' || !Number.isInteger(value) || value < 0;
+/**
+ * A version is a non-negative integer. `Number.isInteger` is already false for
+ * every value that is not a number, so it carries the type check too and a
+ * separate `typeof` guard would decide nothing; the assertion tells the
+ * compiler only what that call has just established.
+ */
+function isValidVersion(value: unknown): value is number {
+	return Number.isInteger(value) && (value as number) >= 0;
 }
 
 /**
@@ -75,21 +93,19 @@ export async function readStateBody(request: Request): Promise<ParsedStateBody> 
 	if (!hasJsonContentType(request) || declaredLength > MAX_STATE_BODY_BYTES) {
 		return { ok: false, code: 'invalid-body' };
 	}
-	const raw = await readBodyText(request);
-	if (raw === null) return { ok: false, code: 'invalid-body' };
-	const parsed = parseJsonObject(raw);
+	const parsed = await readJsonObject(request);
 	if (parsed === null || !isPlainObject(parsed['body'])) {
 		return { ok: false, code: 'invalid-body' };
 	}
 	const version = parsed['version'];
-	if (isInvalidVersion(version)) {
+	if (!isValidVersion(version)) {
 		return { ok: false, code: 'invalid-input', field: 'version', reason: 'invalid' };
 	}
 	const format = parsed['format'];
 	if (format !== STATE_FORMAT) {
 		return { ok: false, code: 'invalid-input', field: 'format', reason: 'unsupported' };
 	}
-	return { ok: true, version: version as number, format, body: parsed['body'] };
+	return { ok: true, version, format, body: parsed['body'] };
 }
 
 /** The signed-in account and its first household, or `null` for no session. */

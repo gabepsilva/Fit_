@@ -25,9 +25,15 @@ function putRequest(options: RequestOptions = {}): Request {
 	if (options.contentLength !== undefined) {
 		headers.set('content-length', String(options.contentLength));
 	}
-	return body === undefined
-		? new Request(SITE, { method: 'PUT', headers })
-		: new Request(SITE, { method: 'PUT', headers, body });
+	const request =
+		body === undefined
+			? new Request(SITE, { method: 'PUT', headers })
+			: new Request(SITE, { method: 'PUT', headers, body });
+	// `new Request` supplies `text/plain` for a string body the caller did not
+	// label, so omitting the header here has to mean removing it afterwards.
+	// Without this, a case meaning "no content type" quietly declared one.
+	if (!headers.has('content-type')) request.headers.delete('content-type');
+	return request;
 }
 
 function eventFor(auth: StateEvent['locals']['auth'], request: Request = putRequest()): StateEvent {
@@ -189,6 +195,22 @@ describe('writeState', () => {
 		);
 	});
 
+	it('accepts a second write at the version the first returned', async () => {
+		await writeState(
+			db,
+			eventFor(authFor(), putRequest({ body: { version: 0, format: 'tend.v1', body: { a: 1 } } }))
+		);
+		const response = await writeState(
+			db,
+			eventFor(authFor(), putRequest({ body: { version: 1, format: 'tend.v1', body: { a: 2 } } }))
+		);
+		expect(response.status).toBe(200);
+		expect(await bodyOf(response)).toMatchObject({ version: 2 });
+		expect(db.prepare('select body from household_state').get()?.['body']).toBe(
+			JSON.stringify({ a: 2 })
+		);
+	});
+
 	it('refuses a stale version and leaves the stored row unchanged', async () => {
 		await writeState(
 			db,
@@ -301,6 +323,20 @@ describe('writeState', () => {
 			)
 		);
 		expect(response.status).toBe(400);
+	});
+
+	it('accepts a content type padded with whitespace before its parameter', async () => {
+		const response = await writeState(
+			db,
+			eventFor(
+				authFor(),
+				putRequest({
+					body: { version: 0, format: 'tend.v1', body: { a: 1 } },
+					headers: { 'content-type': 'application/json ; charset=utf-8' }
+				})
+			)
+		);
+		expect(response.status).toBe(200);
 	});
 
 	it('accepts a content type declared in a different case, with a charset suffix', async () => {
