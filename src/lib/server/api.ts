@@ -19,6 +19,8 @@ const STATUS = {
 	'forbidden-origin': 403,
 	/** Registration only: the username is already in use. */
 	'username-taken': 409,
+	/** A write's expected version does not match what is stored; the current document is returned alongside it. */
+	'stale-version': 409,
 	/** The sign-in throttle is holding this attempt; `Retry-After` says for how long. */
 	'too-many-attempts': 429
 } as const;
