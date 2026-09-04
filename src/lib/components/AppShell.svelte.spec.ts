@@ -250,6 +250,27 @@ describe('AppShell, signed in', () => {
 		expect(document.body.textContent).not.toContain('A quieter tracker');
 	});
 
+	it('lets a person continue past a stuck pull rather than holding them with no way forward', async () => {
+		seedSessionStorage();
+		// Held rather than released for most of the test — the stuck-connection
+		// case — but resolved before the test ends so no unsettled request is
+		// left running against the shared `sync` singleton for a later test.
+		const state = heldStateFetch();
+		vi.useFakeTimers();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+
+		await vi.advanceTimersByTimeAsync(6000);
+		await page.getByRole('button', { name: 'Continue without waiting' }).click();
+		vi.useRealTimers();
+
+		// Nothing pulled and no local document either: this is the same
+		// Onboarding a device that had never synced would have shown, which is
+		// what "continuing" means here — not a promise the pull is abandoned.
+		await expect.element(page.getByText('A quieter tracker')).toBeInTheDocument();
+
+		state.release(0, null);
+	});
+
 	it('does not hold a returning device with its own document behind a spinner', async () => {
 		// This device already has its own onboarded document; the quiet
 		// background refresh a returning visit gets must not be interrupted by

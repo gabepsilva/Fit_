@@ -998,6 +998,68 @@ describe('while a request is in the air', () => {
 	});
 });
 
+describe('a connection that never answers at all', () => {
+	/**
+	 * A server whose `fetch` never resolves on its own — a half-open socket, a
+	 * captive portal that swallows the request. The only way this promise ever
+	 * settles is the `AbortSignal` `ask()` passes in, which is exactly the
+	 * mechanism under test: without it, this is a promise nothing ever ends.
+	 */
+	function hungConnection(): { aborted: () => number } {
+		let aborted = 0;
+		vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+			const signal = init?.signal;
+			return new Promise((_resolve, reject) => {
+				signal?.addEventListener('abort', () => {
+					aborted += 1;
+					reject(new DOMException('The operation was aborted.', 'AbortError'));
+				});
+			});
+		});
+		return { aborted: () => aborted };
+	}
+
+	it('gives up on its own rather than leaving status stuck at loading forever', async () => {
+		vi.useFakeTimers();
+		try {
+			const connection = hungConnection();
+			const sync = syncFor(blankDevice());
+
+			const started = sync.start(HOUSEHOLD);
+			expect(sync.status).toBe('loading');
+
+			// Comfortably past the request's own timeout, with nothing else in the
+			// test ever resolving the connection.
+			await vi.advanceTimersByTimeAsync(15_000);
+			await started;
+
+			expect(connection.aborted()).toBe(1);
+			expect(sync.status).not.toBe('loading');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('lands on the same status a plainly dropped connection would', async () => {
+		// A device holding something of its own: the outcome of a timed-out read
+		// must be indistinguishable from any other unreachable server, `waiting`
+		// among the possibilities exactly as it is for a dropped connection.
+		vi.useFakeTimers();
+		try {
+			hungConnection();
+			const sync = syncFor(journal());
+
+			const started = sync.start(HOUSEHOLD);
+			await vi.advanceTimersByTimeAsync(15_000);
+			await started;
+
+			expect(sync.status).toBe('waiting');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});
+
 describe('when the next account signs in before the last answer lands', () => {
 	/**
 	 * The window `AccountMenu` opens: `flush()` has returned, the sign-out round

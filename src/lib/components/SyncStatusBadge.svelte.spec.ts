@@ -44,7 +44,7 @@ describe('SyncStatusBadge, a write not yet on the server', () => {
 		expect(document.body.textContent).toContain('Saving…');
 	});
 
-	it('clears the notice once the save settles', async () => {
+	it('clears the notice once the save settles and its minimum stretch has passed', async () => {
 		vi.useFakeTimers();
 		sync.status = 'saving';
 		await render(SyncStatusBadge);
@@ -52,8 +52,36 @@ describe('SyncStatusBadge, a write not yet on the server', () => {
 		expect(document.body.textContent).toContain('Saving…');
 
 		sync.status = 'idle';
+		// The notice has a floor on how long it stays up once shown, so it does
+		// not vanish the instant the save that triggered it settles.
+		await vi.advanceTimersByTimeAsync(500);
+		expect(document.body.textContent).toContain('Saving…');
+
 		await vi.advanceTimersByTimeAsync(500);
 		expect(document.body.textContent?.trim()).toBe('');
+	});
+
+	it('does not strobe on a connection where each save takes about half a second', async () => {
+		// Several saves in a row, each settling before the next begins, on a
+		// connection slow enough to clear the notice delay but fast enough that
+		// naive show/hide would flicker the notice on and off between them.
+		vi.useFakeTimers();
+		sync.status = 'saving';
+		await render(SyncStatusBadge);
+
+		await vi.advanceTimersByTimeAsync(500);
+		expect(document.body.textContent).toContain('Saving…');
+
+		sync.status = 'idle';
+		await vi.advanceTimersByTimeAsync(100);
+		sync.status = 'saving';
+		// Still inside the minimum-visible stretch from the first save, and the
+		// second save has begun again: the notice was never cleared to begin
+		// with, so there is nothing here for a person to notice flickering.
+		expect(document.body.textContent).toContain('Saving…');
+
+		await vi.advanceTimersByTimeAsync(600);
+		expect(document.body.textContent).toContain('Saving…');
 	});
 });
 
@@ -78,5 +106,38 @@ describe('SyncStatusBadge, a write the server refused', () => {
 		sync.status = 'error';
 		await render(SyncStatusBadge);
 		await expect.element(page.getByText(/couldn't reach the server/i)).toBeInTheDocument();
+	});
+});
+
+describe('SyncStatusBadge, the live region itself', () => {
+	it('is present even with nothing to announce, rather than appearing only once there is', async () => {
+		// A region only mounted once a message exists is a region whose first
+		// message is inserted whole — the one case assistive tech is least
+		// likely to announce. It must already be there, empty, from the start.
+		sync.status = 'idle';
+		await render(SyncStatusBadge);
+		expect(page.getByRole('status').elements()).toHaveLength(1);
+	});
+
+	it('stays the one node across every state, rather than being recreated', async () => {
+		vi.useFakeTimers();
+		sync.status = 'idle';
+		await render(SyncStatusBadge);
+		const idleNode = page.getByRole('status').elements()[0];
+
+		sync.status = 'waiting';
+		await vi.advanceTimersByTimeAsync(0);
+		expect(page.getByRole('status').elements()[0]).toBe(idleNode);
+
+		sync.status = 'error';
+		await vi.advanceTimersByTimeAsync(0);
+		expect(page.getByRole('status').elements()[0]).toBe(idleNode);
+	});
+
+	it('sits out of document flow, so a notice appearing never shifts the content around it', async () => {
+		sync.status = 'idle';
+		await render(SyncStatusBadge);
+		const region = page.getByRole('status').elements()[0];
+		expect(region?.closest('.fixed')).not.toBeNull();
 	});
 });

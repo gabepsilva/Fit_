@@ -34,6 +34,20 @@ const STATE_FORMAT = 'tend.v1';
 /** A write refused because someone else's went first. */
 const STALE_STATUS = 409;
 
+/**
+ * How long an exchange may sit open before this device gives up on it.
+ *
+ * Long enough that an ordinary slow-mobile round trip is never mistaken for a
+ * dead connection — a captive portal's own redirect page can take several
+ * seconds, and a weak-signal 3G request routinely does too. Short enough that
+ * a truly half-open connection (the case this exists for: a socket that will
+ * never answer at all) does not leave `status` stuck at `'loading'` for
+ * minutes. `ask()` treats a timeout exactly like any other dropped request —
+ * there is nothing this device can tell the two apart, and nothing it needs
+ * to.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 const BEHIND_MESSAGE = 'This device was behind, so it reloaded your newer data.';
 
 /**
@@ -86,11 +100,18 @@ type Answer = { status: number; body: unknown };
  * `credentials` stays at the default, which carries the session cookie.
  */
 async function ask(init: RequestInit): Promise<Answer | null> {
+	// A plain `setTimeout` and an `AbortController`, not `AbortSignal.timeout`:
+	// the latter is not routed through the environment's timers, so a test
+	// simulating a hung connection has no way to make it fire.
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 	try {
-		const response = await fetch(resolve('/api/state'), init);
+		const response = await fetch(resolve('/api/state'), { ...init, signal: controller.signal });
 		return { status: response.status, body: (await response.json()) as unknown };
 	} catch {
 		return null;
+	} finally {
+		clearTimeout(timer);
 	}
 }
 

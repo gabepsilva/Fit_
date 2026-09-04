@@ -47,6 +47,15 @@
 	const restored = $derived(tend.hydrated && session.hydrated);
 
 	/**
+	 * Set by `InitialSync`'s own "continue without waiting" action: a person
+	 * held on the loading screen by a stuck connection is not made to wait for
+	 * `sync`'s own ten-second timeout on top of it. Reset for every household
+	 * that starts syncing, so the choice from one account never carries into
+	 * the next one that signs in on this device.
+	 */
+	let skipInitialSync = $state(false);
+
+	/**
 	 * A device with no document of its own is, until its first pull settles,
 	 * indistinguishable from one that has genuinely never onboarded — both read
 	 * `tend.state.onboarded` as `false`. Showing Onboarding in that window would
@@ -57,7 +66,9 @@
 	 * `onboarded` is whatever it is, and any later reload rides quietly in the
 	 * background the way it does for a returning device today.
 	 */
-	const awaitingFirstPull = $derived(!tend.state.onboarded && sync.status === 'loading');
+	const awaitingFirstPull = $derived(
+		!tend.state.onboarded && sync.status === 'loading' && !skipInitialSync
+	);
 
 	const pathname = $derived(page.url?.pathname ?? '/');
 	const onAuthRoute = $derived(AUTH_ROUTES.some((route) => resolve(route) === pathname));
@@ -118,6 +129,10 @@
 	 */
 	$effect(() => {
 		const household = restored && session.signedIn ? session.household : null;
+		// A fresh household gets a fresh chance at the loading screen: someone
+		// who chose to continue past a stuck pull on one account must not find
+		// the choice still in effect for the next one that signs in here.
+		skipInitialSync = false;
 		if (household === null) {
 			sync.stop();
 			return;
@@ -169,7 +184,10 @@
 			</div>
 		{:else if session.signedIn}
 			{#if awaitingFirstPull}
-				<InitialSync />
+				<InitialSync
+					onretry={() => void sync.flush()}
+					oncontinue={() => (skipInitialSync = true)}
+				/>
 			{:else if tend.state.onboarded}
 				<div class="bg-background flex min-h-dvh w-full max-w-lg flex-col">
 					<TopBar
