@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { bestFood, findFoods, guessMeal, hydrateProposal, parseLocalText } from './parse-text';
+import type { QuantitySpec } from './quantity';
 import type { Meal } from './types';
 
 const ids = (query: string, limit?: number) => findFoods(query, limit).map((hit) => hit.food.id);
@@ -47,8 +48,6 @@ const NUMBER_WORD_CASES: ParseCase[] = [
 // '×' is the multiplication sign, which people get from a phone keyboard.
 const WRITTEN_NUMBER_CASES: ParseCase[] = [
 	['1/2 avocado', 0.5, 'avocado', 1],
-	['3/4 cup oats', 0.75, 'oats', 0.96],
-	['10/20 cups brown rice', 0.5, 'brown-rice', 0.96],
 	['1/ 2 avocado', 0.5, 'avocado', 1],
 	['1 /2 avocado', 0.5, 'avocado', 1],
 	['0.5 avocado', 0.5, 'avocado', 1],
@@ -59,9 +58,12 @@ const WRITTEN_NUMBER_CASES: ParseCase[] = [
 ];
 
 const GLUED_UNIT_CASES: ParseCase[] = [
-	['150g brown rice', 150, 'brown-rice', 0.96],
-	['12.5g almonds', 12.5, 'almonds', 0.96],
-	['8oz salmon', 8, 'salmon', 0.96],
+	// 195 g a serving, so 150 g is a bit over three quarters of one.
+	['150g brown rice', 0.77, 'brown-rice', 0.96],
+	// 28 g a serving.
+	['12.5g almonds', 0.45, 'almonds', 0.96],
+	// 8 oz is 226.8 g against a 100 g serving.
+	['8oz salmon', 2.27, 'salmon', 0.96],
 	['1cup oats', 1, 'oats', 0.96],
 	['1slice toast', 1, 'sourdough', 0.96],
 	['2slices toast', 2, 'sourdough', 0.96]
@@ -75,8 +77,8 @@ const UNIT_WORD_CASES: ParseCase[] = [
 	['1 slice sourdough', 1, 'sourdough', 0.96],
 	['2 slices toast', 2, 'sourdough', 0.96],
 	['1 cup oats', 1, 'oats', 0.96],
-	['2 cups brown rice', 2, 'brown-rice', 0.96],
-	['2 tbsp peanut butter', 2, 'peanut-butter', 0.96],
+	['2 cups brown rice', 1, 'brown-rice', 0.96],
+	['2 tbsp peanut butter', 1, 'peanut-butter', 0.96],
 	['1 tsp honey', 1, 'honey', 1],
 	['1 scoop whey', 1, 'whey', 0.96],
 	['2 scoops whey', 2, 'whey', 0.96],
@@ -86,10 +88,10 @@ const UNIT_WORD_CASES: ParseCase[] = [
 	['1 bowl oats', 1, 'oats', 0.96],
 	['1 piece salmon', 1, 'salmon', 0.96],
 	['2 pieces salmon', 2, 'salmon', 0.96],
-	['4 oz salmon', 4, 'salmon', 0.96],
-	['150 g brown rice', 150, 'brown-rice', 0.96],
-	['150 grams brown rice', 150, 'brown-rice', 0.96],
-	['1 gram honey', 1, 'honey', 1]
+	['4 oz salmon', 1.13, 'salmon', 0.96],
+	['150 g brown rice', 0.77, 'brown-rice', 0.96],
+	['150 grams brown rice', 0.77, 'brown-rice', 0.96],
+	['1 gram honey', 0.05, 'honey', 1]
 ];
 
 describe('findFoods', () => {
@@ -216,7 +218,7 @@ describe('parseLocalText', () => {
 	);
 
 	it.each(UNIT_WORD_CASES)(
-		'drops the unit word in "%s" and logs %d serving(s) of %s',
+		'reads the unit word in "%s" and logs %d serving(s) of %s',
 		(text, servings, foodId, confidence) => {
 			const item = firstItem(text);
 			expect(item?.servings).toBe(servings);
@@ -338,6 +340,15 @@ describe('parseLocalText', () => {
 		expect(result.items[0]?.servings).toBe(1);
 	});
 
+	it('accepts a match scoring exactly at the threshold, not just above it', () => {
+		// Eleven of twenty words name the food: 11/20 is the 0.55 threshold itself.
+		const repeat = (word: string, times: number) => Array.from({ length: times }, () => word);
+		const words = [...repeat('chicken', 11), ...repeat('zebra', 9)].join(' ');
+		const item = parseLocalText(words, 'lunch').items[0];
+		expect(item?.confidence).toBe(0.55);
+		expect(item?.foodId).toBe('chicken-breast');
+	});
+
 	it('is not "all matched" when there is nothing to match', () => {
 		const result = parseLocalText('');
 		expect(result.items).toEqual([]);
@@ -350,6 +361,111 @@ describe('parseLocalText', () => {
 		expect(result.unmatched).toEqual([]);
 		expect(result.items.map((i) => i.foodId)).toEqual(['chicken-breast', 'brown-rice']);
 		expect(result.items.map((i) => i.confidence)).toEqual([0.96, 0.96]);
+	});
+});
+
+describe('parseLocalText quantities', () => {
+	const quantityOf = (text: string) => firstItem(text)?.quantity;
+
+	it.each([
+		['200 g chicken breast', 2, 'chicken-breast'],
+		['200g chicken breast', 2, 'chicken-breast'],
+		['1 kg chicken breast', 10, 'chicken-breast'],
+		// A 244 g serving of milk, so 200 g is a little over four fifths.
+		['200 g milk', 0.82, 'whole-milk'],
+		// 1 lb is 453.59 g against a 100 g serving.
+		['1 lb salmon', 4.54, 'salmon'],
+		['16 ounces salmon', 4.54, 'salmon']
+	])(
+		'resolves the mass in "%s" against the food\u2019s own serving weight',
+		(text, servings, id) => {
+			const item = firstItem(text);
+			expect(item?.foodId).toBe(id);
+			expect(item?.servings).toBe(servings);
+		}
+	);
+
+	it('keeps the mass it read, so a matcher can resolve it later', () => {
+		expect(quantityOf('200 g chicken breast')).toEqual<QuantitySpec>({
+			amount: 200,
+			unit: 'g',
+			kind: 'mass'
+		});
+	});
+
+	it.each([
+		['2 cups milk', 'cups', 'whole-milk'],
+		['2 cups brown rice', 'cups', 'brown-rice'],
+		['3/4 cup oats', 'cup', 'oats'],
+		['250 ml milk', 'ml', 'whole-milk'],
+		['2 tbsp peanut butter', 'tbsp', 'peanut-butter']
+	])(
+		'records one serving for the volume in "%s" rather than inventing a number',
+		(text, unit, id) => {
+			const item = firstItem(text);
+			expect(item?.foodId).toBe(id);
+			expect(item?.servings).toBe(1);
+			expect(item?.quantity?.unit).toBe(unit);
+			expect(item?.quantity?.kind).toBe('volume');
+		}
+	);
+
+	it.each([
+		['200 G chicken breast', 2, 'chicken-breast'],
+		['150G brown rice', 0.77, 'brown-rice']
+	])('reads the unit in "%s" whatever case it was typed in', (text, servings, id) => {
+		const item = firstItem(text);
+		expect(item?.foodId).toBe(id);
+		expect(item?.servings).toBe(servings);
+		expect(item?.quantity?.kind).toBe('mass');
+	});
+
+	it('keeps the unit lowercased, however it was typed', () => {
+		expect(quantityOf('200 G chicken breast')?.unit).toBe('g');
+		expect(quantityOf('150g brown rice')).toEqual<QuantitySpec>({
+			amount: 150,
+			unit: 'g',
+			kind: 'mass'
+		});
+	});
+
+	it('leaves a bare number meaning servings', () => {
+		expect(quantityOf('two eggs')).toEqual<QuantitySpec>({ amount: 2, unit: '', kind: 'serving' });
+		expect(firstItem('two eggs')?.servings).toBe(2);
+	});
+
+	it('leaves a per-item unit meaning servings', () => {
+		expect(quantityOf('2 slices of toast')).toEqual<QuantitySpec>({
+			amount: 2,
+			unit: '',
+			kind: 'serving'
+		});
+		expect(firstItem('2 slices of toast')?.servings).toBe(2);
+	});
+
+	it('will not read the last word left in a phrase as a unit', () => {
+		const item = firstItem('3 cups');
+		expect(item?.servings).toBe(3);
+		expect(item?.quantity).toEqual<QuantitySpec>({ amount: 3, unit: '', kind: 'serving' });
+	});
+
+	it('reads no unit from a phrase that leads with none', () => {
+		expect(quantityOf('coffee')).toEqual<QuantitySpec>({ amount: 1, unit: '', kind: 'serving' });
+	});
+
+	it('reads no unit from a leading fraction', () => {
+		expect(quantityOf('1/2 avocado')).toEqual<QuantitySpec>({
+			amount: 0.5,
+			unit: '',
+			kind: 'serving'
+		});
+	});
+
+	it('records one serving for a mass it has no catalog food to weigh', () => {
+		const item = firstItem('200 g xyzzy gruel');
+		expect(item?.foodId).toBeNull();
+		expect(item?.servings).toBe(1);
+		expect(item?.quantity).toEqual<QuantitySpec>({ amount: 200, unit: 'g', kind: 'mass' });
 	});
 });
 

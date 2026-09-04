@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { FOOD_BY_ID } from '$lib/domain/foods';
-import type { ProposedItem } from '$lib/domain/types';
+import type { QuantifiedItem } from '$lib/domain/quantity';
 import ProposalRow from './ProposalRow.svelte';
 
-const matched: ProposedItem = {
+const matched: QuantifiedItem = {
 	foodId: 'egg-large',
 	query: 'eggs',
 	name: 'Egg, large',
@@ -14,7 +14,7 @@ const matched: ProposedItem = {
 	confidence: 0.92
 };
 
-const unmatched: ProposedItem = { ...matched, foodId: null, name: 'gruel', confidence: 0 };
+const unmatched: QuantifiedItem = { ...matched, foodId: null, name: 'gruel', confidence: 0 };
 
 const handlers = {
 	onmatch: vi.fn(),
@@ -60,7 +60,8 @@ describe('ProposalRow', () => {
 		await render(ProposalRow, {
 			props: { item: unmatched, step: 0.5, matching: false, ...handlers }
 		});
-		await expect.element(page.getByText('serving')).toBeInTheDocument();
+		// Exact: the row also states the recorded amount, which contains "servings".
+		await expect.element(page.getByText('serving', { exact: true })).toBeInTheDocument();
 	});
 
 	it('asks to open the matcher', async () => {
@@ -86,6 +87,35 @@ describe('ProposalRow', () => {
 		});
 		await page.getByRole('button', { name: 'Increase' }).click();
 		expect(onchange).toHaveBeenCalledWith(expect.objectContaining({ servings: 2.5 }));
+	});
+
+	it('states what will be logged, in servings and in grams', async () => {
+		await render(ProposalRow, {
+			props: { item: matched, step: 0.5, matching: false, ...handlers }
+		});
+		// A large egg is 50 g a serving.
+		await expect.element(page.getByText('2 servings · 100 g')).toBeInTheDocument();
+	});
+
+	it('names the quantity it could not use, and what it recorded instead', async () => {
+		const item: QuantifiedItem = {
+			...matched,
+			servings: 1,
+			quantity: { amount: 2, unit: 'cups', kind: 'volume' }
+		};
+		await render(ProposalRow, { props: { item, step: 0.5, matching: false, ...handlers } });
+		await expect
+			.element(page.getByText('Couldn’t use “2 cups” — recorded as 1 serving · 50 g'))
+			.toBeInTheDocument();
+	});
+
+	it('says nothing about a unit it did use', async () => {
+		const item: QuantifiedItem = {
+			...matched,
+			quantity: { amount: 100, unit: 'g', kind: 'mass' }
+		};
+		await render(ProposalRow, { props: { item, step: 0.5, matching: false, ...handlers } });
+		await expect.element(page.getByText('2 servings · 100 g')).toBeInTheDocument();
 	});
 
 	it('reports a removal', async () => {
