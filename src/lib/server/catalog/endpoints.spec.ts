@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Auth } from '../users/types';
 import { lookupBarcode, searchCatalog } from './endpoints';
 import type { CatalogEvent } from './endpoints';
-import { createFixtureCatalog } from './fixture';
+import { createFixtureCatalog } from '../../../../tests/catalog-fixture';
 
 const SIGNED_IN = {
 	account: { id: 'a1', username: 'jordan', displayName: 'Jordan', createdAt: '2026-01-01' },

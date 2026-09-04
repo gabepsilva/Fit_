@@ -46,6 +46,15 @@ describe('openCatalog', () => {
 		expect(open).not.toHaveBeenCalled();
 	});
 
+	it('asks node:sqlite for a read-only handle, not merely a read-only pragma', () => {
+		// Straight at the dependency, because `openCatalog` also sets
+		// `query_only`, which would refuse the write on its own and hide the
+		// loss of the read-only open behind it.
+		const db = catalogDependencies.open(temporaryCatalog());
+		expect(() => db.exec("insert into food values (2, 'EGG')")).toThrow(/readonly/i);
+		db.close();
+	});
+
 	it('opens the file read-only, so a rebuilt catalog can never hold user rows', () => {
 		const db = openCatalog(temporaryCatalog());
 		expect(db?.prepare('select name from food').get()?.['name']).toBe('MILK');

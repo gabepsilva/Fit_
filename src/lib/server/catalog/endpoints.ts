@@ -49,7 +49,8 @@ export function searchCatalog(catalog: DatabaseSync | null, event: CatalogEvent)
 export function lookupBarcode(catalog: DatabaseSync | null, event: CatalogEvent): Response {
 	const gate = ready(catalog, event);
 	if (!gate.ok) return gate.response;
-	const barcode = barcodeOf(event.url.searchParams.get('code') ?? '');
+	const code = event.url.searchParams.get('code');
+	const barcode = code === null ? null : barcodeOf(code);
 	if (barcode === null) return apiError('invalid-input', { field: 'code', reason: 'invalid' });
 	const foods = foodsByBarcode(gate.catalog, barcode);
 	if (foods.length === 0) return apiError('not-found', { field: 'code', reason: 'unknown' });

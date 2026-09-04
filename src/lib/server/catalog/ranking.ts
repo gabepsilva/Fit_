@@ -69,6 +69,9 @@ const CORROBORATION_SCALE = 250;
 /** The core catalog's quality floor; rows below it normalize to zero rather than to a negative. */
 const QUALITY_FLOOR = 87;
 
+/** The span from that floor to a perfect 100, which the quality term divides by. */
+const QUALITY_SPAN = 13;
+
 /** At or above this, a generic row is a USDA reference food rather than a survey composite. */
 const REFERENCE_QUALITY = 91;
 
@@ -86,16 +89,8 @@ const SHORTLIST = 500;
  * Kept short on purpose: this is a demotion, not a filter, and every word added
  * here is a food someone can still find by naming it.
  */
-const PROCESSED_FORM_WORDS = [
-	'dried',
-	'dehydrated',
-	'powder',
-	'frozen',
-	'canned',
-	'concentrate',
-	'imitation',
-	'meatless'
-];
+const PROCESSED_FORM_WORDS =
+	'dried dehydrated powder frozen canned concentrate imitation meatless'.split(' ');
 
 /** One trailing "s" dropped from a word longer than three characters — `singular` in `query.ts`, in SQL. */
 function singularSql(column: string): string {
@@ -177,7 +172,7 @@ named as (
 				then 1.0 else 0.0 end)
 			+ ${w.corroboration} * min(1.0,
 				ln(1.0 + f.n_sources) / ln(1.0 + ${CORROBORATION_SCALE}.0))
-			+ ${w.quality} * max(0.0, (f.quality - ${QUALITY_FLOOR}) / ${100 - QUALITY_FLOOR}.0)
+			+ ${w.quality} * max(0.0, (f.quality - ${QUALITY_FLOOR}) / ${QUALITY_SPAN}.0)
 			as row_score
 	from matched m
 	join food f on f.food_id = m.food_id

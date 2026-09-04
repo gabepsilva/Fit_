@@ -3,6 +3,10 @@ import { DatabaseSync } from 'node:sqlite';
 /**
  * A catalog of a dozen rows, in the shape `data/scripts/build_db.py` builds.
  *
+ * It lives beside `e2e-support.ts` rather than under `src/`, because it is test
+ * data: nothing the application ships imports it, and a mutant in a row is a
+ * changed food name rather than a defect any test should be asserting.
+ *
  * It exists so the ranking is asserted rather than hoped for. The real catalog
  * is a 365 MB file that is not in the repository and not in CI, so the rows
  * here are chosen to reproduce the defect it exhibits: ordered by `quality`
@@ -77,15 +81,16 @@ const FIXTURE_FOODS: FixtureRow[] = [
 		barcode: '00000000000059',
 		alias: null
 	},
-	// A preserved form. Short, generic and high quality, so only the
-	// processed-form penalty keeps it below plain milk.
+	// A preserved form, built to win on every other term: as short as
+	// "Milk, whole", generic, in the reference tier it is not in, and better
+	// corroborated. Only the processed-form penalty keeps it below plain milk.
 	{
 		id: 6,
-		name: 'Milk, dried, whole',
+		name: 'Milk, dried',
 		brand: null,
 		kind: 'generic',
 		quality: 91,
-		sources: 2,
+		sources: 300,
 		barcode: null,
 		alias: null
 	},
