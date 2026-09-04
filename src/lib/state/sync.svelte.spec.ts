@@ -900,6 +900,38 @@ describe('while a request is in the air', () => {
 		await started;
 	});
 
+	it('is already loading the instant start is called, before any request lands', () => {
+		// A caller that renders off `status` right after calling `start` — the
+		// gate between a loading screen and Onboarding — must never catch a tick
+		// where the household is set but the read has not been marked under way.
+		// This is checked with no `await` at all: the assertion runs before the
+		// microtask that issues the request has even had a chance to.
+		const gate = held(documentAnswer(0, null));
+		const sync = syncFor(blankDevice());
+
+		void sync.start(HOUSEHOLD);
+
+		expect(sync.status).toBe('loading');
+		gate.release();
+	});
+
+	it('says it is reading again on a retry, after a first read that never landed', async () => {
+		// The first pull never counts as read (it was `unreachable`, not
+		// `refused`), so a later trigger reads again — and that second read
+		// marks `status` as `loading` on its own, the same as the first did.
+		const sent = server([DROPPED]);
+		const sync = syncFor(blankDevice());
+		await sync.start(HOUSEHOLD);
+		expect(sent).toHaveLength(1);
+		expect(sync.status).toBe('idle');
+
+		const gate = held(documentAnswer(0, null));
+		globalThis.dispatchEvent(new Event('online'));
+		await vi.waitFor(() => expect(sync.status).toBe('loading'));
+
+		gate.release();
+	});
+
 	it('says it is saving while it saves', async () => {
 		const server = heldWrites(documentAnswer(0, null));
 		const sync = syncFor(journal());
@@ -980,6 +1012,86 @@ describe('while a request is in the air', () => {
 
 		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
 		expect(store.state.profiles).toEqual([]);
+	});
+});
+
+describe('a connection that never answers at all', () => {
+	/**
+	 * A server whose `fetch` never resolves on its own — a half-open socket, a
+	 * captive portal that swallows the request. The only way this promise ever
+	 * settles is the `AbortSignal` `ask()` passes in, which is exactly the
+	 * mechanism under test: without it, this is a promise nothing ever ends.
+	 */
+	function hungConnection(): { aborted: () => number } {
+		let aborted = 0;
+		vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+			const signal = init?.signal;
+			return new Promise((_resolve, reject) => {
+				signal?.addEventListener('abort', () => {
+					aborted += 1;
+					reject(new DOMException('The operation was aborted.', 'AbortError'));
+				});
+			});
+		});
+		return { aborted: () => aborted };
+	}
+
+	it('gives up on its own rather than leaving status stuck at loading forever', async () => {
+		vi.useFakeTimers();
+		try {
+			const connection = hungConnection();
+			const sync = syncFor(blankDevice());
+
+			const started = sync.start(HOUSEHOLD);
+			expect(sync.status).toBe('loading');
+
+			// Comfortably past the request's own timeout, with nothing else in the
+			// test ever resolving the connection.
+			await vi.advanceTimersByTimeAsync(15_000);
+			await started;
+
+			expect(connection.aborted()).toBe(1);
+			expect(sync.status).not.toBe('loading');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('lands on the same status a plainly dropped connection would', async () => {
+		// A device holding something of its own: the outcome of a timed-out read
+		// must be indistinguishable from any other unreachable server, `waiting`
+		// among the possibilities exactly as it is for a dropped connection.
+		vi.useFakeTimers();
+		try {
+			hungConnection();
+			const sync = syncFor(journal());
+
+			const started = sync.start(HOUSEHOLD);
+			await vi.advanceTimersByTimeAsync(15_000);
+			await started;
+
+			expect(sync.status).toBe('waiting');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('clears its own timeout once an answer arrives, rather than leaving it pending', async () => {
+		// A request the server answered promptly still armed a timer against a
+		// hang that never happened. Leaving that timer running would eventually
+		// abort a signal nothing is listening to any more — harmless, but a real
+		// resource this device should not be holding on to for ten seconds
+		// after the exchange it was for is long done. Asserted directly against
+		// `clearTimeout` rather than a pending-timer count: this environment's
+		// own machinery holds timers of its own that have nothing to do with
+		// this request, and a count is not a reliable way to isolate one call.
+		const cleared = vi.spyOn(globalThis, 'clearTimeout');
+		server([documentAnswer(0, null)]);
+		const sync = syncFor(blankDevice());
+
+		await sync.start(HOUSEHOLD);
+
+		expect(cleared).toHaveBeenCalled();
 	});
 });
 
