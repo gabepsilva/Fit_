@@ -94,8 +94,10 @@ read when a session starts, so a session older than a definition falls back to
 | `reviewer` | opus   | high   | Review of a builder's or solver's change before it reaches `main`             |
 
 Each rung names a capability, not a vendor. The `mechanic` and `builder` rungs go to an
-OpenCode free model first, run headless in the slice's worktree with `opencode run --dir
-<worktree> -m <provider/model> "<prompt>"`. Free at the time of writing:
+OpenCode free model first, run headless from inside the slice's worktree with `cd
+<worktree> && opencode run -m <provider/model> "<prompt>"`. The `--dir` flag must not be
+used because an absolute worktree path falls outside OpenCode's trusted root and its file
+tools are rejected before the model reads anything. Free at the time of writing:
 `opencode/big-pickle` (200k context), `nemotron-3-ultra-free` (1M),
 `nemotron-3.5-lightning-free` (262k), `muse-spark-1.3-contributor-free` (1M),
 `mimo-v2.5-free`, `ling-3.0-flash-fin-free`, and the local `ai1` provider. Paid
