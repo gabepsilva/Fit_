@@ -16,12 +16,14 @@ import type { GateFixture } from './fixtures';
  * CI. `check:ci-contract` proves the workflow still runs every group.
  */
 const rules: [string, (fixture: GateFixture) => boolean][] = [
+	// Anything that boots a browser: a nested Playwright run, a nested
+	// browser-mode Vitest run, and the one mutation lane that needs both. Taking
+	// them first is what lets the mutation runner below skip the browser
+	// download entirely.
+	['browser', (fixture) => fixture.browser === true],
 	// Nested Stryker runs. Serial by their own `exclusive` flag, so they get a
 	// runner to themselves and the full machine each.
 	['mutation', (fixture) => fixture.exclusive === true],
-	// What is left that boots a browser: a nested Playwright run and a nested
-	// browser-mode Vitest run.
-	['browser', (fixture) => fixture.browser === true],
 	// Everything else: static gates and the Docker-based scanners.
 	['static', () => true]
 ];

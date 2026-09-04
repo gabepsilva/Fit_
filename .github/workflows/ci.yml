@@ -487,12 +487,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - group: mutation
-            docker: false
-            browser: true
           - group: browser
             docker: false
             browser: true
+          - group: mutation
+            docker: false
+            browser: false
           - group: static
             docker: true
             browser: false

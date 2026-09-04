@@ -302,7 +302,7 @@ export const fixtures: GateFixture[] = [
 		apply: (root) =>
 			edit(root, '.github/workflows/ci.yml', (content) =>
 				content.replace(
-					'          - group: mutation\n            docker: false\n            browser: true\n',
+					'          - group: mutation\n            docker: false\n            browser: false\n',
 					''
 				)
 			)
