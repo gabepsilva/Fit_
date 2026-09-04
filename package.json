@@ -20,6 +20,8 @@
 		"build:capacitor": "VITE_CAPACITOR=1 vite build",
 		"android:sync": "bun run build:capacitor && cap sync android",
 		"android:run": "bun run android:sync && cap run android",
+		"android:release": "bun scripts/android/build-release.ts",
+		"android:install": "bun scripts/android/install.ts",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync && git config core.hooksPath .githooks 2>/dev/null || true",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",

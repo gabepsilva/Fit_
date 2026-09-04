@@ -52,10 +52,15 @@ captures/
 # Comment next line if keeping position of elements in Navigation Editor is relevant for you
 .idea/navEditor.xml
 
-# Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+# Keystore files and anything carrying their passwords. The release keystore and
+# its properties file live outside this repository (see README, "Android release
+# build") and are named by FIT_ANDROID_SIGNING_PROPERTIES, so nothing here is a
+# path anyone should be able to commit by accident.
+*.jks
+*.keystore
+*.properties
+!gradle.properties
+!gradle/wrapper/gradle-wrapper.properties
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild
