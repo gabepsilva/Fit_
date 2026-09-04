@@ -143,6 +143,21 @@ export async function openLogSheet(page: Page): Promise<void> {
 	await expect(sheet.getByRole('button', { name: 'Close' })).toBeFocused();
 }
 
+/**
+ * Onboard onto the seeded journal, so there is a day's log to read.
+ *
+ * No `page.goto` of its own, unlike `openEmptyJournal`: some callers are
+ * already on the first run when they reach it, having just registered or just
+ * come back to a device, and navigating again would throw that state away. The
+ * ones that do need it navigate for themselves on the line above.
+ */
+export async function openSampleJournal(page: Page): Promise<void> {
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await page.getByRole('button', { name: 'Open the sample journal' }).click();
+	await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+}
+
 /** Onboard onto an empty journal, so anything logged afterwards is logged here. */
 export async function openEmptyJournal(page: Page): Promise<void> {
 	await page.goto('/');

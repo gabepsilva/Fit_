@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test';
 import { test } from '../../tests/preview-server';
-import { openLogSheetAndType, signInThroughApi } from '../../tests/e2e-support';
+import { openLogSheetAndType, openSampleJournal, signInThroughApi } from '../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 test.describe('arriving without an account', () => {
@@ -76,10 +76,7 @@ test.describe('once onboarded', () => {
 	test.beforeEach(async ({ page, baseURL }) => {
 		await signInThroughApi(page, baseURL ?? '');
 		await page.goto('/');
-		await page.getByRole('button', { name: 'Continue' }).click();
-		await page.getByRole('button', { name: 'Continue' }).click();
-		await page.getByRole('button', { name: 'Open the sample journal' }).click();
-		await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+		await openSampleJournal(page);
 	});
 
 	test('shows today with the day’s log', async ({ page }) => {

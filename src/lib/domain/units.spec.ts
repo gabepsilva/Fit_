@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
 	cmToIn,
-	displayHeight,
 	displayWeight,
-	formatHeight,
 	formatWeight,
 	heightFromFeetInches,
 	heightToFeetInches,
-	heightUnitName,
 	inToCm,
 	kgToLb,
 	lbToKg,
@@ -65,20 +62,14 @@ describe('weight conversion', () => {
 });
 
 describe('height conversion', () => {
-	it('reads a metric height as whole centimeters', () => {
-		expect(displayHeight(168, 'metric')).toEqual({ cm: 168 });
-		expect(formatHeight(168, 'metric')).toBe('168 cm');
-	});
-
-	it('reads an imperial height as feet and inches', () => {
+	it('reads a height as feet and inches', () => {
 		// 168 cm is 5'6.1", which rounds to 5'6.
-		expect(displayHeight(168, 'imperial')).toEqual({ feet: 5, inches: 6 });
-		expect(formatHeight(168, 'imperial')).toBe('5′6″');
+		expect(heightToFeetInches(168)).toEqual({ feet: 5, inches: 6 });
 	});
 
 	it('carries a foot when inches round up to twelve', () => {
 		// 182.5 cm is 71.85 in, which rounds to 72 in = 6'0", not 5'12".
-		expect(displayHeight(182.5, 'imperial')).toEqual({ feet: 6, inches: 0 });
+		expect(heightToFeetInches(182.5)).toEqual({ feet: 6, inches: 0 });
 	});
 
 	it('round-trips cm -> in -> cm with no drift', () => {
@@ -93,10 +84,5 @@ describe('height conversion', () => {
 
 	it('round-trips feet and inches typed in, back out, with no drift', () => {
 		expect(heightToFeetInches(heightFromFeetInches(5, 9))).toEqual({ feet: 5, inches: 9 });
-	});
-
-	it('names the unit in full for a screen reader', () => {
-		expect(heightUnitName('imperial')).toBe('feet and inches');
-		expect(heightUnitName('metric')).toBe('centimeters');
 	});
 });

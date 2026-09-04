@@ -37,10 +37,6 @@ export function weightUnitAbbr(units: UnitSystem): string {
 	return units === 'imperial' ? 'lb' : 'kg';
 }
 
-export function heightUnitName(units: UnitSystem): string {
-	return units === 'imperial' ? 'feet and inches' : 'centimeters';
-}
-
 /**
  * A stored `kg` (body weight, or a `kg`/week trend delta — the conversion is
  * a pure scale, so a delta converts the same way a quantity does), read in
@@ -60,23 +56,10 @@ export function weightToKg(value: number, units: UnitSystem): number {
 	return units === 'imperial' ? lbToKg(value) : value;
 }
 
-/** A stored `heightCm`, read as whole feet and inches — the imperial half of `displayHeight`. */
+/** A stored `heightCm`, read as whole feet and inches, which is how imperial states a height. */
 export function heightToFeetInches(cm: number): { feet: number; inches: number } {
 	const totalInches = Math.round(cmToIn(cm));
 	return { feet: Math.floor(totalInches / 12), inches: totalInches % 12 };
-}
-
-export type DisplayHeight = { feet: number; inches: number } | { cm: number };
-
-/** A stored `heightCm`, read in the chosen system: whole cm, or feet + inches. */
-export function displayHeight(cm: number, units: UnitSystem): DisplayHeight {
-	return units === 'metric' ? { cm: Math.round(cm) } : heightToFeetInches(cm);
-}
-
-/** `displayHeight` rendered as text: "168 cm" or "5′6″". */
-export function formatHeight(cm: number, units: UnitSystem): string {
-	const h = displayHeight(cm, units);
-	return 'cm' in h ? `${h.cm} cm` : `${h.feet}′${h.inches}″`;
 }
 
 /** The canonical `heightCm` for feet and inches a person typed in imperial. */
