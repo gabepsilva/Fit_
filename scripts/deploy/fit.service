@@ -1,0 +1,56 @@
+[Unit]
+Description=Fit_ web application
+Documentation=https://github.com/gabepsilva/Fit_
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fit
+Group=fit
+# A symlink, so a restart is what picks up the release the deploy just switched to.
+WorkingDirectory=/opt/fit/current
+EnvironmentFile=/etc/fit/fit.env
+ExecStart=/opt/node/bin/node build
+Restart=always
+RestartSec=2
+
+# The unit binds 80 directly rather than running a proxy for one upstream.
+# This is the only privilege it keeps, and it keeps none it could acquire.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+# The database is the one thing on this machine the app may write.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/fit
+# systemd's default umask is 0022, so app.sqlite and the -wal and -shm beside
+# it are born 0644 and only then narrowed to 0600 by src/lib/server/db.ts.
+# 0700 on /var/lib/fit is what makes that window harmless, which makes the
+# directory mode the only thing standing between the password hashes and every
+# local account. This is the second wall: the files are created private.
+UMask=0077
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+LockPersonality=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# AF_UNIX is not for the network: Node's own plumbing uses it.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# MemoryDenyWriteExecute is deliberately absent: V8 maps its JIT pages W+X.
+
+[Install]
+WantedBy=multi-user.target
