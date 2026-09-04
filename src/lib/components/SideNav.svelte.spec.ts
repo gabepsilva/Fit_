@@ -3,6 +3,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import type { SignedInSession } from '$lib/auth/api';
 import { session } from '$lib/state/session.svelte';
+import { APP_VERSION } from '$lib/version';
 import SideNav from './SideNav.svelte';
 
 const DESTINATIONS = ['Today', 'Progress', 'Exercise', 'Plan', 'You'];
@@ -98,6 +99,25 @@ describe('SideNav', () => {
 		await expect
 			.element(page.getByRole('button', { name: 'Sign out', exact: true }))
 			.toBeInTheDocument();
+	});
+
+	it('shows which build this is, at the foot of the drawer', async () => {
+		await render(SideNav, { props: { open: true, pathname: '/' } });
+		await expect.element(page.getByText(APP_VERSION, { exact: true })).toBeInTheDocument();
+	});
+
+	it('names the number for a screen reader rather than showing a bare string', async () => {
+		await render(SideNav, { props: { open: true, pathname: '/' } });
+		await expect.element(page.getByText(`Version ${APP_VERSION}`)).toBeInTheDocument();
+	});
+
+	it('offers nothing to tap: the version is text, not a control', async () => {
+		await render(SideNav, { props: { open: true, pathname: '/' } });
+		const shown = [...document.querySelectorAll('span')].find(
+			(element) => element.textContent === APP_VERSION
+		);
+		expect(shown).toBeDefined();
+		expect(shown?.closest('a, button')).toBeNull();
 	});
 
 	it('closes on Escape', async () => {

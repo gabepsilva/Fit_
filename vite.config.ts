@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import thresholds from './quality/thresholds.json' with { type: 'json' };
+import { readBuildVersion } from './scripts/build/app-version.ts';
 import { DOM_FREE_CLIENT_SPECS } from './quality/dom-free-client-specs.mjs';
 import { playwright } from '@vitest/browser-playwright';
 import adapter from '@sveltejs/adapter-node';
@@ -135,7 +136,19 @@ const DEV_HOSTS = (process.env.FIT_DEV_HOSTS ?? '')
 	.map((host) => host.trim())
 	.filter((host) => host !== '');
 
+/**
+ * The version this build carries, read once here and substituted into the
+ * bundle by `define` below, so the shell, the Capacitor build and
+ * `/api/version` all answer with the same string. `scripts/build/app-version.ts`
+ * has where it comes from.
+ */
+const build = readBuildVersion();
+
 export default defineConfig({
+	define: {
+		__APP_VERSION__: JSON.stringify(build.version),
+		__APP_COMMIT__: JSON.stringify(build.commit)
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit({

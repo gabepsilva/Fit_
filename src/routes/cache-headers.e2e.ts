@@ -70,4 +70,13 @@ test.describe('cache policy', () => {
 		expect(response.status()).toBe(401);
 		expect(response.headers()['cache-control']).toBe('no-cache');
 	});
+
+	test('the version endpoint answers anyone, and never from a cache', async ({ request }) => {
+		// The deploy's smoke check reads this before it has an account, and a
+		// cached answer would report the release it replaced as the live one.
+		const response = await request.get('/api/version');
+		expect(response.status()).toBe(200);
+		expect(response.headers()['cache-control']).toBe('no-cache');
+		expect(((await response.json()) as { version: string }).version).toMatch(/^v\d+\.\d+\.\d+/);
+	});
 });

@@ -58,5 +58,12 @@ export const MUTATE_PATTERNS = [
 	// the build and the end-to-end run, both of which would fail on a flipped
 	// value. A changed lane mutated them and reported the pair as uncovered, which
 	// said nothing about the tests.
-	'!src/routes/+layout.ts'
+	'!src/routes/+layout.ts',
+	// One build-time constant, substituted by Vite's `define` from the git tag.
+	// The identifier it re-exports carries no mutant, so the file would be
+	// reported as an unmeasurable zero rather than as coverage; the derivation
+	// that produces the value is unit-tested in `scripts/build/app-version.spec.ts`,
+	// and what proves the substitution is the build, `/api/version`'s spec and the
+	// end-to-end run that reads the string off the side navigation.
+	'!src/lib/version.ts'
 ];

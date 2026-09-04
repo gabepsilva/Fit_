@@ -1,0 +1,104 @@
+name: Version tag
+
+# Every merge to `main` gets a tag, and the build reads its version from that
+# tag. The alternative -- a workflow committing a bumped `package.json` back --
+# needs a branch-protection bypass, adds a second commit per merge, and races
+# when two merges land together. A tag needs none of that, and the version stays
+# derived rather than stored. See README.md, "How the version is decided".
+#
+# What to tag is decided in `scripts/build/next-version.ts`, which has unit
+# specs; this file is git and API plumbing around it. That split is deliberate:
+# the arithmetic here could not be tried before the first merge, so the first
+# merge to run it would have been the first merge to get it wrong.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Never cancelled and never parallel: two merges landing together have to be
+# tagged in the order they landed, and a cancelled run would leave a commit on
+# `main` with no tag at all.
+concurrency:
+  group: version-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag this merge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      # A tag is not a branch, so protection does not stand in its way and the
+      # default token is enough to create one.
+      contents: write
+      # Read-only, and both are needed: a `permissions:` block sets everything
+      # it does not list to none, so without these the label lookups below 403
+      # and every merge would quietly take the patch branch.
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Tags and history, because the bump is decided from the newest tag.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Decide the next version and tag this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # The labels on the pull request this commit came from. `main` only
+          # receives squash merges, so the API answers with exactly one; the
+          # `(#N)` the squash leaves in the subject is the fallback for a commit
+          # the API has not associated yet.
+          #
+          # A failed call is reported, never swallowed: "the API refused us" and
+          # "the pull request carried no labels" both end with an empty list and
+          # both take the patch branch, so the only thing that tells them apart
+          # is this warning.
+          labels=""
+          if ! labels="$(gh api "repos/$REPOSITORY/commits/$COMMIT/pulls" --jq '.[].labels[].name' 2>&1)"; then
+            echo "::warning::Could not read the pull request for $COMMIT, so no release label was seen: $labels"
+            labels=""
+          fi
+          if [ -z "$labels" ]; then
+            number="$(git log -1 --pretty=%s "$COMMIT" | sed -n 's/.*(#\([0-9][0-9]*\))$/\1/p')"
+            if [ -n "$number" ]; then
+              if ! labels="$(gh api "repos/$REPOSITORY/issues/$number" --jq '.labels[].name' 2>&1)"; then
+                echo "::warning::Could not read the labels on #$number, so no release label was seen: $labels"
+                labels=""
+              fi
+            fi
+          fi
+          echo "Labels on this merge: $(echo "$labels" | tr '\n' ' ')"
+
+          # Unsorted on purpose: ordering versions is the part that string sort
+          # gets wrong, so `next-version.ts` owns it where a spec can hold it.
+          next="$(
+            FIT_TAGS="$(git tag --list 'v*')" \
+            FIT_HEAD_TAGS="$(git tag --points-at "$COMMIT")" \
+            FIT_LABELS="$labels" \
+            bun run --silent version:next
+          )"
+          if [ -z "$next" ]; then
+            echo "$COMMIT already carries a version tag; nothing to do."
+            exit 0
+          fi
+
+          echo "Tagging $COMMIT as $next."
+          gh api --method POST "repos/$REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$next" \
+            -f "sha=$COMMIT" >/dev/null
+          echo "### Tagged \`$next\`" >> "$GITHUB_STEP_SUMMARY"

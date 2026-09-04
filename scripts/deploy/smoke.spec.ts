@@ -38,6 +38,10 @@ const machine = vi.hoisted(() => ({
 
 const SMOKE_USERNAME = /smoke\.[0-9]+\.[0-9a-f]{6}/;
 
+/** The version the stand-in application reports, which the deploy compares against. */
+const BUILT_VERSION = 'v0.0.7';
+let servedVersion = BUILT_VERSION;
+
 vi.mock('./config', async (importOriginal) => ({
 	...(await importOriginal<typeof Config>()),
 	remote: (script: string): Promise<string> => {
@@ -112,6 +116,10 @@ function application(): { server: Server; accounts: Set<string> } {
 				send(response, 204);
 				return;
 			}
+			if (method === 'GET' && url === '/api/version') {
+				send(response, 200, { version: servedVersion, commit: 'be031ca' });
+				return;
+			}
 			if (method === 'GET' && url === '/api/sessions/current') {
 				const username = sessions.get(token(request) ?? '');
 				if (username === undefined) {
@@ -135,6 +143,7 @@ beforeEach(async () => {
 	machine.liveRelease = 'commit-under-test';
 	machine.removalOutput = '{"accounts":1,"households":1}';
 	machine.removals = [];
+	servedVersion = BUILT_VERSION;
 	({ server, accounts } = application());
 	await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 	const address = server.address();
@@ -158,8 +167,39 @@ async function report(): Promise<{ ok: boolean; failure?: string }> {
 }
 
 async function run(): Promise<boolean> {
-	return smoke(['--base', base, '--origin', base, '--commit', 'commit-under-test']);
+	return smoke([
+		'--base',
+		base,
+		'--origin',
+		base,
+		'--commit',
+		'commit-under-test',
+		'--version',
+		BUILT_VERSION
+	]);
 }
+
+describe('the build the deploy started', () => {
+	it('has to be the one answering, not merely the one on the symlink', async () => {
+		// The symlink is right and the process is serving something else: a unit
+		// that failed to restart, or an edge still handing out the old shell.
+		// `readlink` cannot see that, so the application is asked directly.
+		servedVersion = 'v0.0.6+be031ca';
+		expect(await run()).toBe(false);
+		expect((await report()).failure).toContain('the served version is the one this deploy built');
+	});
+
+	it('passes when the served version is the string the build baked in', async () => {
+		expect(await run()).toBe(true);
+		expect((await report()).failure).toBeUndefined();
+	});
+
+	it('fails when the endpoint is not there at all, rather than reading a missing version as a match', async () => {
+		servedVersion = '';
+		expect(await run()).toBe(false);
+		expect((await report()).failure).toContain('expected v0.0.7');
+	});
+});
 
 describe('the account the smoke check registers', () => {
 	it('is removed again when every check passes', async () => {
@@ -182,6 +222,12 @@ describe('the account the smoke check registers', () => {
 		machine.liveRelease = 'a-release-that-is-not-this-commit';
 		await run();
 		expect((await report()).failure).toContain('the live release is this commit');
+	});
+
+	it('is removed again when the served build is not the one this deploy made', async () => {
+		servedVersion = 'v0.0.6+be031ca';
+		expect(await run()).toBe(false);
+		expect(machine.removals).toEqual([...accounts]);
 	});
 
 	it('says so when the machine could not take the row back out', async () => {
