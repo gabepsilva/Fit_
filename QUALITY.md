@@ -54,10 +54,9 @@ freely — `build`, `test:e2e` and `test:gates` all contend for `build/` and for
 port block that starts at 4173, one port per Playwright worker.
 
 **Where a tier runs is a cost decision, and the default is the hosted runners.** Measured
-2026-09-04: the hosted `ci` workflow finishes in about nine minutes across eight parallel
-jobs, its critical path being the gate self-test at around 316s beside end-to-end at 276s,
-while the same suite run locally through `make ci` takes eight to eighteen minutes because
-one machine runs the lanes in sequence. Running both is paying twice for one answer, and
+2026-09-04 (run 33918527511): the hosted `ci` workflow finishes in about four and a half
+minutes across fourteen parallel jobs, while the same suite run locally through `make ci`
+takes eight to eighteen minutes because one machine runs the lanes in sequence. Running both is paying twice for one answer, and
 the local half is the expensive one: an agent waiting on it is billing tokens to poll a
 process that a hosted runner is about to repeat for free.
 
@@ -66,7 +65,7 @@ catches formatting, lint, spelling and typecheck, which is what actually fails m
 then push and let the hosted matrix run the full tier. Read the verdict from
 `gh pr checks`, not from a local report. Two exceptions stay local: the deploy scripts,
 which need the real machine, and tight iteration on one failing lane, where
-`gate.ts ci --job <name>` beats a nine-minute round trip.
+`gate.ts ci --job <name>` beats a four-and-a-half-minute round trip.
 
 This changes where the gates run, never what they enforce. Every threshold, every lane and
 every fixture is unchanged, and a red hosted check blocks a merge exactly as a red local
@@ -181,8 +180,23 @@ and not strictness.
 Those are cold numbers. The sub-minute times some pull requests show are incremental cache
 hits, not the cost of the lane, and budgeting from them understates what a push actually
 buys. Removing the three moved lanes saves about 29.5 runner-minutes per pull-request run;
-they were never the critical path either — the gate self-test at ~316s and end-to-end at
-~276s are — so the wall clock a contributor waits is roughly unchanged.
+they were never the critical path either — so the wall clock a contributor waits is
+roughly unchanged.
+
+**The critical path is the security mutation lane, twice over.** Measured 2026-09-04, after
+sharding (run 33918527511): `Gate self-test (mutation)` 267s and `Mutation (security)` 249s,
+with the four end-to-end shards finishing in 91-188s and their merge job in 21s. Both of the
+first two are the same work — one is the lane itself, the other is the
+`security-surviving-mutant` fixture at 233s proving that the lane goes red when a mutant
+survives. That fixture runs the lane cold, with no incremental cache, which is what makes it
+proof; warming it from the hosted cache would cut it to under a minute and would prove only
+that the warm path reports debt. Do not do that. Everything else in the workflow finishes
+inside two and a half minutes.
+
+Before the sharding the same workflow took about ten minutes: `Gate self-test` at 547s ran
+all 31 fixtures in series, because its pool was `min(4, cores / 4)` and a hosted runner has
+four cores; `End-to-end` at 611s ran four browser projects on one runner at `workers: 1`.
+Neither number was a limit of the work — both were a limit of how it was arranged.
 
 **Why the security lane is the exception.** It stays blocking because the authentication
 boundary is the one place where a test that fails to assert is a security risk rather than a
