@@ -17,6 +17,7 @@ import {
 import { describeRemoval, runAndRemove } from './smoke-cleanup';
 import { removeSmokeAccountScript, removedAccounts, smokeUsername } from './smoke-account';
 import { REVALIDATE } from '../../src/lib/server/cache-policy';
+import { readBuildVersion } from '../build/app-version';
 import { capture, projectRoot } from '../security/shared';
 
 /**
@@ -84,6 +85,8 @@ type Options = {
 	origin: string;
 	/** The release expected to be live. */
 	commit: string;
+	/** The version string the deploy built, which the served build must agree with. */
+	version: string;
 	tunnel: boolean;
 };
 
@@ -106,6 +109,7 @@ function parseOptions(argv: string[]): Options {
 		base: (flags.get('base') ?? PUBLIC_ORIGIN).replace(/\/$/, ''),
 		origin: flags.get('origin') ?? PUBLIC_ORIGIN,
 		commit: flags.get('commit') ?? '',
+		version: flags.get('version') ?? '',
 		tunnel
 	};
 }
@@ -349,6 +353,27 @@ async function checkRelease(expected: string): Promise<void> {
 	);
 }
 
+/**
+ * That the server answering is the build this deploy made.
+ *
+ * `checkRelease` below asks the machine which directory `current` points at,
+ * which proves the symlink moved; it says nothing about what the process
+ * serving requests is running, and a unit that failed to restart, an edge that
+ * cached the old shell, or a phone holding a stale bundle all leave that
+ * assertion true. This one asks the application instead, over the same path a
+ * phone uses, and compares it against the exact string the build baked in.
+ */
+async function checkVersion(client: Client, expected: string): Promise<void> {
+	const response = await client.get('/api/version');
+	const body = await jsonOf(response);
+	const served = body['version'];
+	check(
+		'the served version is the one this deploy built',
+		response.status === 200 && served === expected,
+		`GET /api/version -> ${response.status} ${typeof served === 'string' ? served : '(no version)'}, expected ${expected}`
+	);
+}
+
 async function writeReport(ok: boolean, failure: string | undefined): Promise<void> {
 	const directory = path.join(projectRoot, 'reports', 'deploy');
 	await mkdir(directory, { recursive: true });
@@ -380,6 +405,7 @@ async function runChecks(options: Options): Promise<void> {
 			await checkUnauthenticated(client);
 			await checkRoundTrip(client, credentials);
 			await checkRelease(options.commit);
+			await checkVersion(client, options.version);
 		},
 		() => removeAccount(credentials)
 	);
@@ -399,6 +425,12 @@ export async function smoke(argv: string[]): Promise<boolean> {
 	const options = parseOptions(argv);
 	if (options.commit === '') {
 		options.commit = await capture('git', ['rev-parse', 'HEAD']);
+	}
+	// Run on its own, this reads the checkout the same way the build would. The
+	// deploy passes `--version` instead, because by then the answer is a fact
+	// about the artifact it shipped rather than about this working tree.
+	if (options.version === '') {
+		options.version = readBuildVersion().version;
 	}
 	let tunnel: ChildProcess | undefined;
 	if (options.tunnel) {

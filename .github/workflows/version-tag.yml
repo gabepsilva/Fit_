@@ -1,0 +1,94 @@
+name: Version tag
+
+# Every merge to `main` gets a tag, and the build reads its version from that
+# tag. The alternative -- a workflow committing a bumped `package.json` back --
+# needs a branch-protection bypass, adds a second commit per merge, and races
+# when two merges land together. A tag needs none of that, and the version stays
+# derived rather than stored. See README.md, "How the version is decided".
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Never cancelled and never parallel: two merges landing together have to be
+# tagged in the order they landed, and a cancelled run would leave a commit on
+# `main` with no tag at all.
+concurrency:
+  group: version-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag this merge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      # The one permission this needs, and the reason it can use the default
+      # token instead of a bypass: a tag is not a branch, so protection does not
+      # stand in its way.
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Tags and history, because the bump is decided from the newest tag.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide the next version and tag this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # Idempotent: a commit that already carries a tag is left alone, so a
+          # re-run of this workflow cannot produce a second version for one merge.
+          existing="$(git tag --points-at "$COMMIT" --list 'v*' | head -n 1)"
+          if [ -n "$existing" ]; then
+            echo "$COMMIT is already $existing; nothing to do."
+            exit 0
+          fi
+
+          # Version sort, not lexical: `-v:refname` is what puts v0.0.10 after
+          # v0.0.9 instead of before it.
+          latest="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+          if [ -z "$latest" ]; then
+            major=0
+            minor=0
+            patch=0
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+          fi
+
+          # The labels on the pull request this commit came from. `main` only
+          # receives squash merges, so the API answers with exactly one; the
+          # `(#N)` the squash leaves in the subject is the fallback for a commit
+          # the API has not associated yet.
+          labels="$(gh api "repos/$REPOSITORY/commits/$COMMIT/pulls" --jq '.[].labels[].name' || true)"
+          if [ -z "$labels" ]; then
+            number="$(git log -1 --pretty=%s "$COMMIT" | sed -n 's/.*(#\([0-9][0-9]*\))$/\1/p')"
+            if [ -n "$number" ]; then
+              labels="$(gh api "repos/$REPOSITORY/issues/$number" --jq '.labels[].name' || true)"
+            fi
+          fi
+
+          # A user-visible feature Gabriel asked for reaching production complete
+          # moves the middle number; everything else moves the last one. The major
+          # is moved by hand, once, at production launch.
+          if printf '%s\n' "$labels" | grep -qx 'release:minor'; then
+            minor=$((minor + 1))
+            patch=0
+          else
+            patch=$((patch + 1))
+          fi
+          next="v${major}.${minor}.${patch}"
+
+          echo "Tagging $COMMIT as $next (previous: ${latest:-none})."
+          gh api --method POST "repos/$REPOSITORY/git/refs" \
+            -f "ref=refs/tags/$next" \
+            -f "sha=$COMMIT" >/dev/null
+          echo "### Tagged \`$next\`" >> "$GITHUB_STEP_SUMMARY"

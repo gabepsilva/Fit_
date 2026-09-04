@@ -22,6 +22,7 @@ import {
 	UNIT_FILE
 } from './config';
 import { activationScript } from './activation';
+import { currentReleaseVersion } from './release-version';
 import { activateAndPrune, describeActivationFailure } from './rollout';
 import { ASSET_GENERATIONS, pruneReleasesScript, retainAssetsScript } from './retention';
 import { smoke } from './smoke';
@@ -304,7 +305,11 @@ export async function deploy(argv: string[]): Promise<boolean> {
 	const host = deployHost();
 	const version = pinnedNodeVersion();
 	const release = await releaseCommit();
-	console.log(`Deploying ${release} to ${host} (Node v${version}).`);
+	// Before the build, because the build is what bakes the version in: the tag
+	// for the merge being deployed is usually seconds old and this checkout has
+	// never fetched it. `release-version.ts` has how long it waits and why.
+	const released = await currentReleaseVersion();
+	console.log(`Deploying ${release} (${released}) to ${host} (Node v${version}).`);
 
 	await run('bun', ['run', 'build']);
 	await stageRuntimeDependencies();
@@ -322,7 +327,13 @@ export async function deploy(argv: string[]): Promise<boolean> {
 	console.log(`Live: ${CURRENT_LINK} -> ${RELEASES_ROOT}/${release}`);
 	console.log(`Environment: ${ENV_FILE} (edit on the machine; the deploy never overwrites it).`);
 	console.log(`Smoke check against ${options.tunnel ? 'an SSH tunnel' : PUBLIC_ORIGIN}:`);
-	return smoke([...(options.tunnel ? ['--tunnel'] : []), '--commit', release]);
+	return smoke([
+		...(options.tunnel ? ['--tunnel'] : []),
+		'--commit',
+		release,
+		'--version',
+		released
+	]);
 }
 
 // Guarded, so importing this module to test a piece of it does not deploy.

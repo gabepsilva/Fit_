@@ -128,12 +128,39 @@ bun run deploy:smoke
 The smoke check asks the deployed server for the sign-in page and requires a page this app
 built, not merely a 200 — a 200 is what anything listening on that port would answer. It
 then checks that an anonymous `GET /api/sessions/current` is refused as `unauthenticated`,
-registers a throwaway account and signs it out, in and out again, and confirms
-`/opt/fit/current` points at the commit under test. It writes `reports/deploy/smoke.json`.
+registers a throwaway account and signs it out, in and out again, confirms
+`/opt/fit/current` points at the commit under test, and asks `/api/version` whether the
+build answering is the one this deploy built. It writes `reports/deploy/smoke.json`.
 Add `--tunnel` to either command to reach the origin through an SSH port forward instead of
 through Cloudflare, for when the public name is the thing that is broken; that mode also
 stands in for the proxy's client-address header, which Cloudflare otherwise supplies and
 refuses to accept from a caller.
+
+### How the version is decided
+
+The version is derived from a git tag, never stored. `.github/workflows/version-tag.yml`
+runs on every push to `main`, reads the newest `v*` tag by version sort, and tags the merge
+commit; the first run creates `v0.0.1`. A commit that already carries a tag is left alone,
+and the workflow's concurrency group makes two merges that land together tag in order.
+`package.json` stays at `0.0.1` and is not the source of truth.
+
+`scripts/build/app-version.ts` turns that tag into the string the build carries, injected by
+`define` in `vite.config.ts` and read back as `APP_VERSION` in `src/lib/version.ts`. A build
+exactly on its tag is `v0.0.7`; a build ahead of one, or on a branch with no tag, adds the
+short commit — `v0.0.7+be031ca` — so a stale shell is diagnosable from a screenshot. An
+unpacked tarball with no git says `v0.0.1+unknown`. The side navigation shows it at the foot
+of the drawer and `GET /api/version` returns `{ version, commit }` unauthenticated.
+
+When the numbers move:
+
+- **Patch (`0.0.x`)** — every merge to `main`, automatic.
+- **Minor (`0.x.0`)** — when a pull request carries the label `release:minor`, the workflow
+  bumps the middle number and resets the patch. The orchestrator applies that label when a
+  user-visible feature Gabriel asked for reaches production complete, not when its first
+  slice lands.
+- **Major (`1.0.0`)** — once, by hand, at production launch, when the DEVELOPMENT-ONLY
+  permissions block leaves `ORCHESTRATOR.md`. After that, a major means a change that breaks
+  sync with older clients.
 
 ## Quality gates
 

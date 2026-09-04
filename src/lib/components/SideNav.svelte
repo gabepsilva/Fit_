@@ -7,6 +7,7 @@
 	import UserRound from '@lucide/svelte/icons/user-round';
 	import X from '@lucide/svelte/icons/x';
 	import { resolve } from '$app/paths';
+	import { APP_VERSION } from '$lib/version';
 	import AccountMenu from './auth/AccountMenu.svelte';
 	import NavLink from './NavLink.svelte';
 	import type { NavRoute } from './nav-routes';
@@ -53,6 +54,16 @@
 				{/each}
 			</nav>
 			<AccountMenu />
+			<!--
+				Which build this is, small and muted at the foot of the drawer. It is
+				text and nothing else: tapping it does nothing, and the visible half is
+				the bare string so a screenshot is enough to tell a stale shell from a
+				current one. The screen-reader half says what the number is.
+			-->
+			<p class="text-muted-foreground mt-auto px-4 pb-3 text-xs">
+				<span class="sr-only">Version</span>
+				<span>{APP_VERSION}</span>
+			</p>
 		</Dialog.Content>
 	</Dialog.Portal>
 </Dialog.Root>
