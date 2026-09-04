@@ -29,12 +29,18 @@ const projects = selected.map((name) => ({
 }));
 
 /**
- * One less than the cores. A worker is a browser and a preview server rather
- * than a browser alone, but the server spends the run waiting on the browser,
- * so the browsers are what the cores are for. `workers: 1` used to be the
- * containment for one shared server and one shared database;
- * `tests/preview-server.ts` gives each worker its own, so the limit is the
- * machine.
+ * Half the cores. A worker is a browser and a preview server rather than a
+ * browser alone. `workers: 1` used to be the containment for one shared server
+ * and one shared database; `tests/preview-server.ts` gives each worker its own,
+ * so the limit is the machine.
+ *
+ * Half rather than all of them, deliberately. WebKit on Linux is this suite's
+ * fragile engine -- main flaked a `mobile-safari` test at `workers: 1` in run
+ * 33917056886, before any of this -- and `failOnFlakyTests` means a test that
+ * only passes on the retry fails the build. Runs 33916933876 and 33918527511
+ * finished 292 tests each at half the cores with nothing flaky and no retry;
+ * three workers on a four-core runner timed one out on the drawer. The last
+ * core buys back more than it costs.
  *
  * A ZAP run is the exception: it names one server through `E2E_BASE_URL` and
  * scans what passes through one proxy.
@@ -43,7 +49,7 @@ const projects = selected.map((name) => ({
  * an explicit `undefined` is not the same as an absent key, and Playwright's
  * own type says so. Absent is what "let Playwright choose" means.
  */
-const hostedWorkers = { workers: Math.max(2, availableParallelism() - 1) };
+const hostedWorkers = { workers: Math.max(2, Math.floor(availableParallelism() / 2)) };
 const workers = env.ZAP_PROXY_URL ? { workers: 1 } : isCI ? hostedWorkers : {};
 
 /**

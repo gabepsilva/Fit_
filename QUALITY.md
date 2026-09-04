@@ -183,6 +183,14 @@ buys. Removing the three moved lanes saves about 29.5 runner-minutes per pull-re
 they were never the critical path either — so the wall clock a contributor waits is
 roughly unchanged.
 
+**End-to-end parallelism is capped at half the cores on purpose.** Each worker owns a
+preview server and a database, so nothing stops it going higher -- but WebKit on Linux is
+this suite's fragile engine, and `failOnFlakyTests` turns a test that only passes on the
+retry into a red build. Main flaked a `mobile-safari` test at `workers: 1` in run
+33917056886, before any sharding existed, so the fragility is the engine and not the
+parallelism; three workers on a four-core runner made it likelier, timing out a drawer
+click in run 33920548201. Half the cores measured clean. Raise it only with a measurement.
+
 **The critical path is the security mutation lane, twice over.** Measured 2026-09-04, after
 sharding (run 33918527511): `Gate self-test (mutation)` 267s and `Mutation (security)` 249s,
 with the four end-to-end shards finishing in 91-188s and their merge job in 21s. Both of the
