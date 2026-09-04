@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { emptyProfile } from '$lib/domain/profile';
 	import type { Activity, Goal, Profile, Restriction } from '$lib/domain/types';
-	import { todayISO, uid } from '$lib/domain/utils';
+	import { heightFromFeetInches, heightToFeetInches, kgToLb, lbToKg } from '$lib/domain/units';
+	import { round1, todayISO, uid } from '$lib/domain/utils';
 	import { tend } from '$lib/state/tend.svelte';
 	import Button from '$lib/ui/Button.svelte';
 	import Input from '$lib/ui/Input.svelte';
@@ -47,6 +48,30 @@
 	let activity = $state<Activity>('light');
 	let restrictions = $state<Restriction[]>(['nut-free']);
 	let household = $state(false);
+
+	const units = $derived(tend.state.units);
+	// Only meaningful once `units` is imperial, but always computed so the
+	// template never has to narrow a union type to reach it.
+	const heightFeetInches = $derived(heightToFeetInches(heightCm));
+	const weightDisplay = $derived(units === 'imperial' ? round1(kgToLb(kg)) : kg);
+
+	// Converts exactly — no display rounding reaches storage, or a typed 160 lb
+	// would not read back as 160 lb once round-tripped through kg.
+	function setHeightFeet(value: string) {
+		heightCm = heightFromFeetInches(Number(value), heightFeetInches.inches);
+	}
+
+	function setHeightInches(value: string) {
+		heightCm = heightFromFeetInches(heightFeetInches.feet, Number(value));
+	}
+
+	function setHeightCm(value: string) {
+		heightCm = Number(value);
+	}
+
+	function setWeightDisplay(value: string) {
+		kg = units === 'imperial' ? lbToKg(Number(value)) : Number(value);
+	}
 
 	const heading = $derived(
 		step === 0 ? 'A quieter tracker' : step === 1 ? 'About you' : 'How to start'
@@ -163,14 +188,53 @@
 					<Label for="onboard-age">Age</Label>
 					<Input id="onboard-age" class="mt-1.5" type="number" bind:value={age} />
 				</div>
-				<div>
-					<Label for="onboard-height">Height cm</Label>
-					<Input id="onboard-height" class="mt-1.5" type="number" bind:value={heightCm} />
-				</div>
-				<div>
-					<Label for="onboard-weight">Weight kg</Label>
-					<Input id="onboard-weight" class="mt-1.5" type="number" bind:value={kg} />
-				</div>
+				{#if units === 'imperial'}
+					<div>
+						<Label for="onboard-height-ft">Height ft, in</Label>
+						<div class="mt-1.5 flex gap-1">
+							<Input
+								id="onboard-height-ft"
+								type="number"
+								aria-label="Height, feet"
+								bind:value={() => heightFeetInches.feet, (v) => setHeightFeet(String(v))}
+							/>
+							<Input
+								id="onboard-height-in"
+								type="number"
+								aria-label="Height, inches"
+								bind:value={() => heightFeetInches.inches, (v) => setHeightInches(String(v))}
+							/>
+						</div>
+					</div>
+					<div>
+						<Label for="onboard-weight">Weight lb</Label>
+						<Input
+							id="onboard-weight"
+							class="mt-1.5"
+							type="number"
+							bind:value={() => weightDisplay, (v) => setWeightDisplay(String(v))}
+						/>
+					</div>
+				{:else}
+					<div>
+						<Label for="onboard-height">Height cm</Label>
+						<Input
+							id="onboard-height"
+							class="mt-1.5"
+							type="number"
+							bind:value={() => Math.round(heightCm), (v) => setHeightCm(String(v))}
+						/>
+					</div>
+					<div>
+						<Label for="onboard-weight">Weight kg</Label>
+						<Input
+							id="onboard-weight"
+							class="mt-1.5"
+							type="number"
+							bind:value={() => weightDisplay, (v) => setWeightDisplay(String(v))}
+						/>
+					</div>
+				{/if}
 			</div>
 
 			<div>
