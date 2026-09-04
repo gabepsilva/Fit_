@@ -29,7 +29,7 @@ endif
 # `make android` does not depend on what a particular shell exports.
 ANDROID_SDK := $(shell sed -n 's/^sdk\.dir=//p' android/local.properties 2>/dev/null)
 
-.PHONY: help fast verify deep audit ci ci-static ci-unit ci-security ci-browser ci-mutation-security ci-mutation-node ci-mutation-client ci-mutation-full dev android android-build android-usb test lint format clean clean-cache
+.PHONY: help fast verify deep audit ci ci-static ci-unit ci-security ci-browser ci-mutation-security ci-mutation-node ci-mutation-client dev android android-build android-usb test lint format clean clean-cache
 
 help: ## Show this list
 	@echo 'Fit_ gates. Same checks as CI; the difference is what runs in parallel.'
@@ -53,7 +53,7 @@ verify: ## The pre-push gate: adds coverage, build, budgets (~45s)
 deep: ## Adds mutation and end-to-end flows (~9m warm; cold runs are hardware-dependent)
 	@$(GATE) verify:deep
 
-audit: ## Force the explicit full-tree mutation audit
+audit: ## Force the full-tree mutation audit CI now runs daily, not per pull request
 	@bun run test:mutation:full -- --force-cold
 
 # Each job is exactly the slice CI gives its own runner.
@@ -63,7 +63,6 @@ ci-security: ; @$(GATE) ci --job security
 ci-mutation-security: ; @$(GATE) ci --job mutation-security
 ci-mutation-node: ; @$(GATE) ci --job mutation-node
 ci-mutation-client: ; @$(GATE) ci --job mutation-client
-ci-mutation-full: ; @$(GATE) ci --job mutation-full
 
 # One lane, because all three contend for the same two things: `build/` and
 # port 4173. The self-test belongs here too — one of its fixtures runs the
@@ -121,7 +120,7 @@ android-usb: ## Install a device build that talks to this machine over USB, and 
 # slower. Each lane owns separate incremental state.
 ci: ## Everything CI runs: light lanes in parallel, then mutation (~6m warm locally)
 	@$(MAKE) -j4 --output-sync=target ci-static ci-unit ci-security ci-browser
-	@$(MAKE) --output-sync=target ci-mutation-security ci-mutation-node ci-mutation-client ci-mutation-full
+	@$(MAKE) --output-sync=target ci-mutation-security ci-mutation-node ci-mutation-client
 
 test: ## Unit and component tests only
 	@bun run test:unit

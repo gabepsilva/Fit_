@@ -132,6 +132,10 @@ jobs:
             coverage/
             reports/
 
+  # Only the lanes that judge the diff. The full-tree audit re-verifies untouched
+  # code, so it costs ~17 runner minutes per push to say what it said yesterday;
+  # it moved to a daily schedule in mutation-audit.yml. Cost, not speed: these
+  # three finish inside the matrix either way.
   mutation:
     name: Mutation (${{ matrix.name }})
     runs-on: ubuntu-24.04
@@ -155,12 +159,6 @@ jobs:
             lane: changed-client
             browser: true
             timeout: 30
-          - name: full
-            job: mutation-full
-            lane: full
-            browser: true
-            # A cold run measured ~17 minutes with 9 workers; hosted runners may expose only 3.
-            timeout: 60
     env:
       MUTATION_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD^' }}
     steps:

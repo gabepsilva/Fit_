@@ -219,11 +219,37 @@ export const fixtures: GateFixture[] = [
 	{
 		name: 'missing-ci-job',
 		gate: 'check:ci-contract',
-		failureIncludes: 'CI workflow does not invoke declared jobs: mutation-full',
+		failureIncludes: 'CI workflow does not invoke declared jobs: mutation-client',
 		description: 'A declared CI job omitted from the hosted workflow.',
 		apply: (root) =>
 			edit(root, '.github/workflows/ci.yml', (content) =>
-				content.replace('            job: mutation-full\n', '')
+				content.replace('            job: mutation-client\n', '')
+			)
+	},
+	{
+		// The full mutation lane is no longer a merge gate, so nothing in ci.yml
+		// would notice it disappearing. This is what stands in its place: delete
+		// the cron and the lane stops running entirely, which is the exact way
+		// moving a lane off pull requests goes wrong.
+		name: 'unscheduled-audit-lane',
+		gate: 'check:schedules',
+		failureIncludes: 'Tier "audit" runs on no schedule',
+		description: 'The scheduled full-tree mutation audit left with no schedule to run on.',
+		apply: (root) =>
+			edit(root, '.github/workflows/mutation-audit.yml', (content) =>
+				content.replace("    - cron: '41 4 * * *'\n", '')
+			)
+	},
+	{
+		// A scheduled lane nobody hears about is the other half of the same
+		// failure: green Actions tab, silent mutation debt.
+		name: 'silent-scheduled-lane',
+		gate: 'check:schedules',
+		failureIncludes: 'cannot surface a failure',
+		description: 'A scheduled tier that can no longer open an issue when it goes red.',
+		apply: (root) =>
+			edit(root, '.github/workflows/mutation-audit.yml', (content) =>
+				content.replace('      issues: write\n', '')
 			)
 	},
 	{

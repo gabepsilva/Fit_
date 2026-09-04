@@ -1,8 +1,15 @@
 name: Full mutation audit
 
+# The full-tree lane, off the pull-request matrix since 2026-09-04. It
+# re-verifies code the diff never touched, so paying ~17 runner minutes for it
+# on every push bought a re-run of yesterday's answer. Daily and cold here
+# instead; the security and changed lanes still gate every pull request.
+#
+# It is not a merge gate, so it has to be loud on its own: a red run opens or
+# updates a GitHub issue below, and the run itself stays red.
 on:
   schedule:
-    - cron: '41 4 * * 1'
+    - cron: '41 4 * * *'
   workflow_dispatch:
 
 permissions:
@@ -17,6 +24,9 @@ jobs:
     name: Full mutation audit
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,3 +89,25 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: reports/mutation/full/
+
+      # No `continue-on-error`: the run stays red, and the issue exists so that a
+      # red scheduled run is seen by someone who is not watching the Actions tab.
+      # One issue per marker, commented on rather than reopened, so a lane that
+      # stays red for a week does not file seven of them.
+      - name: Raise an issue when the audit reports mutation debt
+        if: failure()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = '<!-- scheduled-full-mutation-audit -->';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `${marker}\nThe scheduled full-tree mutation audit failed on \`${context.sha}\`. The verdict and Stryker report are attached to ${run}.\n\nThis lane is not a merge gate: it re-verifies code no recent diff touched, so a failure here is untouched-code mutation debt, not a regression in the change that ran last. Read \`reports/mutation/full/verdict.json\` from the run artifacts, then either kill the surviving mutants or record a reviewed exception. Do not lower the threshold.`;
+            const { owner, repo } = context.repo;
+            const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'quality' });
+            const previous = issues.find((issue) => issue.body?.includes(marker));
+
+            if (previous) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: previous.number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title: 'Scheduled full mutation audit is failing', body, labels: ['quality'] });
+            }

@@ -43,6 +43,11 @@ const staticSteps: GateStep[] = [
 		concurrent: true
 	},
 	{ name: 'check:ci-contract', purpose: 'Local and hosted CI job parity', concurrent: true },
+	{
+		name: 'check:schedules',
+		purpose: 'Non-blocking tiers still run on a schedule',
+		concurrent: true
+	},
 	{ name: 'knip', purpose: 'Unused files, exports, dependencies', concurrent: true },
 	{
 		name: 'duplicates',
@@ -113,6 +118,12 @@ const requiredMutationSteps = [
 	changedClientMutationStep
 ];
 
+/**
+ * Off the pull-request matrix since 2026-09-04: it re-verifies untouched code,
+ * and a cold run costs ~17 runner minutes on every push. It runs daily on a
+ * schedule instead (mutation-audit.yml), as the `audit` tier. The security and
+ * changed lanes above still gate every pull request.
+ */
 const fullMutationStep: GateStep = {
 	name: 'test:mutation:full',
 	purpose: 'Full mutation audit',
@@ -184,7 +195,6 @@ export const ciJobs = {
 	'mutation-security': [securityMutationStep],
 	'mutation-node': [changedNodeMutationStep],
 	'mutation-client': [changedClientMutationStep],
-	'mutation-full': [fullMutationStep],
 	build: buildSteps,
 	e2e: [e2eStep],
 	security: blockingSecuritySteps,
@@ -225,7 +235,10 @@ export const tiers = {
 	],
 	/** Ring 4. The complete merge gate, and the exact set CI runs. */
 	ci: ciSteps,
-	/** Deterministic full-tree audit, run on main and cold on schedule. */
+	/**
+	 * Deterministic full-tree audit. Not a merge gate: it runs daily and cold on
+	 * a schedule, and `check:schedules` proves that schedule still exists.
+	 */
 	audit: [fullMutationStep],
 	/** Ring 5. Scheduled, non-deterministic scanners. */
 	nightly: advisorySecuritySteps

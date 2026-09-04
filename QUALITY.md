@@ -55,7 +55,7 @@ freely — `build`, `test:e2e` and `test:gates` all contend for `build/` and por
 reuse the first one's server and prove nothing.
 
 **Where a tier runs is a cost decision, and the default is the hosted runners.** Measured
-2026-09-04: the hosted `ci` workflow finishes in about nine minutes across eleven parallel
+2026-09-04: the hosted `ci` workflow finishes in about nine minutes across ten parallel
 jobs, its critical path being the gate self-test at around 316s beside end-to-end at 276s,
 while the same suite run locally through `make ci` takes eight to eighteen minutes because
 one machine runs the lanes in sequence. Running both is paying twice for one answer, and
@@ -77,6 +77,13 @@ hosted one, that costs no time, only the tidiness of never pushing red.
 
 `check:ci-contract` proves every declared local CI slice is hosted and every hosted gate job
 is listed in `all-green.needs`; a job outside that protected aggregator is not a merge gate.
+
+`check:schedules` is the same proof for the lanes that deliberately do not gate a merge. A
+tier taken off the pull request only exists if a schedule still runs it, so this proves the
+`audit` and `nightly` tiers are each invoked by a workflow with a `cron`, and that the
+workflow can open an issue when the lane goes red. Deleting a cron line otherwise retires a
+whole tier with nothing turning red to say so. The fixtures `unscheduled-audit-lane` and
+`silent-scheduled-lane` prove both halves.
 
 `bun run check:thresholds` guards the numbers that decide whether a gate passes: coverage,
 mutation score, bundle budgets, duplication, and the suppression baseline. Lowering any of
@@ -102,9 +109,11 @@ boundary a direct dependency declares against; record why here instead.
 
 ## Mutation lanes
 
-Pull requests always run four lanes: the complete Node-only server security closure, changed
-Node files, changed client files, and the blocking full-tree compatibility audit. Test, spec
-and end-to-end artifacts are never mutation targets. Untracked production files count as
+Pull requests run three lanes, all blocking: the complete Node-only server security closure,
+changed Node files, and changed client files. Every one of them judges the diff. The
+full-tree compatibility audit is the fourth lane and runs on a schedule instead — see
+"Where the full audit runs" below. Test, spec and end-to-end artifacts are never mutation
+targets. Untracked production files count as
 changes. Security-boundary specs belong exclusively to the always-on security lane; other
 changed tests, deleted or renamed inputs, and mutation-configuration changes broaden the
 affected lane rather than guessing narrowly.
@@ -148,11 +157,37 @@ endings differently. The crash the wording answers to is a worker race in the sh
 optimizer cache, which is unfixed and tracked separately.
 
 `bun run test:mutation:full` preserves the pre-existing Stryker-compatible aggregate score and
-80 percent merge threshold while legacy files are remediated. It remains blocking and
-incremental on every pull request, and also runs after pushes to `main` and forced-cold every
-Monday. Do not describe that legacy lane as killed-only, per-file, or zero-timeout.
+80 percent threshold while legacy files are remediated. It runs forced-cold once a day on
+`main`, and on demand through `workflow_dispatch`, `make audit`, or `bun run audit:mutation`.
+Do not describe that legacy lane as killed-only, per-file, or zero-timeout.
 
 Mutation caches are lane-specific and are recorded only after the governing verdict passes.
 Never copy an incremental file between lanes or publish one from a failed or cancelled run.
-Regular CI supplies the full audit on pull requests and `main`; the separate audit workflow is
-scheduled and manual so it cannot duplicate a `main` push or race its cache.
+The scheduled audit forces a cold run and shares its cache with nobody, so it can neither
+duplicate nor race a pull-request lane.
+
+### Where the full audit runs
+
+Decided 2026-09-04, by the product owner, to cut runner minutes — not wall clock. The
+full-tree lane left the pull-request matrix (`ci.yml`) for a daily schedule
+(`mutation-audit.yml`, 04:41 UTC on `main`).
+
+The reasoning is what the lane measures. The security and changed lanes judge the code in
+the diff, so they have to run on the diff; the full lane re-verifies code the diff never
+touched, and its answer changes only when the tree does. Paying for it per push bought a
+re-run of yesterday's answer, once per push rather than once per day. Measured on hosted
+runners, 2026-09-04: `Mutation (security)` ~34s, `Mutation (changed-node)` ~1m16,
+`Mutation (changed-client)` ~8m30, `Mutation (full)` ~17m cold. It was never the critical
+path — the self-test at ~316s and end-to-end at ~276s were — so removing it saves runner
+minutes and roughly no wall clock.
+
+Nothing about the lane got weaker. `quality/mutation-policy.json` and
+`quality/thresholds.json` are untouched, the 80 percent Stryker-compatible aggregate and its
+`mutation.break` still govern the full tree, and the schedule runs `--force-cold`, which is
+stricter than the incremental run a pull request used to get.
+
+It is not a merge gate, so it has to be loud by itself: the run stays red — no
+`continue-on-error` — and a failing run opens, or comments on, one `quality`-labelled issue
+carrying the run URL. `check:schedules` proves both the schedule and that issue path still
+exist. What this trades away is honest: mutation debt in untouched code is now noticed
+within a day rather than on the next pull request that happened to push.
