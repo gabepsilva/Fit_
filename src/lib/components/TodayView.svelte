@@ -1,11 +1,15 @@
 <script lang="ts">
 	import {
 		computeTargets,
+		latestWeight,
 		loggedDatesSet,
 		nutritionForDay,
 		rollingAverages
 	} from '$lib/domain/tdee';
 	import { isGlp1, servingStep } from '$lib/domain/profile';
+	import { calendarWeeks, weekOf } from '$lib/domain/training-plan';
+	import { weeklyAdherence } from '$lib/domain/training-progress';
+	import { trainingWeekText, weightStatusText } from '$lib/domain/today-status';
 	import { MEALS } from '$lib/domain/types';
 	import { todayISO, weekdayLong } from '$lib/domain/utils';
 	import { logUi } from '$lib/state/log-ui.svelte';
@@ -36,6 +40,24 @@
 	{@const items = profile.log.filter((i) => i.date === day)}
 	<!-- GLP-1 users are steered by protein, so the layout changes, not just the order. -->
 	{@const primaryProtein = isGlp1(profile)}
+	{@const nowWeek = weekOf(todayISO())}
+	{@const thisWeek = weeklyAdherence({
+		workouts: tend.state.workouts,
+		plan: tend.state.trainingPlan,
+		routines: tend.state.routines,
+		weeks: calendarWeeks(nowWeek.year),
+		year: nowWeek.year,
+		throughWeek: nowWeek.week,
+		count: 1
+	})[0] ?? { planned: 0, done: 0 }}
+	{@const trainingText = trainingWeekText(thisWeek)}
+	{@const weightText = weightStatusText({
+		hasWeight: profile.weights.length > 0,
+		hasTrend: targets.tdee.sampleSize >= 4,
+		kg: latestWeight(profile.weights),
+		kgPerWeek: targets.tdee.kgPerWeek,
+		units: tend.state.units
+	})}
 	<div class="flex flex-col gap-6 pb-8">
 		<PageHeader kicker={weekdayLong(day)} title="Today">
 			{greetingFor(week.loggedDays)}
@@ -88,6 +110,17 @@
 				Week’s average {Math.round(week.avg.kcal) || '—'} kcal on logged days — unlogged days are not
 				counted as zero.
 			</p>
+		</section>
+
+		<section class="bg-card grid grid-cols-2 gap-3 rounded-3xl px-4 py-3 shadow-border text-sm">
+			<div role="group" aria-label="This week's training">
+				<p class="text-muted-foreground text-xs">Training</p>
+				<p class="mt-0.5">{trainingText}</p>
+			</div>
+			<div role="group" aria-label="Weight">
+				<p class="text-muted-foreground text-xs">Weight</p>
+				<p class="mt-0.5">{weightText}</p>
+			</div>
 		</section>
 
 		{#each MEALS as meal (meal)}
