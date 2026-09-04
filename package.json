@@ -33,6 +33,7 @@
 		"check:ci-contract": "bun scripts/quality/ci-contract.ts",
 		"check:schedules": "bun scripts/quality/schedule-contract.ts",
 		"check:bundle": "bun scripts/quality/bundle-budget.ts",
+		"version:next": "bun scripts/build/next-version.ts",
 		"format": "prettier --write .",
 		"format:check": "prettier --check --cache --cache-location reports/quality/cache/prettier .",
 		"lint": "bun scripts/quality/eslint.ts",

@@ -5,6 +5,11 @@ name: Version tag
 # needs a branch-protection bypass, adds a second commit per merge, and races
 # when two merges land together. A tag needs none of that, and the version stays
 # derived rather than stored. See README.md, "How the version is decided".
+#
+# What to tag is decided in `scripts/build/next-version.ts`, which has unit
+# specs; this file is git and API plumbing around it. That split is deliberate:
+# the arithmetic here could not be tried before the first merge, so the first
+# merge to run it would have been the first merge to get it wrong.
 on:
   push:
     branches: [main]
@@ -25,10 +30,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      # The one permission this needs, and the reason it can use the default
-      # token instead of a bypass: a tag is not a branch, so protection does not
-      # stand in its way.
+      # A tag is not a branch, so protection does not stand in its way and the
+      # default token is enough to create one.
       contents: write
+      # Read-only, and both are needed: a `permissions:` block sets everything
+      # it does not list to none, so without these the label lookups below 403
+      # and every merge would quietly take the patch branch.
+      pull-requests: read
+      issues: read
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -36,6 +45,11 @@ jobs:
           # Tags and history, because the bump is decided from the newest tag.
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
 
       - name: Decide the next version and tag this commit
         env:
@@ -45,49 +59,45 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Idempotent: a commit that already carries a tag is left alone, so a
-          # re-run of this workflow cannot produce a second version for one merge.
-          existing="$(git tag --points-at "$COMMIT" --list 'v*' | head -n 1)"
-          if [ -n "$existing" ]; then
-            echo "$COMMIT is already $existing; nothing to do."
-            exit 0
-          fi
-
-          # Version sort, not lexical: `-v:refname` is what puts v0.0.10 after
-          # v0.0.9 instead of before it.
-          latest="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
-          if [ -z "$latest" ]; then
-            major=0
-            minor=0
-            patch=0
-          else
-            IFS=. read -r major minor patch <<< "${latest#v}"
-          fi
-
           # The labels on the pull request this commit came from. `main` only
           # receives squash merges, so the API answers with exactly one; the
           # `(#N)` the squash leaves in the subject is the fallback for a commit
           # the API has not associated yet.
-          labels="$(gh api "repos/$REPOSITORY/commits/$COMMIT/pulls" --jq '.[].labels[].name' || true)"
+          #
+          # A failed call is reported, never swallowed: "the API refused us" and
+          # "the pull request carried no labels" both end with an empty list and
+          # both take the patch branch, so the only thing that tells them apart
+          # is this warning.
+          labels=""
+          if ! labels="$(gh api "repos/$REPOSITORY/commits/$COMMIT/pulls" --jq '.[].labels[].name' 2>&1)"; then
+            echo "::warning::Could not read the pull request for $COMMIT, so no release label was seen: $labels"
+            labels=""
+          fi
           if [ -z "$labels" ]; then
             number="$(git log -1 --pretty=%s "$COMMIT" | sed -n 's/.*(#\([0-9][0-9]*\))$/\1/p')"
             if [ -n "$number" ]; then
-              labels="$(gh api "repos/$REPOSITORY/issues/$number" --jq '.labels[].name' || true)"
+              if ! labels="$(gh api "repos/$REPOSITORY/issues/$number" --jq '.labels[].name' 2>&1)"; then
+                echo "::warning::Could not read the labels on #$number, so no release label was seen: $labels"
+                labels=""
+              fi
             fi
           fi
+          echo "Labels on this merge: $(echo "$labels" | tr '\n' ' ')"
 
-          # A user-visible feature Gabriel asked for reaching production complete
-          # moves the middle number; everything else moves the last one. The major
-          # is moved by hand, once, at production launch.
-          if printf '%s\n' "$labels" | grep -qx 'release:minor'; then
-            minor=$((minor + 1))
-            patch=0
-          else
-            patch=$((patch + 1))
+          # Unsorted on purpose: ordering versions is the part that string sort
+          # gets wrong, so `next-version.ts` owns it where a spec can hold it.
+          next="$(
+            FIT_TAGS="$(git tag --list 'v*')" \
+            FIT_HEAD_TAGS="$(git tag --points-at "$COMMIT")" \
+            FIT_LABELS="$labels" \
+            bun run --silent version:next
+          )"
+          if [ -z "$next" ]; then
+            echo "$COMMIT already carries a version tag; nothing to do."
+            exit 0
           fi
-          next="v${major}.${minor}.${patch}"
 
-          echo "Tagging $COMMIT as $next (previous: ${latest:-none})."
+          echo "Tagging $COMMIT as $next."
           gh api --method POST "repos/$REPOSITORY/git/refs" \
             -f "ref=refs/tags/$next" \
             -f "sha=$COMMIT" >/dev/null
