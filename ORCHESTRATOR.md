@@ -140,6 +140,26 @@ Cost is a constraint Gabriel set, not a preference.
   return the conclusion, an agent does, even for a two-line read.
 - Slices are short, prompts are precise, and lookups go to the cheapest agent.
 
+## The five-hour window
+
+Claude Code meters usage in a rolling five-hour window, and the orchestrator is
+responsible for not spending the whole window in one cycle. The only supported way
+to read the window is the status line hook, which receives
+rate_limits.five_hour.used_percentage and rate_limits.five_hour.resets_at on its
+standard input and fires only in an interactive session. The script at
+~/.claude/statusline-usage.sh records both values to ~/.claude/usage-state.json on
+every render, and the orchestrator reads that file rather than guessing.
+
+At ninety-three percent the orchestrator stops delegating. It lets whatever is
+already running finish, writes its cycle comment on the log issue, and waits for
+the time in resets_at before starting anything new.
+
+The threshold is a gate on starting new work rather than a stop, because an agent
+already running has already committed its tokens and a long gate run can carry the
+total past the threshold after the gate closes. Nothing wakes an idle session when
+the window resets, so a session that means to resume by itself has to be running the
+loop skill with a wait long enough to reach resets_at.
+
 ## Product state and priorities, as of 2026-09-03
 
 Built: the six nutrition destinations, onboarding, logging by text, voice, search, manual
