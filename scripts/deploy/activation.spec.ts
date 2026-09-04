@@ -36,6 +36,8 @@ type Machine = {
 	releases: Record<'old' | 'next', string>;
 	/** Release paths `curl` will answer for; anything else is a connection refused. */
 	setHealthy: (releases: string[]) => Promise<void>;
+	/** Make `systemctl restart` exit non-zero, as a unit systemd refuses to start does. */
+	failRestarts: () => Promise<void>;
 	run: (previous: string | null) => Promise<{ code: number; stderr: string }>;
 	live: () => Promise<string>;
 	restarts: () => Promise<number>;
@@ -57,6 +59,7 @@ async function machine(): Promise<Machine> {
 	const currentLink = path.join(root, 'current');
 	const healthyFile = path.join(root, 'healthy');
 	const restartLog = path.join(root, 'restarts');
+	const restartExit = path.join(root, 'restart-exit');
 	const releases = {
 		old: path.join(root, 'releases', 'old'),
 		next: path.join(root, 'releases', 'next')
@@ -65,6 +68,7 @@ async function machine(): Promise<Machine> {
 	for (const release of Object.values(releases)) await mkdir(release, { recursive: true });
 	await writeFile(healthyFile, '');
 	await writeFile(restartLog, '');
+	await writeFile(restartExit, '0');
 	await symlink(releases.old, currentLink);
 
 	const stub = async (name: string, body: string): Promise<void> => {
@@ -73,7 +77,10 @@ async function machine(): Promise<Machine> {
 		await chmod(file, 0o755);
 	};
 	await stub('curl', `grep -Fxq "$(readlink -f ${currentLink})" ${healthyFile}`);
-	await stub('systemctl', `echo "$*" >> ${restartLog}\nexit 0`);
+	await stub(
+		'systemctl',
+		`echo "$*" >> ${restartLog}\nif [ "$1" = restart ]; then exit "$(cat ${restartExit})"; fi\nexit 0`
+	);
 	await stub('journalctl', 'exit 0');
 	await stub('sleep', 'exit 0');
 
@@ -82,6 +89,7 @@ async function machine(): Promise<Machine> {
 		currentLink,
 		releases,
 		setHealthy: async (paths) => writeFile(healthyFile, `${paths.join('\n')}\n`),
+		failRestarts: async () => writeFile(restartExit, '1'),
 		run: async (previous) => {
 			const script = activationScript({
 				target: releases.next,
@@ -144,6 +152,22 @@ describe('activating a release', () => {
 		await target.setHealthy([target.releases.old]);
 		await target.run(target.releases.old);
 		expect(await target.restarts()).toBe(2);
+	});
+
+	it('rolls back when the restart itself fails, not only when the release is silent', async () => {
+		// `remote()` prepends `set -euo pipefail`, so a `systemctl restart` that
+		// exits non-zero used to abort the script here — before the health wait,
+		// and so before the rollback, leaving `current` on a release that never
+		// started. A unit systemd refuses (a bad directive, a namespace it
+		// cannot set up, a start job that times out) fails exactly this way, and
+		// it is the case the rollback exists for.
+		target = await machine();
+		await target.setHealthy([target.releases.old]);
+		await target.failRestarts();
+		const { code, stderr } = await target.run(target.releases.old);
+		expect(code).not.toBe(0);
+		expect(await target.live()).toBe(target.releases.old);
+		expect(stderr).toContain('rolled back');
 	});
 
 	it('says so rather than claiming a recovery when the previous release is down too', async () => {

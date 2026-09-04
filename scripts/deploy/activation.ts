@@ -53,9 +53,30 @@ function healthFunction(activation: Activation): string {
 }`;
 }
 
+/**
+ * Point the link at a release and restart onto it.
+ *
+ * The restart is explicitly allowed to fail. `remote()` prepends
+ * `set -euo pipefail`, so a bare `systemctl restart` that exits non-zero —
+ * a directive systemd rejects, a namespace it cannot set up, a start job that
+ * times out — aborted the script here, before the health wait and therefore
+ * before the rollback, leaving the link on the release that would not start.
+ * That is precisely the failure the rollback exists for, so the one command
+ * that reports it must not be the one that prevents it.
+ *
+ * Nothing is lost by ignoring the status: `wait_for_health` is the verdict
+ * either way, and a restart that failed produces a release that does not
+ * answer. Both paths use this, so the rollback's own restart is covered by the
+ * same reasoning — a rollback that could not restart still reaches the message
+ * saying the service is down.
+ *
+ * `ln` is left fatal on purpose. It is the switch: if it fails on the way
+ * forward nothing has moved and the previous release is still live, and there
+ * is no recovery to attempt.
+ */
 function switchTo(release: string, activation: Activation): string {
 	return `ln -sfnT ${release} ${activation.currentLink}
-systemctl restart ${activation.serviceName}`;
+systemctl restart ${activation.serviceName} || true`;
 }
 
 /**
