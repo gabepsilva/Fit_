@@ -1,7 +1,8 @@
 <script lang="ts">
 	import X from '@lucide/svelte/icons/x';
 	import { FOOD_BY_ID } from '$lib/domain/foods';
-	import type { Food, ProposedItem } from '$lib/domain/types';
+	import { describeRecorded, resolveQuantity, type QuantifiedItem } from '$lib/domain/quantity';
+	import type { Food } from '$lib/domain/types';
 	import FoodSearch from './FoodSearch.svelte';
 	import ProvenanceBadge from './ProvenanceBadge.svelte';
 	import QuantityStepper from './QuantityStepper.svelte';
@@ -15,18 +16,22 @@
 		onchange,
 		onremove
 	}: {
-		item: ProposedItem;
+		item: QuantifiedItem;
 		step: number;
 		matching: boolean;
 		onmatch: () => void;
 		onpickmatch: (food: Food) => void;
-		onchange: (next: ProposedItem) => void;
+		onchange: (next: QuantifiedItem) => void;
 		onremove: () => void;
 	} = $props();
 
 	const food = $derived(item.foodId ? FOOD_BY_ID[item.foodId] : undefined);
 	const summary = $derived(`${Math.round(item.confidence * 100)}% sure · ${item.meal}`);
 	const removeLabel = $derived(`Remove ${item.name}`);
+	// Re-read against the food rather than trusting a stored flag: matching an item
+	// to the catalog can turn a quantity the parser had to decline into one it can use.
+	const declined = $derived(item.quantity ? resolveQuantity(item.quantity, food).declined : null);
+	const recorded = $derived(describeRecorded(item.servings, food, declined));
 </script>
 
 <li class="bg-background rounded-2xl p-3">
@@ -60,6 +65,7 @@
 			{step}
 		/>
 	</div>
+	<p class="text-muted-foreground mt-1.5 text-xs">{recorded}</p>
 	{#if matching}
 		<div class="mt-3">
 			<FoodSearch onpick={onpickmatch} placeholder="Find a catalog match" />
