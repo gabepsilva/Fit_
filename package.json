@@ -57,6 +57,7 @@
 		"test:e2e:all": "E2E_ALL_BROWSERS=1 playwright test",
 		"test:e2e:security": "bun scripts/security/zap.ts",
 		"test": "bun run test:unit && bun run test:e2e",
+		"as-owen": "bun scripts/github/as-owen.ts",
 		"security:images": "bun scripts/security/images.ts",
 		"security:gitleaks": "bun scripts/security/gitleaks.ts",
 		"security:semgrep": "bun scripts/security/semgrep.ts",
