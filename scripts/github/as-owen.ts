@@ -3,6 +3,7 @@ import { createSign } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 
 const DEFAULT_APP_ID = '4578638';
+const ALLOWED_COMMAND = 'gh';
 const GITHUB_API = 'https://api.github.com';
 const JWT_ISSUED_SKEW_SECONDS = 60;
 const JWT_LIFETIME_SECONDS = 9 * 60;
@@ -51,12 +52,16 @@ function base64url(input: Buffer | string): string {
  * be a new dependency the script does not need.
  */
 export function mintAppJwt(appId: string, privateKeyPem: string, nowMs: number): string {
+	const numericAppId = Number(appId);
+	if (!Number.isInteger(numericAppId)) {
+		throw new Error(`FIT_GITHUB_APP_ID must be a numeric app id, got: ${appId}`);
+	}
 	const nowSeconds = Math.floor(nowMs / 1000);
 	const header = { alg: 'RS256', typ: 'JWT' };
 	const payload = {
 		iat: nowSeconds - JWT_ISSUED_SKEW_SECONDS,
 		exp: nowSeconds + JWT_LIFETIME_SECONDS,
-		iss: Number(appId)
+		iss: numericAppId
 	};
 	const signingInput = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
 	const signature = createSign('RSA-SHA256').update(signingInput).sign(privateKeyPem);
@@ -108,14 +113,33 @@ export async function fetchInstallationId(
 	return body.id;
 }
 
+/**
+ * The token this script mints is scoped to a single repository and to only
+ * the permissions the child `gh` command actually uses (issue and PR
+ * comments/edits). Requesting no body here would mint a token carrying every
+ * permission the app's installation holds on every repository it can see.
+ */
+const INSTALLATION_TOKEN_PERMISSIONS = {
+	issues: 'write',
+	pull_requests: 'write'
+} as const;
+
 export async function fetchInstallationToken(
 	fetchImpl: typeof fetch,
 	jwt: string,
-	installationId: number
+	installationId: number,
+	repo: string
 ): Promise<string> {
 	const response = await fetchImpl(
 		`${GITHUB_API}/app/installations/${String(installationId)}/access_tokens`,
-		{ method: 'POST', headers: githubHeaders(jwt) }
+		{
+			method: 'POST',
+			headers: githubHeaders(jwt),
+			body: JSON.stringify({
+				repositories: [repo],
+				permissions: INSTALLATION_TOKEN_PERMISSIONS
+			})
+		}
 	);
 	if (!response.ok) {
 		throw new Error(
@@ -124,6 +148,37 @@ export async function fetchInstallationToken(
 	}
 	const body = (await response.json()) as { token: string };
 	return body.token;
+}
+
+/**
+ * Revokes the installation token so it dies with this process instead of
+ * living out its full hour. Revocation failure is logged, never thrown: it
+ * must never mask the child command's own exit code.
+ */
+export async function revokeInstallationToken(
+	fetchImpl: typeof fetch,
+	token: string
+): Promise<void> {
+	try {
+		const response = await fetchImpl(`${GITHUB_API}/installation/token`, {
+			method: 'DELETE',
+			headers: {
+				Authorization: `token ${token}`,
+				Accept: 'application/vnd.github+json',
+				'X-GitHub-Api-Version': '2022-11-28',
+				'User-Agent': 'fit-as-owen-script'
+			}
+		});
+		if (!response.ok) {
+			console.error(
+				`Warning: failed to revoke the installation token: ${response.status} ${response.statusText}`
+			);
+		}
+	} catch (error) {
+		console.error(
+			`Warning: failed to revoke the installation token: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
 }
 
 function readKeyPathOrFail(env: NodeJS.ProcessEnv): string | undefined {
@@ -151,6 +206,10 @@ export async function run(
 		console.error('Usage: as-owen.ts <command> [args...]');
 		return 1;
 	}
+	if (command !== ALLOWED_COMMAND) {
+		console.error(`Refusing to run "${command}": only "${ALLOWED_COMMAND}" is allowed.`);
+		return 1;
+	}
 
 	const keyPath = readKeyPathOrFail(env);
 	if (keyPath === undefined) return 1;
@@ -169,19 +228,23 @@ export async function run(
 
 	const appId = env.FIT_GITHUB_APP_ID ?? DEFAULT_APP_ID;
 	const privateKeyPem = deps.readKeyFile(keyPath);
-	const jwt = mintAppJwt(appId, privateKeyPem, deps.now());
 
 	let token: string;
 	try {
+		const jwt = mintAppJwt(appId, privateKeyPem, deps.now());
 		const { owner, repo } = parseOwnerRepo(deps.getOriginUrl());
 		const installationId = await fetchInstallationId(deps.fetchImpl, jwt, owner, repo);
-		token = await fetchInstallationToken(deps.fetchImpl, jwt, installationId);
+		token = await fetchInstallationToken(deps.fetchImpl, jwt, installationId, repo);
 	} catch (error) {
 		console.error(error instanceof Error ? error.message : String(error));
 		return 1;
 	}
 
-	return deps.spawnChild(command, argv.slice(1), { ...env, GH_TOKEN: token });
+	try {
+		return await deps.spawnChild(command, argv.slice(1), { ...env, GH_TOKEN: token });
+	} finally {
+		await revokeInstallationToken(deps.fetchImpl, token);
+	}
 }
 
 if (import.meta.main) {
