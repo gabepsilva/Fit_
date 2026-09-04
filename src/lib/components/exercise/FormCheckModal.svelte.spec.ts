@@ -94,6 +94,95 @@ describe('FormCheckModal', () => {
 		expect(video?.getAttribute('preload')).toBe('none');
 	});
 
+	it('autoplays, loops and hides native controls, staying silent and inline', async () => {
+		await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
+		const video = document.querySelector('video');
+		expect(video?.hasAttribute('autoplay')).toBe(true);
+		expect(video?.hasAttribute('loop')).toBe(true);
+		expect(video?.muted).toBe(true);
+		expect(video?.hasAttribute('playsinline')).toBe(true);
+		expect(video?.hasAttribute('controls')).toBe(false);
+	});
+
+	it('names the tap/keyboard pause affordance in its accessible name', async () => {
+		await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
+		const video = document.querySelector('video');
+		const label = video?.getAttribute('aria-label')?.toLowerCase() ?? '';
+		expect(label).toContain('pause');
+		expect(label).toContain('play');
+	});
+
+	it('toggles play and pause when the clip is clicked, since there are no visible controls', async () => {
+		const playSpy = vi
+			.spyOn(HTMLMediaElement.prototype, 'play')
+			.mockImplementation(() => Promise.resolve());
+		const pauseSpy = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+		try {
+			await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
+			const video = document.querySelector('video') as HTMLVideoElement;
+			expect(video).not.toBeNull();
+
+			video.click();
+			expect(playSpy).toHaveBeenCalledTimes(1);
+
+			Object.defineProperty(video, 'paused', { value: false, configurable: true });
+			video.click();
+			expect(pauseSpy).toHaveBeenCalledTimes(1);
+		} finally {
+			playSpy.mockRestore();
+			pauseSpy.mockRestore();
+		}
+	});
+
+	it('is keyboard reachable and toggles on Enter and Space, not just click', async () => {
+		const playSpy = vi
+			.spyOn(HTMLMediaElement.prototype, 'play')
+			.mockImplementation(() => Promise.resolve());
+		const pauseSpy = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+		try {
+			await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
+			const video = document.querySelector('video') as HTMLVideoElement;
+			expect(video.tabIndex).toBe(0);
+
+			video.dispatchEvent(
+				new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+			);
+			expect(playSpy).toHaveBeenCalledTimes(1);
+
+			Object.defineProperty(video, 'paused', { value: false, configurable: true });
+			video.dispatchEvent(
+				new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+			);
+			expect(pauseSpy).toHaveBeenCalledTimes(1);
+		} finally {
+			playSpy.mockRestore();
+			pauseSpy.mockRestore();
+		}
+	});
+
+	it('does not autoplay when the system asks for reduced motion', async () => {
+		const matchMediaSpy = vi.spyOn(window, 'matchMedia').mockImplementation(
+			(query: string) =>
+				({
+					matches: query === '(prefers-reduced-motion: reduce)',
+					media: query,
+					onchange: null,
+					addListener: vi.fn(),
+					removeListener: vi.fn(),
+					addEventListener: vi.fn(),
+					removeEventListener: vi.fn(),
+					dispatchEvent: vi.fn()
+				}) as MediaQueryList
+		);
+		try {
+			await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
+			const video = document.querySelector('video');
+			expect(video?.hasAttribute('autoplay')).toBe(false);
+		} finally {
+			matchMediaSpy.mockRestore();
+		}
+	});
+
 	it('keeps the clip square, not the video-wide placeholder shape', async () => {
 		await render(FormCheckModal, { props: { open: true, name: 'Push-up', onclose: vi.fn() } });
 		const video = document.querySelector('video');
