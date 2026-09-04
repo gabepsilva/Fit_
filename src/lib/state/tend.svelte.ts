@@ -17,9 +17,11 @@ import type {
 	PlannedMealSlot,
 	Profile,
 	Routine,
+	RoutineExercise,
 	TendState,
 	WeightEntry,
-	Workout
+	Workout,
+	WorkoutSet
 } from '$lib/domain/types';
 import {
 	DEFAULT_LOAD_UNIT,
@@ -180,7 +182,7 @@ export class TendStore {
 		this.state.onboarded = true;
 		this.state.profiles = profiles;
 		this.state.activeProfileId = profiles[0].id;
-		this.state.weekPlan = [];
+		// `generatePlan()` builds the week plan from scratch, so there is nothing to clear first.
 		// `persist()` is explicit here so onboarding does not silently depend on `generatePlan` doing it.
 		this.generatePlan();
 		this.persist();
@@ -342,8 +344,9 @@ export class TendStore {
 		if (index <= 0) return;
 		const exercises = this.routine(id)?.exercises;
 		if (!exercises?.[index]) return;
-		const [moved] = exercises.splice(index, 1);
-		if (moved) exercises.splice(index - 1, 0, moved);
+		// The bounds check above guarantees `splice` removes exactly the checked row.
+		const [moved] = exercises.splice(index, 1) as [RoutineExercise];
+		exercises.splice(index - 1, 0, moved);
 		this.persist();
 	}
 
@@ -418,7 +421,8 @@ export class TendStore {
 	addSet() {
 		const exercise = this.liveExercise;
 		if (!exercise) return;
-		const last = exercise.sets.at(-1) ?? { reps: 10, load: 0, done: false };
+		// Only reps and load carry over; the pushed set below always starts undone.
+		const last: Pick<WorkoutSet, 'reps' | 'load'> = exercise.sets.at(-1) ?? { reps: 10, load: 0 };
 		exercise.sets.push({ reps: last.reps, load: last.load, done: false });
 		this.persist();
 	}
