@@ -1,9 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
-import {
-	clearRegistrationThrottle,
-	openEmptyJournal,
-	signInThroughApi
-} from '../../tests/e2e-support';
+import { expect, type Page } from '@playwright/test';
+import { test } from '../../tests/preview-server';
+import { openEmptyJournal, signInThroughApi } from '../../tests/e2e-support';
 
 /**
  * The units preference (PR #73) only ever changes how a stored weight is
@@ -14,8 +11,6 @@ import {
  * `/progress` for the reading) rather than calling the domain functions
  * directly, so a UI-level reintroduction of that bug is caught too.
  */
-
-test.beforeEach(clearRegistrationThrottle);
 
 async function switchUnits(page: Page, label: 'Metric' | 'Imperial') {
 	await page.getByRole('button', { name: 'Open menu' }).click();
