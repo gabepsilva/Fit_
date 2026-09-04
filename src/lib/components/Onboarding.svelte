@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { emptyProfile } from '$lib/domain/profile';
 	import type { Activity, Goal, Profile, Restriction } from '$lib/domain/types';
-	import { displayHeight, heightFromFeetInches, kgToLb, lbToKg } from '$lib/domain/units';
+	import { cmToIn, heightFromFeetInches, kgToLb, lbToKg } from '$lib/domain/units';
 	import { round1, todayISO, uid } from '$lib/domain/utils';
 	import { tend } from '$lib/state/tend.svelte';
 	import Button from '$lib/ui/Button.svelte';
@@ -50,28 +50,26 @@
 	let household = $state(false);
 
 	const units = $derived(tend.state.units);
-	const heightDisplay = $derived(displayHeight(heightCm, units));
+	// Only meaningful once `units` is imperial, but always computed so the
+	// template never has to narrow a union type to reach it.
+	const heightFeet = $derived(Math.floor(Math.round(cmToIn(heightCm)) / 12));
+	const heightInches = $derived(Math.round(cmToIn(heightCm)) % 12);
 	const weightDisplay = $derived(units === 'imperial' ? round1(kgToLb(kg)) : kg);
 
 	function setHeightFeet(value: string) {
-		const feet = Number(value) || 0;
-		const inches = 'inches' in heightDisplay ? heightDisplay.inches : 0;
-		heightCm = Math.round(heightFromFeetInches(feet, inches) * 10) / 10;
+		heightCm = round1(heightFromFeetInches(Number(value), heightInches));
 	}
 
 	function setHeightInches(value: string) {
-		const inches = Number(value) || 0;
-		const feet = 'feet' in heightDisplay ? heightDisplay.feet : 0;
-		heightCm = Math.round(heightFromFeetInches(feet, inches) * 10) / 10;
+		heightCm = round1(heightFromFeetInches(heightFeet, Number(value)));
 	}
 
 	function setHeightCm(value: string) {
-		heightCm = Number(value) || 0;
+		heightCm = Number(value);
 	}
 
 	function setWeightDisplay(value: string) {
-		const n = Number(value) || 0;
-		kg = units === 'imperial' ? round1(lbToKg(n)) : n;
+		kg = units === 'imperial' ? round1(lbToKg(Number(value))) : Number(value);
 	}
 
 	const heading = $derived(
@@ -197,19 +195,13 @@
 								id="onboard-height-ft"
 								type="number"
 								aria-label="Height, feet"
-								bind:value={
-									() => ('feet' in heightDisplay ? heightDisplay.feet : 0),
-									(v) => setHeightFeet(String(v))
-								}
+								bind:value={() => heightFeet, (v) => setHeightFeet(String(v))}
 							/>
 							<Input
 								id="onboard-height-in"
 								type="number"
 								aria-label="Height, inches"
-								bind:value={
-									() => ('inches' in heightDisplay ? heightDisplay.inches : 0),
-									(v) => setHeightInches(String(v))
-								}
+								bind:value={() => heightInches, (v) => setHeightInches(String(v))}
 							/>
 						</div>
 					</div>
@@ -229,10 +221,7 @@
 							id="onboard-height"
 							class="mt-1.5"
 							type="number"
-							bind:value={
-								() => ('cm' in heightDisplay ? heightDisplay.cm : heightCm),
-								(v) => setHeightCm(String(v))
-							}
+							bind:value={() => Math.round(heightCm), (v) => setHeightCm(String(v))}
 						/>
 					</div>
 					<div>
