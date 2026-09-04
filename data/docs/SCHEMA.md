@@ -184,3 +184,16 @@ data/.venv/bin/python data/scripts/build_db.py
 
 Every download is recorded in `data/raw/MANIFEST.json` with its size, SHA-256 and
 fetch time, so any build can be traced to the exact bytes it came from.
+
+If only the SQLite export needs redoing — `clean/food*.parquet` are already
+current but `db/*.sqlite` is missing, partial or stale — re-run just that
+step instead of the whole pipeline:
+
+```bash
+data/.venv/bin/python data/scripts/export_sqlite.py
+```
+
+This reads `clean/food.parquet`, `clean/food_alias.parquet` and
+`clean/food_serving.parquet` and rewrites both `.sqlite` artifacts from
+scratch; it shares its export logic with `build_db.py` and is safe to run
+repeatedly.
