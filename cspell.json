@@ -45,6 +45,7 @@
 		"Figtree",
 		"folate",
 		"Fraunces",
+		"gabepsilva",
 		"Gitleaks",
 		"gradlew",
 		"gridlines",
@@ -73,6 +74,7 @@
 		"Oatly",
 		"onadd",
 		"onbump",
+		"oneline",
 		"onlog",
 		"onmatch",
 		"onmenu",
@@ -112,6 +114,8 @@
 		"viewports",
 		"Vitest",
 		"wordmark",
+		"worktree",
+		"worktrees",
 		"xyzzy",
 		"zaproxy"
 	]
