@@ -153,6 +153,11 @@ Each run writes `reports/quality/gate-<tier>.json`: every step with its exit cod
 log path, and machine-readable artifact. Re-run a single step with
 `bun scripts/quality/gate.ts <tier> --only <step>`.
 
+A red step is one of two things, and the report keeps them apart. `failed` lists steps that
+ran and judged the change; `crashed` lists steps that died before reaching a verdict, and
+each step carries an `outcome` of `passed`, `failed` or `crashed`. A crashed step proves
+nothing about the change, so it is never a finding to work around.
+
 The pre-commit hook is installed by `bun install` and lives in `.githooks/`.
 
 ### Proving the gates

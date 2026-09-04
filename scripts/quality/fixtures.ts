@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { CRASH_EXIT_CODE } from './run-outcome';
 
 /**
  * One deliberately broken input per gate. Fixtures are generated at run time
@@ -25,6 +26,8 @@ export interface GateFixture {
 	baselinePaths?: string[];
 	/** Text proving the gate rejected the intended defect instead of failing setup. */
 	failureIncludes?: string;
+	/** The exact status this failure mode must report, where the gate has more than one. */
+	expectedExitCode?: number;
 	apply: (root: string) => Promise<void>;
 }
 
@@ -308,6 +311,9 @@ export const fixtures: GateFixture[] = [
 		name: 'security-surviving-mutant',
 		gate: 'test:mutation:security',
 		exclusive: true,
+		// The debt half of the pair proved by `crashed-mutation-run` below: real
+		// surviving mutants are a verdict, and a verdict exits 1.
+		expectedExitCode: 1,
 		failureIncludes: 'changed-line score',
 		description: 'A shallow server test leaves a security-boundary mutant alive.',
 		apply: async (root) => {
@@ -322,6 +328,25 @@ export const fixtures: GateFixture[] = [
 				"import { expect, it } from 'vitest';\nimport { authorize } from './fixture';\n\nit('returns an authorization decision', () => {\n\texpect(typeof authorize('owner', 'stranger')).toBe('boolean');\n});\n"
 			);
 		}
+	},
+	{
+		name: 'crashed-mutation-run',
+		gate: 'test:mutation:security',
+		exclusive: true,
+		expectedExitCode: CRASH_EXIT_CODE,
+		failureIncludes: 'mutation lane CRASHED: it produced no verdict',
+		description:
+			'A mutation runner that dies before writing a report must report a crash, not debt.',
+		// The observed incident: Stryker's dry run died resolving the vitest
+		// projects, so the lane left only `scope.json` behind and exited 1 —
+		// indistinguishable from surviving mutants. Throwing out of the config
+		// reproduces that ending exactly, and the lane has to name it a crash.
+		apply: (root) =>
+			edit(
+				root,
+				'vite.config.ts',
+				(content) => `${content}\nthrow new Error('Failed to initialize projects');\n`
+			)
 	},
 	{
 		name: 'changed-node-surviving-mutant',
