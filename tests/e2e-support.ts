@@ -44,9 +44,28 @@ export function freshUsername(): string {
 }
 
 /**
+ * The `localStorage` record the shell reads, written via `addInitScript` because the
+ * cookie `page.request` just collected is HttpOnly.
+ *
+ * `addInitScript` runs on every page load; seeding unconditionally would resurrect sessions
+ * after sign-out. The `sessionStorage` flag ensures the seed happens once per tab, and each
+ * caller passes its own flag so a second sign-in on the same context is not blocked by the
+ * first one's.
+ */
+async function seedSessionRecord(page: Page, record: string, flag: string): Promise<void> {
+	await page.addInitScript(
+		([key, value, once]) => {
+			if (globalThis.sessionStorage.getItem(once ?? '') !== null) return;
+			globalThis.sessionStorage.setItem(once ?? '', '1');
+			globalThis.localStorage.setItem(key ?? '', value ?? '');
+		},
+		[SESSION_STORAGE_KEY, record, flag]
+	);
+}
+
+/**
  * Registers via API (not the form) so failures below are attributable.
- * `page.request` shares the cookie jar; the `localStorage` record is written via `addInitScript`
- * because the shell reads it (the cookie is HttpOnly). `origin` header is required by `hooks.server.ts`.
+ * `page.request` shares the cookie jar; `origin` is required by `hooks.server.ts`.
  */
 export async function signInThroughApi(
 	page: Page,
@@ -58,16 +77,31 @@ export async function signInThroughApi(
 		data: { username, displayName: 'Robin', password: PASSWORD, householdName: 'Kitchen' }
 	});
 	expect(response.status()).toBe(201);
-	const record = JSON.stringify(await response.json());
-	// `addInitScript` runs on every page load; seeding unconditionally would resurrect sessions after sign-out.
-	// The `sessionStorage` flag ensures the seed happens once per tab.
-	await page.addInitScript(
-		([key, value, flag]) => {
-			if (globalThis.sessionStorage.getItem(flag ?? '') !== null) return;
-			globalThis.sessionStorage.setItem(flag ?? '', '1');
-			globalThis.localStorage.setItem(key ?? '', value ?? '');
-		},
-		[SESSION_STORAGE_KEY, record, 'fit.e2e.seeded']
-	);
+	await seedSessionRecord(page, JSON.stringify(await response.json()), 'fit.e2e.seeded');
 	return username;
+}
+
+/**
+ * Sign an already-registered account in on this context — the other half of the pair, and
+ * the only way to put the same account on a second device.
+ */
+export async function returnThroughApi(
+	page: Page,
+	baseURL: string,
+	username: string,
+	flag = 'fit.e2e.returned'
+): Promise<void> {
+	const response = await page.request.post('/api/sessions', {
+		headers: { origin: new URL(baseURL).origin },
+		data: { username, password: PASSWORD }
+	});
+	expect(response.status()).toBe(200);
+	await seedSessionRecord(page, JSON.stringify(await response.json()), flag);
+}
+
+/** End the session from the drawer, which is the only place that offers it. */
+export async function signOutThroughDrawer(page: Page): Promise<void> {
+	await page.getByRole('button', { name: 'Open menu' }).click();
+	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
 }

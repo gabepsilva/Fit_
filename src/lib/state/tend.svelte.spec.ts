@@ -12,7 +12,7 @@ import type {
 	Profile,
 	TendState
 } from '$lib/domain/types';
-import { PLANNED_MEALS, REST_WEEK, ZERO_MICROS } from '$lib/domain/types';
+import { DEFAULT_REST_SECONDS, PLANNED_MEALS, REST_WEEK, ZERO_MICROS } from '$lib/domain/types';
 import { todayISO } from '$lib/domain/utils';
 import { countsAsTraining } from '$lib/domain/workout';
 import { STORAGE_KEY, TendStore } from './tend.svelte';
@@ -1564,6 +1564,133 @@ describe('debounced persistence internals', () => {
 			expect(store.currentExercise?.sets[0]?.done).toBe(true);
 		} finally {
 			vi.unstubAllGlobals();
+		}
+	});
+});
+
+describe('what a synced device needs from the store', () => {
+	it('tells its watcher every time the document reaches storage', () => {
+		const store = onboarded();
+		const changes = vi.fn();
+		store.watch(changes);
+		store.togglePantry('oats');
+		expect(changes).toHaveBeenCalledTimes(1);
+	});
+
+	it('tells it once for a burst that is written once', async () => {
+		const store = inSession();
+		const changes = vi.fn();
+		store.watch(changes);
+		store.bumpSet(0, 'reps', 1);
+		store.bumpSet(0, 'reps', 1);
+		await vi.waitFor(() => expect(changes).toHaveBeenCalledTimes(1));
+	});
+
+	it('says nothing at all when nobody is watching', () => {
+		const store = onboarded();
+		expect(() => store.togglePantry('oats')).not.toThrow();
+	});
+
+	it('tells only the watcher that replaced the last one', () => {
+		const store = onboarded();
+		const first = vi.fn();
+		const second = vi.fn();
+		store.watch(first);
+		store.watch(second);
+		store.togglePantry('oats');
+		expect(first).not.toHaveBeenCalled();
+		expect(second).toHaveBeenCalledTimes(1);
+	});
+
+	it('takes a document from elsewhere in place of its own', () => {
+		const store = onboarded();
+		store.replace({ onboarded: true, pantry: ['rice'], activeProfileId: 'p-9' });
+		expect(store.state.pantry).toEqual(['rice']);
+		expect(store.state.activeProfileId).toBe('p-9');
+	});
+
+	it('fills in every field the document it was given left out', () => {
+		const store = onboarded();
+		store.replace({ onboarded: true });
+		expect(store.state.profiles).toEqual([]);
+		expect(store.state.restSeconds).toBe(DEFAULT_REST_SECONDS);
+	});
+
+	it('writes what it took, so a reload finds it', () => {
+		const store = onboarded();
+		store.replace({ onboarded: true, pantry: ['rice'] });
+		expect(stored().pantry).toEqual(['rice']);
+	});
+
+	it('drops a debounced write rather than letting it undo what it took', async () => {
+		const store = inSession();
+		store.toggleSet(0);
+		store.replace({ onboarded: true, pantry: ['rice'] });
+		await new Promise((resolve) => setTimeout(resolve, 260));
+		expect(stored().pantry).toEqual(['rice']);
+		expect(stored().activeWorkout).toBeNull();
+	});
+
+	it('does not report a document it took as a change of its own', () => {
+		const store = onboarded();
+		const changes = vi.fn();
+		store.watch(changes);
+		store.replace({ onboarded: true, pantry: ['rice'] });
+		expect(changes).not.toHaveBeenCalled();
+	});
+
+	it('does not let a debounced write report the document it took, either', async () => {
+		const store = inSession();
+		// A debounced write is already scheduled when the server's answer lands.
+		store.toggleSet(0);
+		const changes = vi.fn();
+		store.watch(changes);
+		store.replace({ onboarded: true, pantry: ['rice'] });
+		await new Promise((resolve) => setTimeout(resolve, 260));
+		expect(changes).not.toHaveBeenCalled();
+	});
+
+	it('keeps nothing on the device once it is cleared', () => {
+		const store = onboarded();
+		store.clear();
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+		expect(store.state.profiles).toEqual([]);
+		expect(store.state.onboarded).toBe(false);
+	});
+
+	it('does not let a debounced write put the document back after it is cleared', async () => {
+		const store = inSession();
+		store.toggleSet(0);
+		store.clear();
+		await new Promise((resolve) => setTimeout(resolve, 260));
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+	});
+
+	it('does not report being cleared as a change of its own', () => {
+		const store = onboarded();
+		const changes = vi.fn();
+		store.watch(changes);
+		store.clear();
+		expect(changes).not.toHaveBeenCalled();
+	});
+
+	it('stays usable after being cleared, without hydrating again', () => {
+		const store = onboarded();
+		store.clear();
+		store.togglePantry('oats');
+		expect(stored().pantry).toEqual(['oats']);
+	});
+
+	it('clears where there is no browser storage at all', () => {
+		const real = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+		Object.defineProperty(globalThis, 'localStorage', { value: undefined, configurable: true });
+		try {
+			const store = new TendStore();
+			store.hydrate();
+			expect(() => store.clear()).not.toThrow();
+			expect(store.state.profiles).toEqual([]);
+		} finally {
+			if (real) Object.defineProperty(globalThis, 'localStorage', real);
 		}
 	});
 });

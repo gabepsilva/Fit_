@@ -1,0 +1,1267 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { emptyProfile } from '$lib/domain/profile';
+import type { TendState } from '$lib/domain/types';
+import { STORAGE_KEY, TendStore } from './tend.svelte';
+import { SYNC_STORAGE_KEY, SyncStore, type SyncRecord } from './sync.svelte';
+
+const announced = vi.hoisted(() => [] as string[]);
+vi.mock('svelte-sonner', () => ({
+	toast: (message: string) => {
+		announced.push(message);
+	}
+}));
+
+const HOUSEHOLD = 'h-1';
+
+type Sent = {
+	path: string;
+	method: string | undefined;
+	contentType: string | undefined;
+	body: Record<string, unknown> | null;
+};
+
+function jsonResponse(body: unknown, status = 200): Response {
+	return new Response(JSON.stringify(body), {
+		status,
+		headers: { 'content-type': 'application/json' }
+	});
+}
+
+/** What a read answers, and what a refused write answers: the same four fields. */
+function documentAnswer(version: number, body: Record<string, unknown> | null): Response {
+	return jsonResponse({ version, format: 'tend.v1', body, updatedAt: null });
+}
+
+function stale(version: number, body: Record<string, unknown> | null): Response {
+	return jsonResponse({ error: { code: 'stale-version' }, version, format: 'tend.v1', body }, 409);
+}
+
+function stored(version: number): Response {
+	return jsonResponse({ version, updatedAt: '2026-09-04T09:00:00.000Z' });
+}
+
+const DROPPED = new TypeError('Failed to fetch');
+
+/** A server that answers the given sequence, and records what it was asked. */
+function server(answers: (Response | Error)[]): Sent[] {
+	const sent: Sent[] = [];
+	vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+		const raw = init?.body;
+		sent.push({
+			path: typeof input === 'string' ? input : '',
+			method: init?.method,
+			contentType: (init?.headers as Record<string, string> | undefined)?.['content-type'],
+			body: typeof raw === 'string' ? (JSON.parse(raw) as Record<string, unknown>) : null
+		});
+		const next = answers.shift();
+		if (next === undefined) return Promise.reject(new Error('the server was asked once too often'));
+		return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
+	});
+	return sent;
+}
+
+function record(): SyncRecord | null {
+	const raw = localStorage.getItem(SYNC_STORAGE_KEY);
+	return raw === null ? null : (JSON.parse(raw) as SyncRecord);
+}
+
+/** A device that has recorded something of its own. */
+function journal(): TendStore {
+	const store = new TendStore();
+	store.hydrate();
+	store.addProfile(emptyProfile({ name: 'Alex' }));
+	return store;
+}
+
+/** A device that has never written anything down. */
+function blankDevice(): TendStore {
+	const store = new TendStore();
+	store.hydrate();
+	return store;
+}
+
+function remoteState(name: string): Record<string, unknown> {
+	const profile = { ...emptyProfile({ name }), id: 'p-remote' };
+	return { onboarded: true, activeProfileId: 'p-remote', profiles: [profile] };
+}
+
+function deferred(): { promise: Promise<void>; release: () => void } {
+	let release = () => {};
+	const promise = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	return { promise, release };
+}
+
+const running: SyncStore[] = [];
+
+function syncFor(store: TendStore): SyncStore {
+	const sync = new SyncStore(store);
+	running.push(sync);
+	return sync;
+}
+
+beforeEach(() => {
+	localStorage.clear();
+	announced.length = 0;
+});
+
+afterEach(() => {
+	for (const sync of running.splice(0)) sync.stop();
+	vi.restoreAllMocks();
+});
+
+describe('the first sync a device does', () => {
+	// The literal, not the constant: a renamed key would round-trip against itself.
+	it('keeps its record under the key the rest of the application knows', () => {
+		expect(SYNC_STORAGE_KEY).toBe('tend.sync.v1');
+	});
+
+	it('talks to the one endpoint that holds the document, and reads with a GET', async () => {
+		const sent = server([documentAnswer(0, null)]);
+		const sync = syncFor(blankDevice());
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent[0]).toMatchObject({ path: '/api/state', method: 'GET' });
+	});
+
+	it('declares JSON on the write, which is all the endpoint accepts', async () => {
+		const sent = server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(journal());
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent[1]?.contentType).toBe('application/json');
+	});
+
+	it('knows nothing before it starts', () => {
+		const sync = syncFor(blankDevice());
+		expect(sync.status).toBe('idle');
+		expect(sync.version).toBe(0);
+	});
+
+	it('sends a journal the server has never seen, rather than being emptied by it', async () => {
+		const store = journal();
+		const sent = server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent[1]?.method).toBe('PUT');
+		expect(store.state.profiles).toHaveLength(1);
+	});
+
+	it('records the version the first write created', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sync.version).toBe(1);
+		expect(record()).toEqual({ householdId: HOUSEHOLD, version: 1, dirty: false });
+	});
+
+	it('reads once and writes once, and then stops talking', async () => {
+		const sent = server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(journal());
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent.map((call) => call.method)).toEqual(['GET', 'PUT']);
+	});
+
+	it('sends the whole document, onboarding flag and active profile included', async () => {
+		const store = journal();
+		store.state.onboarded = true;
+		store.state.activeProfileId = 'p-1';
+		store.persist();
+		const sent = server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		const body = sent[1]?.body as { format: string; body: TendState } | undefined;
+		expect(body?.format).toBe('tend.v1');
+		expect(body?.body.onboarded).toBe(true);
+		expect(body?.body.activeProfileId).toBe('p-1');
+	});
+
+	it('asks a server with nothing for nothing, when the device has nothing either', async () => {
+		const sent = server([documentAnswer(0, null)]);
+		const sync = syncFor(blankDevice());
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent).toHaveLength(1);
+		expect(sync.status).toBe('idle');
+	});
+
+	it('takes the account’s document onto a device that has none of its own', async () => {
+		const store = blankDevice();
+		server([documentAnswer(3, remoteState('Robin'))]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(store.state.profiles[0]?.name).toBe('Robin');
+		expect(sync.version).toBe(3);
+	});
+
+	it('says nothing to someone opening the app on a new device', async () => {
+		server([documentAnswer(3, remoteState('Robin'))]);
+		const sync = syncFor(blankDevice());
+
+		await sync.start(HOUSEHOLD);
+
+		expect(announced).toEqual([]);
+		expect(sync.status).toBe('idle');
+	});
+
+	it('fills in a field an older document never had', async () => {
+		const store = blankDevice();
+		server([documentAnswer(3, { onboarded: true })]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(store.state.routines).toEqual([]);
+	});
+});
+
+describe('an answer that cannot be read', () => {
+	it('is not mistaken for a document, when it is not an object at all', async () => {
+		const store = journal();
+		server([jsonResponse(null), stored(1)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sync.status).toBe('error');
+		expect(store.state.profiles).toHaveLength(1);
+	});
+
+	it('is not mistaken for a document, when the body is not an object', async () => {
+		const store = journal();
+		server([jsonResponse({ version: 4, format: 'tend.v1', body: 'nonsense' }), stored(5)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(store.state.profiles).toHaveLength(1);
+		expect(sync.version).toBe(5);
+	});
+
+	it('is not mistaken for a document, when the body is an array', async () => {
+		const store = journal();
+		server([jsonResponse({ version: 4, format: 'tend.v1', body: [] }), stored(5)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		// An unusable body reads as "nothing stored here", which is the one case
+		// where this device's own document wins.
+		expect(store.state.profiles).toHaveLength(1);
+		expect(sync.version).toBe(5);
+	});
+
+	it('is not mistaken for a document, when the version is not a whole number', async () => {
+		const store = journal();
+		server([jsonResponse({ version: 1.5, format: 'tend.v1', body: remoteState('Robin') })]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sync.status).toBe('error');
+		expect(store.state.profiles[0]?.name).toBe('Alex');
+	});
+
+	it('leaves a write unsent when the answer names no version', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), jsonResponse({ updatedAt: 'now' })]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(record()?.dirty).toBe(true);
+		expect(sync.status).toBe('error');
+	});
+
+	it('adopts nothing from a refusal that carries no readable document', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 3, dirty: true })
+		);
+		server([
+			documentAnswer(3, remoteState('Alex')),
+			jsonResponse({ error: { code: 'stale-version' } }, 409)
+		]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sync.status).toBe('error');
+		expect(record()?.dirty).toBe(true);
+		expect(sync.version).toBe(3);
+	});
+});
+
+describe('a device that belonged to someone else', () => {
+	it('is emptied before the new household is read', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: 'h-other', version: 4, dirty: false })
+		);
+		server([documentAnswer(0, null)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(store.state.profiles).toEqual([]);
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+	});
+
+	it('never pushes the old household’s journal to the new one', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: 'h-other', version: 4, dirty: true })
+		);
+		const sent = server([documentAnswer(0, null)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent.map((call) => call.method)).toEqual(['GET']);
+	});
+
+	it('keeps the journal when the record names the household signing in', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 2, dirty: false })
+		);
+		server([documentAnswer(2, remoteState('Alex'))]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(store.state.profiles).toHaveLength(1);
+	});
+
+	it('ignores a record that is not the shape it wrote', async () => {
+		const store = journal();
+		localStorage.setItem(SYNC_STORAGE_KEY, '{not json');
+		const sent = server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent[1]?.method).toBe('PUT');
+	});
+
+	it('ignores a record whose version is not a whole number', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 'four', dirty: false })
+		);
+		server([documentAnswer(2, remoteState('Robin'))]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		// Read as version 0, so the server's version 2 is newer and is taken.
+		expect(store.state.profiles[0]?.name).toBe('Robin');
+		expect(sync.version).toBe(2);
+	});
+
+	it('does not read a record that names no household as naming another one', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: 7, version: 1, dirty: false })
+		);
+		server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		// The record is unreadable, not somebody else's: the journal stays.
+		expect(store.state.profiles).toHaveLength(1);
+	});
+
+	it('is not a record at all when it holds something that is not an object', async () => {
+		const store = journal();
+		localStorage.setItem(SYNC_STORAGE_KEY, '"h-other"');
+		const sent = server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(store.state.profiles).toHaveLength(1);
+		expect(sent[1]?.method).toBe('PUT');
+	});
+});
+
+describe('a device that is behind', () => {
+	async function refusedPush(): Promise<{ store: TendStore; sync: SyncStore; sent: Sent[] }> {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 1, dirty: true })
+		);
+		const sent = server([documentAnswer(1, remoteState('Alex')), stale(2, remoteState('Robin'))]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+		return { store, sync, sent };
+	}
+
+	it('takes the newer document instead of overwriting it', async () => {
+		const { store } = await refusedPush();
+		expect(store.state.profiles[0]?.name).toBe('Robin');
+	});
+
+	it('does not send its own document again after being refused', async () => {
+		const { sent } = await refusedPush();
+		expect(sent.map((call) => call.method)).toEqual(['GET', 'PUT']);
+	});
+
+	it('records the version it adopted, with nothing left unsent', async () => {
+		const { sync } = await refusedPush();
+		expect(record()).toEqual({ householdId: HOUSEHOLD, version: 2, dirty: false });
+		expect(sync.version).toBe(2);
+	});
+
+	it('tells the person on this device that it reloaded', async () => {
+		await refusedPush();
+		expect(announced).toEqual(['This device was behind, so it reloaded your newer data.']);
+	});
+
+	it('reports itself as having been stale', async () => {
+		const { sync } = await refusedPush();
+		expect(sync.status).toBe('stale');
+	});
+
+	it('adopts a newer document found by the read, and says so', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 1, dirty: false })
+		);
+		server([documentAnswer(5, remoteState('Robin'))]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(store.state.profiles[0]?.name).toBe('Robin');
+		expect(announced).toHaveLength(1);
+	});
+
+	it('sends nothing when the versions already agree', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 4, dirty: false })
+		);
+		const sent = server([documentAnswer(4, remoteState('Alex'))]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent).toHaveLength(1);
+		expect(sync.status).toBe('idle');
+	});
+
+	it('sends its own document when the server has fallen behind the record', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 6, dirty: false })
+		);
+		const sent = server([documentAnswer(2, remoteState('Alex')), stored(3)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent[1]?.body).toMatchObject({ version: 2 });
+		expect(sync.version).toBe(3);
+	});
+
+	it('records version zero and keeps its own document when the server has lost it', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 5, dirty: false })
+		);
+		server([documentAnswer(0, null), DROPPED]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(record()).toEqual({ householdId: HOUSEHOLD, version: 0, dirty: true });
+		expect(store.state.profiles).toHaveLength(1);
+	});
+
+	it('records the version the server does hold when it has fallen behind', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 6, dirty: false })
+		);
+		const sent = server([documentAnswer(2, remoteState('Alex')), DROPPED]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(record()).toEqual({ householdId: HOUSEHOLD, version: 2, dirty: true });
+		expect(sent.map((call) => call.method)).toEqual(['GET', 'PUT']);
+	});
+
+	it('refuses to be talked into sending for ever by a server that keeps refusing', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 3, dirty: true })
+		);
+		const sent = server([documentAnswer(3, remoteState('Alex')), stale(0, null), stale(0, null)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent.map((call) => call.method)).toEqual(['GET', 'PUT', 'PUT']);
+	});
+
+	it('starts again from nothing when a refusal says the document is gone', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 3, dirty: true })
+		);
+		const sent = server([documentAnswer(3, remoteState('Alex')), stale(0, null), stored(1)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent[2]?.body).toMatchObject({ version: 0 });
+		expect(sync.version).toBe(1);
+	});
+});
+
+describe('a change that cannot be sent', () => {
+	it('is kept, and the device says it is waiting', async () => {
+		const store = journal();
+		const sent = server([documentAnswer(0, null), DROPPED]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(record()?.dirty).toBe(true);
+		expect(sync.status).toBe('waiting');
+		// One attempt, not a burst of them: retrying is what a trigger is for.
+		expect(sent.map((call) => call.method)).toEqual(['GET', 'PUT']);
+	});
+
+	it('survives a push that lands and a later one that does not', async () => {
+		const store = journal();
+		const gate = deferred();
+		let puts = 0;
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if ((init?.method ?? 'GET') === 'GET') return documentAnswer(0, null);
+			puts += 1;
+			if (puts === 1) {
+				await gate.promise;
+				return stored(1);
+			}
+			throw DROPPED;
+		});
+		const sync = syncFor(store);
+
+		const started = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(puts).toBe(1));
+		// Lands while the first request is in flight, so the answer to that
+		// request says nothing about it.
+		store.togglePantry('oats');
+		gate.release();
+		await started;
+
+		expect(puts).toBe(2);
+		expect(record()?.dirty).toBe(true);
+		expect(sync.status).toBe('waiting');
+	});
+
+	it('is sent again as soon as the network returns', async () => {
+		const store = journal();
+		const sent = server([documentAnswer(0, null), DROPPED, stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		globalThis.dispatchEvent(new Event('online'));
+
+		await vi.waitFor(() => expect(sent).toHaveLength(3));
+		await vi.waitFor(() => expect(record()?.dirty).toBe(false));
+	});
+
+	it('is sent again when the page comes back into view', async () => {
+		const store = journal();
+		const sent = server([documentAnswer(0, null), DROPPED, stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		Object.defineProperty(globalThis.document, 'visibilityState', {
+			value: 'visible',
+			configurable: true
+		});
+		globalThis.dispatchEvent(new Event('visibilitychange'));
+
+		await vi.waitFor(() => expect(sent).toHaveLength(3));
+	});
+
+	it('is sent again on the next write', async () => {
+		const store = journal();
+		const sent = server([documentAnswer(0, null), DROPPED, stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		store.togglePantry('oats');
+
+		await vi.waitFor(() => expect(sent.map((call) => call.method)).toEqual(['GET', 'PUT', 'PUT']));
+	});
+
+	it('says it is waiting when the read fails and something is unsent', async () => {
+		const store = journal();
+		const sent = server([DROPPED]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sync.status).toBe('waiting');
+		// Recorded before the first request, so a device that never reaches the
+		// server still knows whose journal it holds and that it is unsent.
+		expect(record()).toEqual({ householdId: HOUSEHOLD, version: 0, dirty: true });
+		// And no write from a version it only guessed at.
+		expect(sent.map((call) => call.method)).toEqual(['GET']);
+	});
+
+	it('says nothing is waiting when the read fails and nothing is unsent', async () => {
+		server([DROPPED]);
+		const sync = syncFor(blankDevice());
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sync.status).toBe('idle');
+	});
+
+	it('retries the read first when it was the read that never arrived', async () => {
+		const store = journal();
+		const sent = server([DROPPED, documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+		expect(sent).toHaveLength(1);
+
+		store.togglePantry('oats');
+
+		await vi.waitFor(() => expect(sent.map((call) => call.method)).toEqual(['GET', 'GET', 'PUT']));
+	});
+
+	it('stops asking when the server refuses the device outright', async () => {
+		const store = journal();
+		const sent = server([jsonResponse({ error: { code: 'unauthenticated' } }, 401)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		// Not even the write it was holding: a device the read was refused for is
+		// not one a write will be accepted from.
+		expect(sent.map((call) => call.method)).toEqual(['GET']);
+		expect(sync.status).toBe('error');
+	});
+
+	it('keeps the change when a write is refused outright', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), jsonResponse({ error: { code: 'invalid-body' } }, 400)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(record()?.dirty).toBe(true);
+		expect(sync.status).toBe('error');
+	});
+});
+
+describe('writes while sync is running', () => {
+	it('records a change as unsent the moment it arrives, not when it is sent', async () => {
+		const store = blankDevice();
+		let puts = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method !== 'PUT') return documentAnswer(2, remoteState('Robin'));
+			puts += 1;
+			await gate.promise;
+			return stored(3);
+		});
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+		expect(record()).toEqual({ householdId: HOUSEHOLD, version: 2, dirty: false });
+
+		store.togglePantry('oats');
+		await vi.waitFor(() => expect(puts).toBe(1));
+
+		expect(record()).toEqual({ householdId: HOUSEHOLD, version: 2, dirty: true });
+		gate.release();
+	});
+
+	it('coalesces a burst into one request in flight and one queued', async () => {
+		const store = journal();
+		const gate = deferred();
+		let puts = 0;
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if ((init?.method ?? 'GET') === 'GET') return documentAnswer(0, null);
+			puts += 1;
+			if (puts === 1) await gate.promise;
+			return stored(puts);
+		});
+		const sync = syncFor(store);
+		const started = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(puts).toBe(1));
+
+		store.togglePantry('oats');
+		store.togglePantry('rice');
+		store.togglePantry('beans');
+		gate.release();
+		await started;
+
+		expect(puts).toBe(2);
+	});
+
+	it('does not send back a document it has just adopted', async () => {
+		const store = journal();
+		localStorage.setItem(
+			SYNC_STORAGE_KEY,
+			JSON.stringify({ householdId: HOUSEHOLD, version: 1, dirty: false })
+		);
+		const sent = server([documentAnswer(5, remoteState('Robin'))]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(sync.status).toBe('stale'));
+
+		expect(sent.map((call) => call.method)).toEqual(['GET']);
+	});
+});
+
+describe('signing out', () => {
+	it('reports unsent changes rather than dropping them', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), DROPPED, DROPPED]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		await expect(sync.flush()).resolves.toBe(false);
+	});
+
+	it('reports everything sent once the server has taken it', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		await expect(sync.flush()).resolves.toBe(true);
+	});
+
+	it('has nothing to flush before it has started', async () => {
+		const sync = syncFor(journal());
+		await expect(sync.flush()).resolves.toBe(true);
+	});
+
+	it('has nothing to flush once it has stopped', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), DROPPED]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+		expect(await sync.flush()).toBe(false);
+
+		sync.stop();
+
+		await expect(sync.flush()).resolves.toBe(true);
+	});
+
+	it('leaves neither the document nor the record on the device', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		sync.forget();
+
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+		expect(localStorage.getItem(SYNC_STORAGE_KEY)).toBeNull();
+		expect(store.state.profiles).toEqual([]);
+	});
+
+	it('asks the server for nothing more once it has been forgotten', async () => {
+		const store = journal();
+		const sent = server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		sync.forget();
+		store.togglePantry('oats');
+		globalThis.dispatchEvent(new Event('online'));
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		expect(sent).toHaveLength(2);
+		// Nor is a record written for the household that has just been forgotten.
+		expect(localStorage.getItem(SYNC_STORAGE_KEY)).toBeNull();
+	});
+
+	it('writes no record for a household it has already forgotten', async () => {
+		const store = journal();
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+			await gate.promise;
+			return documentAnswer(0, null);
+		});
+		const sync = syncFor(store);
+
+		const started = sync.start(HOUSEHOLD);
+		// Signing out while the read is still in the air.
+		sync.forget();
+		gate.release();
+		await started;
+
+		expect(localStorage.getItem(SYNC_STORAGE_KEY)).toBeNull();
+	});
+
+	it('counts nothing the store writes after it has been forgotten', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		sync.forget();
+		store.hydrate();
+		store.togglePantry('oats');
+
+		// The device is not syncing, so what it writes is nobody's unsent work.
+		await expect(sync.flush()).resolves.toBe(true);
+	});
+
+	it('starts again for the next account to sign in here', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), stored(1), documentAnswer(2, remoteState('Robin'))]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+		sync.forget();
+
+		await sync.start('h-2');
+
+		expect(store.state.profiles[0]?.name).toBe('Robin');
+		expect(record()?.householdId).toBe('h-2');
+	});
+});
+
+describe('while a request is in the air', () => {
+	function held(answer: Response): { asked: () => number; release: () => void } {
+		let asked = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+			asked += 1;
+			await gate.promise;
+			return answer;
+		});
+		return { asked: () => asked, release: gate.release };
+	}
+
+	/** A server whose writes hang until released, and whose reads answer at once. */
+	function heldWrites(read: Response): { puts: () => number; release: () => void } {
+		let puts = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method !== 'PUT') return read;
+			puts += 1;
+			await gate.promise;
+			return stored(99);
+		});
+		return { puts: () => puts, release: gate.release };
+	}
+
+	it('says it is reading while it reads', async () => {
+		const gate = held(documentAnswer(0, null));
+		const sync = syncFor(blankDevice());
+
+		const started = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(sync.status).toBe('loading'));
+
+		gate.release();
+		await started;
+	});
+
+	it('says it is saving while it saves', async () => {
+		const server = heldWrites(documentAnswer(0, null));
+		const sync = syncFor(journal());
+
+		const started = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(server.puts()).toBe(1));
+		expect(sync.status).toBe('saving');
+
+		server.release();
+		await started;
+	});
+
+	it('acts on no answer to a read that lands after signing out', async () => {
+		const store = journal();
+		const gate = held(documentAnswer(4, remoteState('Robin')));
+		const sync = syncFor(store);
+
+		const started = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(gate.asked()).toBe(1));
+		sync.forget();
+		gate.release();
+		await started;
+
+		// The document went with the sign-out; a late answer must not put the
+		// last account's journal back on the device.
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+		expect(localStorage.getItem(SYNC_STORAGE_KEY)).toBeNull();
+	});
+
+	it('acts on no answer to a write that lands after signing out', async () => {
+		const server = heldWrites(documentAnswer(0, null));
+		const sync = syncFor(journal());
+
+		const started = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(server.puts()).toBe(1));
+		sync.forget();
+		server.release();
+		await started;
+
+		expect(localStorage.getItem(SYNC_STORAGE_KEY)).toBeNull();
+	});
+
+	it('never sends the emptied store to the account it has just left', async () => {
+		const store = journal();
+		const server = heldWrites(documentAnswer(0, null));
+		const sync = syncFor(store);
+
+		const started = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(server.puts()).toBe(1));
+		sync.forget();
+		// A write reaching the store after the sign-out: the drawer's toast, a
+		// stray effect, anything. It must not become a second request.
+		store.hydrate();
+		store.togglePantry('oats');
+		server.release();
+		await started;
+
+		expect(server.puts()).toBe(1);
+	});
+
+	it('puts a document refused after signing out nowhere', async () => {
+		const store = journal();
+		let puts = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method !== 'PUT') return documentAnswer(0, null);
+			puts += 1;
+			await gate.promise;
+			return stale(4, remoteState('Robin'));
+		});
+		const sync = syncFor(store);
+
+		const started = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(puts).toBe(1));
+		sync.forget();
+		gate.release();
+		await started;
+
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+		expect(store.state.profiles).toEqual([]);
+	});
+});
+
+describe('when the next account signs in before the last answer lands', () => {
+	/**
+	 * The window `AccountMenu` opens: `flush()` has returned, the sign-out round
+	 * trip is still going, and a retry on `online` or `visibilitychange` has put
+	 * a request in the air that nothing cancels. On a shared device the next
+	 * person can be signed in before it answers.
+	 */
+	function handOver(sync: SyncStore): Promise<void> {
+		sync.forget();
+		return sync.start('h-2');
+	}
+
+	it('never takes one account’s document into the next account’s store', async () => {
+		const store = journal();
+		let reads = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method === 'PUT') return stored(8);
+			reads += 1;
+			if (reads === 1) {
+				await gate.promise;
+				return documentAnswer(7, remoteState('AccountA'));
+			}
+			return documentAnswer(0, null);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(reads).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(store.state.profiles).toEqual([]);
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+	});
+
+	it('never records the last account’s version against the next one', async () => {
+		const store = journal();
+		let reads = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method === 'PUT') return stored(8);
+			reads += 1;
+			if (reads === 1) {
+				await gate.promise;
+				return documentAnswer(7, remoteState('AccountA'));
+			}
+			return documentAnswer(0, null);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(reads).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(record()).toEqual({ householdId: 'h-2', version: 0, dirty: false });
+		expect(sync.version).toBe(0);
+	});
+
+	it('reads the next account’s own document rather than waiting on the last one’s', async () => {
+		const store = journal();
+		let reads = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method === 'PUT') return stored(8);
+			reads += 1;
+			if (reads === 1) {
+				await gate.promise;
+				return documentAnswer(7, remoteState('AccountA'));
+			}
+			return documentAnswer(3, remoteState('AccountB'));
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(reads).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(reads).toBe(2);
+		expect(store.state.profiles[0]?.name).toBe('AccountB');
+		expect(sync.version).toBe(3);
+	});
+
+	it('does not let the last account’s exchange close the one under way', async () => {
+		const store = journal();
+		let reads = 0;
+		const leaving = deferred();
+		const arriving = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method === 'PUT') return stored(1);
+			reads += 1;
+			if (reads === 1) {
+				await leaving.promise;
+				return documentAnswer(7, remoteState('AccountA'));
+			}
+			await arriving.promise;
+			return documentAnswer(0, null);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(reads).toBe(1));
+		const second = handOver(sync);
+		await vi.waitFor(() => expect(reads).toBe(2));
+		// The account that left finishes while the new one is still reading.
+		leaving.release();
+		await first;
+
+		// Something asks again in that moment; the read already in the air is
+		// the answer, not a reason to open a second one.
+		store.hydrate();
+		store.togglePantry('oats');
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect(reads).toBe(2);
+
+		arriving.release();
+		await second;
+	});
+
+	it('never claims the version one account’s write created for the next one', async () => {
+		const store = journal();
+		let puts = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method !== 'PUT') return documentAnswer(0, null);
+			puts += 1;
+			if (puts === 1) {
+				await gate.promise;
+				return stored(9);
+			}
+			return stored(1);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(puts).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(record()).toEqual({ householdId: 'h-2', version: 0, dirty: false });
+		expect(sync.version).toBe(0);
+	});
+
+	it('never adopts a document one account’s write was refused with', async () => {
+		const store = journal();
+		let puts = 0;
+		const gate = deferred();
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+			if (init?.method !== 'PUT') return documentAnswer(0, null);
+			puts += 1;
+			if (puts === 1) {
+				await gate.promise;
+				return stale(6, remoteState('AccountA'));
+			}
+			return stored(1);
+		});
+		const sync = syncFor(store);
+
+		const first = sync.start(HOUSEHOLD);
+		await vi.waitFor(() => expect(puts).toBe(1));
+		const second = handOver(sync);
+		gate.release();
+		await Promise.all([first, second]);
+
+		expect(store.state.profiles).toEqual([]);
+		expect(announced).toEqual([]);
+		expect(record()).toEqual({ householdId: 'h-2', version: 0, dirty: false });
+	});
+});
+
+describe('the retry listeners', () => {
+	it('are bound once, however many times syncing starts', async () => {
+		const store = journal();
+		const bound = vi.spyOn(globalThis, 'addEventListener');
+		server([documentAnswer(0, null), stored(1), documentAnswer(1, remoteState('Alex'))]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+		sync.forget();
+		await sync.start('h-2');
+
+		// One for `online`, one for `visibilitychange` — never more.
+		expect(bound).toHaveBeenCalledTimes(2);
+	});
+
+	it('are not asked for where there is nothing to bind them to', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), stored(1)]);
+		vi.stubGlobal('addEventListener', undefined);
+		try {
+			const sync = syncFor(store);
+			await expect(sync.start(HOUSEHOLD)).resolves.toBeUndefined();
+			expect(sync.version).toBe(1);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('do not try again for a page that went out of view rather than into it', async () => {
+		const store = journal();
+		const sent = server([documentAnswer(0, null), DROPPED]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		Object.defineProperty(globalThis.document, 'visibilityState', {
+			value: 'hidden',
+			configurable: true
+		});
+		globalThis.dispatchEvent(new Event('visibilitychange'));
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		expect(sent.map((call) => call.method)).toEqual(['GET', 'PUT']);
+	});
+});
+
+describe('the running state', () => {
+	it('does not start over for the household it is already syncing', async () => {
+		const store = journal();
+		const sent = server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sent).toHaveLength(2);
+	});
+
+	it('reports itself idle once a document has been sent', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+
+		await sync.start(HOUSEHOLD);
+
+		expect(sync.status).toBe('idle');
+	});
+
+	it('forgets the version when it is stopped', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		sync.stop();
+
+		expect(sync.version).toBe(0);
+		expect(sync.status).toBe('idle');
+	});
+
+	it('leaves the document alone when it is merely stopped', async () => {
+		const store = journal();
+		server([documentAnswer(0, null), stored(1)]);
+		const sync = syncFor(store);
+		await sync.start(HOUSEHOLD);
+
+		sync.stop();
+
+		expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
+		expect(localStorage.getItem(SYNC_STORAGE_KEY)).not.toBeNull();
+	});
+
+	it('works where there is no browser storage at all', async () => {
+		const real = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+		Object.defineProperty(globalThis, 'localStorage', { value: undefined, configurable: true });
+		try {
+			const store = new TendStore();
+			store.hydrate();
+			server([documentAnswer(0, null)]);
+			const sync = syncFor(store);
+			await sync.start(HOUSEHOLD);
+			expect(sync.status).toBe('idle');
+			expect(() => sync.forget()).not.toThrow();
+		} finally {
+			if (real) Object.defineProperty(globalThis, 'localStorage', real);
+		}
+	});
+});

@@ -6,6 +6,7 @@
 	import { Toaster } from 'svelte-sonner';
 	import { logUi } from '$lib/state/log-ui.svelte';
 	import { session } from '$lib/state/session.svelte';
+	import { sync } from '$lib/state/sync.svelte';
 	import { tend } from '$lib/state/tend.svelte';
 	import { AUTH_ROUTES, signInPath } from './auth/auth-routes';
 	import LogSheet from './LogSheet.svelte';
@@ -84,6 +85,29 @@
 		// taken a day at a time and re-armed by the tick this effect depends on.
 		const id = setTimeout(() => (clock = Date.now()), Math.min(due, LONGEST_WAIT));
 		return () => clearTimeout(id);
+	});
+
+	/**
+	 * The document follows the account.
+	 *
+	 * Started here, once both stores have read `localStorage` and there is a
+	 * household to sync, and stopped the moment there is not — a sign-out, or the
+	 * expiry above. It is an effect for the same reason the gate below is: signing
+	 * in and signing out change the session while the page sits still, and a
+	 * `load` guard would only see navigation.
+	 *
+	 * Stopping is not emptying. The device keeps what it has until `AccountMenu`
+	 * signs out deliberately, so an expired session does not take a journal with
+	 * it; the household on the sync record is what keeps the next account from
+	 * seeing this one's.
+	 */
+	$effect(() => {
+		const household = restored && session.signedIn ? session.household : null;
+		if (household === null) {
+			sync.stop();
+			return;
+		}
+		void sync.start(household.householdId);
 	});
 
 	/**
