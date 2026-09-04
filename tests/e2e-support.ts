@@ -105,3 +105,28 @@ export async function signOutThroughDrawer(page: Page): Promise<void> {
 	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
 	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
 }
+
+/**
+ * Open the log sheet and type into its box.
+ *
+ * The wait is the point. `Sheet` moves focus into itself a tick after the
+ * dialog mounts — it comes to rest on the sheet's own `Close` button — and
+ * `fill` is two round trips: it focuses the box, then sends the text to
+ * whichever element holds focus when the text arrives. Filling before that
+ * move has landed sends `two eggs` to the button instead. Nothing errors; the
+ * box is simply still empty, so `Parse` stays disabled and the test times out
+ * thirty seconds later pointing at a button rather than at the typing that
+ * never happened. That is what failed on mobile-safari in run 33900350109,
+ * where the snapshot caught focus resting on `Close` with the box empty.
+ *
+ * The value is read back afterwards so that a binding which stops carrying the
+ * text fails here, naming the box, instead of as a timeout further down.
+ */
+export async function openLogSheetAndType(page: Page, what: string): Promise<void> {
+	await page.getByRole('button', { name: 'Log food' }).click();
+	const sheet = page.getByRole('dialog');
+	await expect(sheet.getByRole('button', { name: 'Close' })).toBeFocused();
+	const box = page.getByLabel('What you ate');
+	await box.fill(what);
+	await expect(box).toHaveValue(what);
+}
