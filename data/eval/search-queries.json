@@ -58,7 +58,9 @@
 				"Lamb, ground, raw",
 				"Lamb, ground, cooked, broiled",
 				"Lamb, Canadian, composite cuts, lean, raw",
-				"Lamb, Canadian, composite cuts, lean and fat, 3mm (1/8), cooked"
+				"Lamb, Canadian, composite cuts, lean and fat, 3mm (1/8), cooked",
+				"Lamb, Canadian, ground, raw",
+				"Lamb, Canadian, ground, cooked"
 			],
 			"forbidden": [
 				"Lamb, brain, raw",
@@ -99,7 +101,10 @@
 				"Veal, ground, raw",
 				"Veal, composite cuts, lean, raw",
 				"Veal, composite cuts, lean and fat, raw",
-				"Veal, cubed for stew (leg and shoulder), lean, raw"
+				"Veal, cubed for stew (leg and shoulder), lean, raw",
+				"Veal, ground, broiled",
+				"Veal, ground, pan-fried",
+				"Veal, ground"
 			],
 			"forbidden": [
 				"Veal, brain, raw",
@@ -294,7 +299,10 @@
 				"Beans, black, mature seeds, dry",
 				"Beans, black, mature seeds, boiled",
 				"Beans, lima, raw",
-				"Beans, snap, green, raw"
+				"Beans, snap, green, raw",
+				"Beans, kidney, red, mature seeds, raw",
+				"Beans, kidney, all types, mature seeds, dry",
+				"Beans, kidney, red, mature seeds, cooked, boiled, without salt"
 			],
 			"forbidden": []
 		},
@@ -386,8 +394,8 @@
 		},
 		{
 			"query": "rice",
-			"group": "good",
-			"means": "plain rice: white or brown",
+			"group": "failing",
+			"means": "plain rice: white or brown. Black and red rice are not what a bare \"rice\" means.",
 			"acceptable": [
 				"RICE",
 				"Rice, white, long grain, unenriched, raw",
@@ -396,6 +404,8 @@
 				"Rice, brown, long-grain, cooked (Includes foods for USDA's Food Distribution Program)"
 			],
 			"forbidden": [
+				"Rice, black, unenriched, raw",
+				"Rice, red, unenriched, dry, raw",
 				"Rice, spanish rice mix, unprepared"
 			]
 		},
@@ -591,6 +601,31 @@
 				"Pork, feet, raw",
 				"Pork, feet, simmered",
 				"Pork, fresh, variety meats and by-products, feet, raw"
+			],
+			"forbidden": []
+		},
+		{
+			"query": "beef livers",
+			"group": "adversarial",
+			"means": "beef liver, asked for in the plural: a demotion must not survive the person naming the part",
+			"acceptable": [
+				"Beef, liver, raw",
+				"Beef, liver, braised",
+				"Beef, liver, pan-fried",
+				"Liver, beef",
+				"Beef Liver"
+			],
+			"forbidden": []
+		},
+		{
+			"query": "pork brain",
+			"group": "adversarial",
+			"means": "pork brain, typed singular against a catalog that writes it plural: naming the part must exempt it from the demotion",
+			"acceptable": [
+				"Pork, brains, raw",
+				"Pork, brains, braised",
+				"Pork, fresh, variety meats and by-products, brain, raw",
+				"Pork, fresh, variety meats and by-products, brain, cooked, braised"
 			],
 			"forbidden": []
 		}

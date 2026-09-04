@@ -87,6 +87,36 @@ export function namePartsSql(column: string): string {
 }
 
 /**
+ * Foods the catalog qualifies with a word that also names an animal part.
+ *
+ * "Beans, kidney, red, mature seeds, raw" is a bean variety and not an organ,
+ * and 39 rows carrying a part above are one. "Peanut butter, chunk type, fat,
+ * sugar and salt added" lists fat as an ingredient rather than as a trimming,
+ * and 2 rows are that. Naming the food is more honest than dropping "kidney"
+ * and "fat" from the list above, which would give up 85 generic organ and
+ * trimming rows to spare 41; a scan of all 2,542,583 names found no third
+ * collision.
+ */
+const NOT_A_PART_IN = ['beans', 'peanut butter'];
+
+/**
+ * The forms of a part a person might type.
+ *
+ * The tokenizer does not stem, so "beef livers" reaches the catalog as
+ * `livers` and would not exempt the `liver` the rows carry. Crude in the same
+ * way `singular` in `query.ts` is crude, and for the same reason: it exists so
+ * a plural query and a singular name are the same word, not to be a stemmer.
+ *
+ * Unlike `singular` it has no length floor, because its input is the curated
+ * list above rather than what a person typed, and nothing in that list is
+ * short enough for one to change an answer.
+ */
+function queryForms(part: string): string[] {
+	const stem = part.endsWith('s') ? part.slice(0, -1) : part;
+	return [...new Set([part, stem, `${stem}s`])];
+}
+
+/**
  * True when the row names a part and the query did not.
  *
  * The guard reads the `:text` the ranking already binds — the query's tokens,
@@ -100,8 +130,10 @@ export function namePartsSql(column: string): string {
  */
 export function byproductSql(parts: string): string {
 	const asked = `' ' || :text || ' '`;
-	const tests = BYPRODUCT_PARTS.map(
-		(part) => `(instr(${asked}, ' ${part} ') = 0 and instr(${parts}, ',${part},') > 0)`
-	);
-	return tests.join(' or ');
+	const exempt = NOT_A_PART_IN.map((food) => `instr(${parts}, ',${food},') = 0`);
+	const tests = BYPRODUCT_PARTS.map((part) => {
+		const unasked = queryForms(part).map((form) => `instr(${asked}, ' ${form} ') = 0`);
+		return `(${[...unasked, `instr(${parts}, ',${part},') > 0`].join(' and ')})`;
+	});
+	return `(${exempt.join(' and ')}) and (${tests.join(' or ')})`;
 }

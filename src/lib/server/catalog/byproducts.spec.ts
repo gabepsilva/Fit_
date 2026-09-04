@@ -122,6 +122,36 @@ describe('byproductSql', () => {
 		);
 	});
 
+	it('leaves a kidney bean alone: the catalog names a bean variety after an organ', () => {
+		expect(demoted('Beans, kidney, red, mature seeds, canned, solids and liquids', 'beans')).toBe(
+			false
+		);
+	});
+
+	it('still demotes a kidney that is an organ', () => {
+		expect(demoted('Veal, kidney, braised', 'veal')).toBe(true);
+	});
+
+	it('leaves a peanut butter that lists fat as an ingredient alone', () => {
+		expect(demoted('Peanut butter, chunk type, fat, sugar and salt added', 'peanut butter')).toBe(
+			false
+		);
+	});
+
+	it('reads a plural query as the singular part it names', () => {
+		expect(demoted('Beef, liver, raw', 'beef livers')).toBe(false);
+		expect(demoted('Turkey, all classes, neck, meat only, raw', 'turkey necks')).toBe(false);
+	});
+
+	it('reads a singular query as the plural part it names', () => {
+		expect(demoted('Pork, brains, raw', 'pork brain')).toBe(false);
+	});
+
+	it('does not exempt a part on a query word that is merely a prefix of it', () => {
+		expect(demoted('Chicken, feet, boiled', 'chicken fee')).toBe(true);
+		expect(demoted('Beef, tripe, raw', 'beef trip')).toBe(true);
+	});
+
 	it('does not demote a part the person asked for', () => {
 		expect(demoted('Chicken, feet, boiled', 'chicken feet')).toBe(false);
 		expect(demoted('Beef, liver, raw', 'beef liver')).toBe(false);
