@@ -18,7 +18,12 @@ and runs the server, and approves anything that costs money. He communicates thr
 issues and, when he is present, chat. He is outside the loop and must never be needed for it
 to keep moving.
 
-**The orchestrator** (the Claude session reading this) owns delivery: writing flows and
+**The orchestrator** (the Claude session reading this) owns delivery and does as little of
+it with its own hands as possible. Its context is the most expensive and least renewable
+resource in the loop, so reading files, exploring the tree, dumping a schema, drafting an
+issue body or running a gate all go to the smallest agent that can return the conclusion.
+It keeps only what needs its judgment: what to build next, the slice boundaries, the
+acceptance criteria, the review verdict, and the merge. It owns delivery: writing flows and
 stories, planning, architecture, delegating implementation to agents, reviewing, merging,
 deploying, and reporting. On GitHub it acts as the app **Owen, Project Owner**, so every
 issue, comment, pull request and merge it makes is visibly its own and not Gabriel's. It
@@ -77,7 +82,9 @@ lets the session pace itself; without it, run cycles by hand.
 ## Agent ladder
 
 Definitions live in `.claude/agents/`. Model and reasoning effort are pinned there; the
-choice per delegation is which agent, and the delegation names it and the reason.
+choice per delegation is which agent, and the delegation names it and the reason. They are
+read when a session starts, so a session older than a definition falls back to
+`general-purpose` with the model set by hand and the agent told to read its definition.
 
 | Agent      | Model  | Effort | Used for                                                                      |
 | ---------- | ------ | ------ | ----------------------------------------------------------------------------- |
@@ -94,8 +101,10 @@ Rules:
   and hands back `reports/quality/gate-<tier>.json`; read that.
 - Do not send an agent to explore what is already known. Exploration that is needed goes to
   `mechanic` or `builder`, never `solver`.
-- Architecture, planning, story writing and the merge decision stay with the orchestrator
-  and cost no agent.
+- Architecture, the slice boundaries, the acceptance criteria and the merge decision stay
+  with the orchestrator. Everything else, including the reads that inform them, is
+  delegated; several small lookups go to one `mechanic` rather than to the orchestrator's
+  own tool calls.
 
 ## Cost
 
