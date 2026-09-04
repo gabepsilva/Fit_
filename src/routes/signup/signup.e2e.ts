@@ -182,6 +182,24 @@ test.describe('creating an account', () => {
 		await expect(button).toHaveText('Creating…');
 
 		await expect.poll(() => contrastRatioOf(button)).toBeGreaterThanOrEqual(4.5);
+
+		// `expect.poll` above only proves the settled state is readable — it succeeds on
+		// the first passing sample, so it can't tell "never dips below 4.5" from "got
+		// lucky mid-fade" (issue #46 bit this twice: once for real on the sign-in page,
+		// once again while re-verifying this very test). Animating `background-color` or
+		// `color` between two accessible pairs necessarily passes through intermediates
+		// that satisfy neither — that's what produced the 3.08 ratio axe caught on
+		// sign-in — so the fix is that those properties never animate on a button at all,
+		// not that the animation happens to land somewhere safe. That's a fact about
+		// configuration, not about a rendered frame, so check it directly: no polling, no
+		// flake, fails immediately if either property is ever re-added to the transition.
+		const transitionProperties = await button.evaluate((el) =>
+			getComputedStyle(el)
+				.transitionProperty.split(',')
+				.map((property) => property.trim())
+		);
+		expect(transitionProperties).not.toContain('background-color');
+		expect(transitionProperties).not.toContain('color');
 	});
 
 	test('has no detectable accessibility violations with a field rejected', async ({ page }) => {
