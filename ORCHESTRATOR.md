@@ -10,6 +10,29 @@ Keep it true. Any change to roles, priorities, the agent ladder or the deploy go
 same pull request that changes the fact, and the dated section below is rewritten rather
 than appended to.
 
+## DEVELOPMENT-ONLY PERMISSIONS — REMOVE ALL OF THIS BEFORE PRODUCTION
+
+**GABRIEL: THIS SECTION IS TEMPORARY. DELETE IT, AND UNDO WHAT IT ALLOWS, ON THE DAY THE
+APP GOES TO PRODUCTION.** Everything below is a safety rule switched off on purpose while
+the app has no real users. Each one is dangerous once it does.
+
+**1. THE ORCHESTRATOR MAY BYPASS BRANCH PROTECTION.** Granted 2026-09-04. `main` requires
+an approving review and an up-to-date head, and `enforce_admins` is off, so a merge made
+through the `gh` CLI as an administrator goes through without either. The orchestrator is
+authorized to do that rather than wait. It still does not merge a pull request whose
+checks are failing, and it still sends anything past mechanical through the `reviewer`
+agent first — the bypass buys speed, not permission to skip the gates.
+_To remove: stop bypassing, and turn on `enforce_admins` so the rule binds everyone._
+
+**2. ANY DATA IN THE DATABASE MAY BE DELETED AT ANY TIME.** Granted 2026-09-04. Until
+production there is nothing in `app.sqlite` worth keeping: any account, any row, the whole
+file may be deleted whenever a task needs it, without asking.
+_To remove: delete this, and the ordinary rule under "What needs Gabriel" — never delete
+user data without Gabriel — takes effect again._
+
+Nothing else in this file is suspended. Spending money, handling credentials, lowering a
+gate threshold and reversing a parked decision all still need Gabriel.
+
 ## Roles
 
 **Gabriel** (`@gabepsilva`) is the product owner, the end user, and the infrastructure.
@@ -140,6 +163,15 @@ Cost is a constraint Gabriel set, not a preference.
   return the conclusion, an agent does, even for a two-line read.
 - Slices are short, prompts are precise, and lookups go to the cheapest agent.
 
+A bundle budget may be raised, but never as the reflex when a build goes over. Gabriel
+set the rule on 2026-09-04: a raise is fine when real features have been added and the
+orchestrator can say exactly what grew and why, naming the chunks and the byte counts.
+When that account cannot be given, the answer is not a bigger number but a bundle analyzer
+and a trim of whatever is largest. A raise arrives with its evidence in the pull request
+that needs it: the old and new limits, the measured build size, where the growth landed,
+and whether any new dependency entered. Repeated raises without that evidence mean the
+budget has stopped being a budget.
+
 ## The five-hour window
 
 Claude Code meters usage in a rolling five-hour window, and the orchestrator is
@@ -193,12 +225,17 @@ feature is built. There is no iOS shell.
 ## What needs Gabriel
 
 - Product decisions: what a feature does, the flow, the wording of any promise the app
-  makes to a person.
+  makes to a person. Not how it looks: Gabriel handed the design over on 2026-09-04, so
+  layout, color, type and the shape of a control are the orchestrator's to decide and to
+  defend. He is the end user and will say when something reads wrong; that is feedback to
+  act on, not a veto to wait for.
 - Any spend, as above.
 - Infrastructure access: the VM, DNS, Cloudflare, secrets. The orchestrator never handles a
   credential; it asks Gabriel to place it and says where.
-- Deleting user data, lowering any gate threshold, changing branch protection, or
-  reversing anything this file parks.
+- Lowering any gate threshold, changing branch protection, or reversing anything this file
+  parks.
+- Deleting user data — suspended until production by the development-only permissions at
+  the top of this file, which is where it goes back on.
 
 ## Deploy, as of 2026-09-03
 
