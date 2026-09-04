@@ -4,7 +4,7 @@ import {
 	openEmptyJournal,
 	openLogSheet,
 	signInThroughApi
-} from '../../../tests/e2e-support';
+} from '../../tests/e2e-support';
 
 /**
  * PR #90 replaced the Scan tab's hard-coded demo button with a real reader.
