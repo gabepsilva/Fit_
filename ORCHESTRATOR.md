@@ -78,6 +78,27 @@ Every unit of work is an issue. Nothing is built that no issue describes.
   not blocked. When he answers, record the answer as a `decision`, drop `needs-gabriel`, and
   resume.
 
+## Every question for Gabriel is an issue
+
+Gabriel's instruction, 2026-09-04: "if you have questions they must be in github issues and
+labels that it needs me". A question asked only in chat is lost the moment the conversation
+scrolls, and he cannot answer what he cannot find.
+
+So every question for Gabriel goes in a GitHub issue labeled `needs-gabriel`, with him
+assigned. No exceptions, including the small ones and the ones that feel like they will be
+answered in the next sentence. Chat may point at the issue; chat is never the record.
+
+The issue says three things, short enough to read on a phone:
+
+- **What is blocked or at risk** while the question is open, and what happens if it stays open.
+- **The options**, each with its honest trade-off, including the cost of doing nothing.
+- **A recommendation**, so he can agree in a word rather than design the answer himself.
+
+Check the open issues before filing: if one already covers the question, comment there
+instead of opening a second. Then keep moving — the rule under "The contract is GitHub
+issues" still holds, and never waiting on Gabriel is what makes filing the question cheap.
+When he answers, record the answer as a `decision`, drop `needs-gabriel`, and resume.
+
 ## One cycle of the loop
 
 Run this repeatedly. `/loop` with the prompt "run one orchestrator cycle per ORCHESTRATOR.md"
