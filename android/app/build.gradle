@@ -1,5 +1,52 @@
 apply plugin: 'com.android.application'
 
+/**
+ * Release signing, from a properties file that lives outside this repository.
+ *
+ * `FIT_ANDROID_SIGNING_PROPERTIES` names it; nothing about the keystore -- its
+ * path, its passwords, the file itself -- is ever committed. Unset, this stays
+ * null and the release build is simply unsigned, so CI and a fresh checkout
+ * still build. An unsigned APK cannot be installed, which is what the message
+ * below says rather than leaving it to be discovered at `adb install`.
+ *
+ * A path that is set but wrong is a failure, not a fallback: silently producing
+ * an unsigned APK from a build that asked to be signed is how an unsignable
+ * artifact reaches a phone.
+ */
+def signingPropertiesPath = System.getenv('FIT_ANDROID_SIGNING_PROPERTIES')
+def releaseSigning = null
+if (signingPropertiesPath == null || signingPropertiesPath.trim().isEmpty()) {
+    // `quiet` rather than `lifecycle`: the release script runs Gradle with
+    // --quiet, which is exactly the run this message must survive.
+    logger.quiet('FIT_ANDROID_SIGNING_PROPERTIES is not set: assembleRelease produces an UNSIGNED apk, which cannot be installed. See README "Android release build".')
+} else {
+    def signingPropertiesFile = new File(signingPropertiesPath.trim())
+    if (!signingPropertiesFile.isFile()) {
+        throw new GradleException("FIT_ANDROID_SIGNING_PROPERTIES points at ${signingPropertiesFile}, which is not a file.")
+    }
+    def loaded = new Properties()
+    signingPropertiesFile.withInputStream { loaded.load(it) }
+    def missing = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].findAll {
+        loaded.getProperty(it) == null || loaded.getProperty(it).trim().isEmpty()
+    }
+    if (!missing.isEmpty()) {
+        throw new GradleException("${signingPropertiesFile} is missing ${missing.join(', ')}.")
+    }
+    // A relative storeFile is read beside the properties file, not beside this
+    // build script: the two travel together and the repository is not their home.
+    def store = new File(loaded.getProperty('storeFile').trim())
+    if (!store.isAbsolute()) store = new File(signingPropertiesFile.parentFile, loaded.getProperty('storeFile').trim())
+    if (!store.isFile()) {
+        throw new GradleException("The keystore ${store} named by ${signingPropertiesFile} does not exist.")
+    }
+    releaseSigning = [
+        storeFile: store,
+        storePassword: loaded.getProperty('storePassword'),
+        keyAlias: loaded.getProperty('keyAlias').trim(),
+        keyPassword: loaded.getProperty('keyPassword')
+    ]
+}
+
 android {
     namespace = "email.psilva.fit"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +54,10 @@ android {
         applicationId "email.psilva.fit"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // `scripts/android/build-release.ts` derives both from the git tag and
+        // passes them in; the literals are what an Android Studio build gets.
+        versionCode Integer.parseInt((project.findProperty('fitVersionCode') ?: '1').toString())
+        versionName (project.findProperty('fitVersionName') ?: '1.0').toString()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +65,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseSigning != null) {
+            release {
+                storeFile releaseSigning.storeFile
+                storePassword releaseSigning.storePassword
+                keyAlias releaseSigning.keyAlias
+                keyPassword releaseSigning.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseSigning != null) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

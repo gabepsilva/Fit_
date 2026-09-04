@@ -162,6 +162,42 @@ When the numbers move:
   permissions block leaves `ORCHESTRATOR.md`. After that, a major means a change that breaks
   sync with older clients.
 
+### Android release build
+
+```bash
+FIT_ANDROID_SIGNING_PROPERTIES=~/keys/fit-android-release.properties bun run android:release
+bun run android:install   # adb install -r onto a connected phone
+```
+
+`scripts/android/build-release.ts` produces a signed APK pointed at
+`https://fit.psilva.org`, at `android/app/build/outputs/apk/release/app-release.apk`. It
+checks for JDK 21 and the SDK, builds the static bundle, runs `cap sync android`, and
+calls `assembleRelease`, then prints the APK path and its SHA-256. `--server-url=` aims it
+somewhere else, and only at an `https://` origin: a phone is not on this cable, so the
+loopback URL `make android-usb` uses is refused here. `--unsigned` skips signing
+deliberately, for a build nobody intends to install.
+
+The APK is a shell, not the app. `FIT_CAPACITOR_SERVER_URL` is set for the build, so
+`capacitor.config.ts` gives Capacitor a `server.url` and the WebView loads every asset and
+every API call from that origin on each launch. What the file carries is the native shell,
+the offline page and a signature, so it needs rebuilding when one of those three changes —
+not when the app does.
+
+`versionName` is the string from `scripts/build/app-version.ts` above, tag and `+<sha>` and
+all. `versionCode` is the one integer Android compares, packed from the same tag as
+`major × 1000000 + minor × 1000 + patch`: `v0.0.1` is `1`, `v0.1.0` is `1000`, `v1.0.0` is
+`1000000`, and a minor or patch of 1000 or more is refused rather than allowed to collide
+with the component above it. Only a build sitting exactly on its tag gets a code no other
+build reuses; one ahead of its tag reuses the tag's, which `adb install -r` accepts.
+
+**The keystore is not in this repository and must be backed up.** `android/app/build.gradle`
+reads it from the properties file `FIT_ANDROID_SIGNING_PROPERTIES` names — `storeFile`,
+`storePassword`, `keyAlias`, `keyPassword` — and refuses to guess: a path that is set but
+wrong fails the build, and with the variable unset the build says so and produces an
+unsigned APK, which is what lets CI and a fresh checkout still build. Android identifies an
+app by its signature, so losing the keystore means no installed copy can ever be upgraded
+again — only uninstalled, taking its local data with it — and a new one cannot be issued.
+
 ## Quality gates
 
 Checks are tiered by how long they take, so the loop you run most often stays short.
