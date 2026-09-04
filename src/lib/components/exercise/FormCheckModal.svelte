@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Play from '@lucide/svelte/icons/play';
+	import { browser } from '$app/environment';
 	import { formCues } from '$lib/domain/exercises';
 	import Button from '$lib/ui/Button.svelte';
 	import Modal from '$lib/ui/Modal.svelte';
@@ -16,6 +17,28 @@
 	const hasDemo = $derived(name === 'Push-up');
 	const demoLabel =
 		'Demonstration: a push-up performed with hands under the shoulders, body in a straight line from head to heel, lowering the chest toward the floor, then pressing back up.';
+	const demoAriaLabel = `${demoLabel} Tap or press Enter to pause or play.`;
+
+	// WCAG 2.2.2: motion that starts on its own, runs past five seconds, and sits
+	// beside other content needs a way to stop it. Someone who has asked their
+	// system for reduced motion gets no autoplay at all; everyone else still gets
+	// the same tap/keyboard toggle, since it is the only visible way to pause.
+	const prefersReducedMotion =
+		browser && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+	let videoEl: HTMLVideoElement | undefined = $state();
+
+	function toggleDemo() {
+		if (!videoEl) return;
+		if (videoEl.paused) void videoEl.play();
+		else videoEl.pause();
+	}
+
+	function onDemoKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		event.preventDefault();
+		toggleDemo();
+	}
 </script>
 
 <Modal bind:open title={name} description="Form check">
@@ -26,16 +49,26 @@
 			spec), so this <video> and its src never enter the DOM, and the clip never
 			loads, until the sheet is actually opened. preload="none" keeps it that way
 			even if that assumption ever changes.
+
+			Autoplay, loop and no visible controls are the request; the tap/keyboard
+			toggle below is what makes that legal under WCAG 2.2.2 (Pause, Stop,
+			Hide), and reduced-motion visitors get the same toggle instead of an
+			autostart.
 		-->
 		<video
-			class="bg-secondary mt-4 aspect-square w-full rounded-2xl object-cover"
+			bind:this={videoEl}
+			class="bg-secondary focus-visible:ring-ring ring-offset-background mt-4 aspect-square w-full rounded-2xl object-cover focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
 			src="/media/push-up-demo.mp4"
 			preload="none"
 			playsinline
 			muted
 			loop
-			controls
-			aria-label={demoLabel}
+			autoplay={!prefersReducedMotion}
+			role="button"
+			tabindex={0}
+			aria-label={demoAriaLabel}
+			onclick={toggleDemo}
+			onkeydown={onDemoKeydown}
 		>
 			<p>{demoLabel}</p>
 		</video>
