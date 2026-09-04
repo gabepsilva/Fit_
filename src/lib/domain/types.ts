@@ -164,6 +164,11 @@ export type LoadUnit = 'kg' | 'lb';
 
 export const DEFAULT_LOAD_UNIT: LoadUnit = 'kg';
 
+/** The unit system quantities are read in. Which one is on show is `TendState.units`. */
+export type UnitSystem = 'metric' | 'imperial';
+
+export const DEFAULT_UNITS: UnitSystem = 'metric';
+
 /** Rest between sets, in seconds: the default, and its lower and upper bounds. */
 export const DEFAULT_REST_SECONDS = 90;
 export const MIN_REST_SECONDS = 30;
@@ -248,4 +253,10 @@ export type TendState = {
 	loadUnit: LoadUnit;
 	/** How long the rest between sets runs, in seconds. */
 	restSeconds: number;
+	/**
+	 * The system quantities are read in: mass, height. Conversion happens only
+	 * at display — body weight stays `kg`, height stays `heightCm`, regardless
+	 * of this.
+	 */
+	units: UnitSystem;
 };
