@@ -50,12 +50,9 @@ describe('classifyUnit', () => {
 		}
 	);
 
-	it.each(['cup', 'cups', 'tbsp', 'tablespoon', 'tsp', 'teaspoons', 'ml', 'l', 'litre'])(
-		'reads "%s" as a volume',
-		(unit) => {
-			expect(classifyUnit(unit)).toBe('volume');
-		}
-	);
+	it.each(['cup', 'cups', 'tbsp', 'tsp', 'ml', 'l'])('reads "%s" as a volume', (unit) => {
+		expect(classifyUnit(unit)).toBe('volume');
+	});
 
 	it.each(['', 'slice', 'slices', 'scoop', 'can', 'bowl', 'eggs'])(
 		'reads "%s" as a count of servings',

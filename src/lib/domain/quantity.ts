@@ -12,49 +12,41 @@ import type { Food, ProposedItem } from './types';
  */
 export type QuantityKind = 'serving' | 'mass' | 'volume';
 
-/** Grams in one of each mass unit, exact by definition of the international pound. */
-const GRAMS_PER_UNIT: Record<string, number> = {
+const OUNCE = 28.349523125;
+const POUND = 453.59237;
+
+/**
+ * Grams in one of each unit the parser accepts, with `0` for the units of volume
+ * it cannot convert: the catalog stores mass and no density, so those are listed
+ * to be refused knowingly rather than guessed at. Mass conversions are exact by
+ * definition of the international pound.
+ */
+const UNIT_GRAMS: Record<string, number> = {
 	g: 1,
 	gram: 1,
 	grams: 1,
 	kg: 1000,
-	kilogram: 1000,
-	kilograms: 1000,
-	oz: 28.349523125,
-	ounce: 28.349523125,
-	ounces: 28.349523125,
-	lb: 453.59237,
-	lbs: 453.59237,
-	pound: 453.59237,
-	pounds: 453.59237
+	oz: OUNCE,
+	ounce: OUNCE,
+	ounces: OUNCE,
+	lb: POUND,
+	lbs: POUND,
+	pound: POUND,
+	pounds: POUND,
+	cup: 0,
+	cups: 0,
+	tbsp: 0,
+	tsp: 0,
+	ml: 0,
+	l: 0
 };
-
-/** Units of volume. Listed to be refused knowingly, not to be converted. */
-const VOLUME_UNITS = new Set([
-	'cup',
-	'cups',
-	'tbsp',
-	'tablespoon',
-	'tablespoons',
-	'tsp',
-	'teaspoon',
-	'teaspoons',
-	'ml',
-	'milliliter',
-	'milliliters',
-	'l',
-	'litre',
-	'litres',
-	'liter',
-	'liters'
-]);
 
 /**
  * Every unit worth reading off the front of a phrase. Order does not matter: an
  * alternation built from it is anchored to what follows, so "150grams" cannot
  * settle for the "g" it tries first.
  */
-export const MEASURE_UNITS: readonly string[] = [...Object.keys(GRAMS_PER_UNIT), ...VOLUME_UNITS];
+export const MEASURE_UNITS: readonly string[] = Object.keys(UNIT_GRAMS);
 
 export type QuantitySpec = {
 	/** The number the person typed. */
@@ -75,11 +67,10 @@ export type ResolvedQuantity = {
 type ServingWeight = Pick<Food, 'grams'>;
 
 export function classifyUnit(unit: string): QuantityKind {
+	// `Object.hasOwn`, not a lookup: "constructor" and "toString" are on every object.
 	const u = unit.toLowerCase();
-	// `Object.hasOwn`, not `in`: "constructor" and "toString" are on every object.
-	if (Object.hasOwn(GRAMS_PER_UNIT, u)) return 'mass';
-	if (VOLUME_UNITS.has(u)) return 'volume';
-	return 'serving';
+	if (!Object.hasOwn(UNIT_GRAMS, u)) return 'serving';
+	return UNIT_GRAMS[u] === 0 ? 'volume' : 'mass';
 }
 
 /**
@@ -106,7 +97,7 @@ export function resolveQuantity(
 	// would otherwise yield Infinity or NaN servings and log a meaningless entry.
 	const perServing = food?.grams ?? 0;
 	if (!Number.isFinite(perServing) || perServing <= 0) return declined;
-	const grams = spec.amount * (GRAMS_PER_UNIT[spec.unit.toLowerCase()] ?? 1);
+	const grams = spec.amount * (UNIT_GRAMS[spec.unit.toLowerCase()] ?? 1);
 	return { servings: roundServings(grams / perServing), declined: null };
 }
 
