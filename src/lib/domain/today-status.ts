@@ -37,6 +37,6 @@ export function weightStatusText(args: {
 	if (!hasTrend) return `${reading}. Not enough entries yet for a trend.`;
 	const rate = displayWeight(Math.abs(kgPerWeek), units);
 	if (rate === 0) return `${reading}, holding steady.`;
-	const direction = kgPerWeek > 0 ? 'up' : 'down';
+	const direction = Math.sign(kgPerWeek) === -1 ? 'down' : 'up';
 	return `${reading}, trending ${direction} ${rate.toFixed(1)} ${abbr}/week.`;
 }
