@@ -915,6 +915,23 @@ describe('while a request is in the air', () => {
 		gate.release();
 	});
 
+	it('says it is reading again on a retry, after a first read that never landed', async () => {
+		// The first pull never counts as read (it was `unreachable`, not
+		// `refused`), so a later trigger reads again — and that second read
+		// marks `status` as `loading` on its own, the same as the first did.
+		const sent = server([DROPPED]);
+		const sync = syncFor(blankDevice());
+		await sync.start(HOUSEHOLD);
+		expect(sent).toHaveLength(1);
+		expect(sync.status).toBe('idle');
+
+		const gate = held(documentAnswer(0, null));
+		globalThis.dispatchEvent(new Event('online'));
+		await vi.waitFor(() => expect(sync.status).toBe('loading'));
+
+		gate.release();
+	});
+
 	it('says it is saving while it saves', async () => {
 		const server = heldWrites(documentAnswer(0, null));
 		const sync = syncFor(journal());
@@ -1057,6 +1074,24 @@ describe('a connection that never answers at all', () => {
 		} finally {
 			vi.useRealTimers();
 		}
+	});
+
+	it('clears its own timeout once an answer arrives, rather than leaving it pending', async () => {
+		// A request the server answered promptly still armed a timer against a
+		// hang that never happened. Leaving that timer running would eventually
+		// abort a signal nothing is listening to any more — harmless, but a real
+		// resource this device should not be holding on to for ten seconds
+		// after the exchange it was for is long done. Asserted directly against
+		// `clearTimeout` rather than a pending-timer count: this environment's
+		// own machinery holds timers of its own that have nothing to do with
+		// this request, and a count is not a reliable way to isolate one call.
+		const cleared = vi.spyOn(globalThis, 'clearTimeout');
+		server([documentAnswer(0, null)]);
+		const sync = syncFor(blankDevice());
+
+		await sync.start(HOUSEHOLD);
+
+		expect(cleared).toHaveBeenCalled();
 	});
 });
 
