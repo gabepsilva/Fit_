@@ -73,6 +73,57 @@ that project gets exercised.
 bun run dev
 ```
 
+## Running it
+
+In production the app is the `adapter-node` build, deployed to one small Linux VM with
+Cloudflare terminating TLS in front of it.
+
+```bash
+FIT_DEPLOY_HOST=user@host bun run deploy
+```
+
+`scripts/deploy/deploy.ts` builds here rather than there — the VM has 2 GB and cannot hold
+Vite beside the running server — then ships `build/`, the `package.json` beside it, and a
+production `node_modules` resolved from `bun.lock`. It installs the Node pinned in
+`.tool-versions` from nodejs.org if the machine does not already have it, lands the release
+in `/opt/fit/releases/<commit>/`, switches `/opt/fit/current`, restarts `fit.service`, and
+runs the smoke check. The tree must be clean: a release is named for its commit.
+
+The host is deliberately not in this repository. Without `FIT_DEPLOY_HOST` the script stops.
+
+On the machine, all of it installed by the deploy:
+
+| Path                      | What                                                                 |
+| ------------------------- | -------------------------------------------------------------------- |
+| `/opt/node`               | The pinned Node, from nodejs.org against its own checksums           |
+| `/opt/fit/releases/<sha>` | One release; the last five are kept and hard-link their shared parts |
+| `/opt/fit/current`        | Symlink to the live release. Switching it is the deploy              |
+| `/etc/fit/fit.env`        | `0600`, root-owned, read by the unit's `EnvironmentFile`             |
+| `/var/lib/fit/app.sqlite` | The database, in a `0700` directory owned by the `fit` user          |
+
+`scripts/deploy/fit.service` runs as the unprivileged `fit` user under `ProtectSystem=strict`
+with `/var/lib/fit` as its only writable path, and holds `CAP_NET_BIND_SERVICE` so it can
+bind port 80 without being root — Cloudflare terminates TLS and forwards plain HTTP there,
+so there is no proxy on the machine. `scripts/deploy/deploy.spec.ts` holds that unit and
+that environment file to each other, so the port and the capability cannot drift apart. `scripts/deploy/fit.env.example` is the template for the
+environment file, and documents what each variable does: `ORIGIN`, which is also the origin
+policy's allow-list; `FIT_CLIENT_ADDRESS=forwarded` with `ADDRESS_HEADER=cf-connecting-ip`,
+so the sign-in throttle keys on the visitor rather than on Cloudflare; and `FIT_DB_PATH`.
+The deploy writes that file only when it is absent, so an edit on the machine survives the
+next release.
+
+```bash
+bun run deploy:smoke
+```
+
+The smoke check asks the deployed server for the sign-in page and requires a page this app
+built, not merely a 200 — a 200 is what anything listening on that port would answer. It
+then checks that an anonymous `GET /api/sessions/current` is refused as `unauthenticated`,
+registers a throwaway account and signs it out, in and out again, and confirms
+`/opt/fit/current` points at the commit under test. It writes `reports/deploy/smoke.json`.
+Add `--tunnel` to either command to reach the origin through an SSH port forward instead of
+through Cloudflare, for when the public name is the thing that is broken.
+
 ## Quality gates
 
 Checks are tiered by how long they take, so the loop you run most often stays short.

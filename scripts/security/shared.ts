@@ -14,6 +14,8 @@ export const cacheRoot = path.join(projectRoot, '.security-cache');
 interface RunOptions {
 	allowFailure?: boolean;
 	env?: NodeJS.ProcessEnv;
+	/** Defaults to the project root; the deploy stages a dependency tree elsewhere. */
+	cwd?: string;
 }
 
 export async function assertDocker(): Promise<void> {
@@ -42,7 +44,7 @@ export async function run(
 ): Promise<number> {
 	const exitCode = await new Promise<number>((resolve, reject) => {
 		const child = spawn(command, args, {
-			cwd: projectRoot,
+			cwd: options.cwd ?? projectRoot,
 			env: options.env ?? process.env,
 			stdio: 'inherit'
 		});

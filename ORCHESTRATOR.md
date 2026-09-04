@@ -197,14 +197,61 @@ feature is built. There is no iOS shell.
 
 ## Deploy, as of 2026-09-03
 
-Not yet possible; the VM does not exist. When it does: Gabriel runs a Linux VM with Node at
-the `.tool-versions` version and Cloudflare terminating TLS in front. The app is the
-`adapter-node` build. The environment must set `ORIGIN` (or `FIT_ALLOWED_ORIGINS`) to the
-public origin, `FIT_CLIENT_ADDRESS=forwarded` with `ADDRESS_HEADER` set to Cloudflare's
-client-address header so the sign-in throttle keys on the visitor rather than the proxy,
-and `FIT_DB_PATH` to a private directory. The Android build is pointed at the same server by
-`FIT_CAPACITOR_SERVER_URL`, which must be `https://`. The deploy script, the service unit,
-the smoke check and this section's rewrite are one story.
+The app is live at <https://fit.psilva.org>. One command from a clean checkout deploys it:
+
+```bash
+FIT_DEPLOY_HOST=user@host bun run deploy
+```
+
+The host is Gabriel's VM. It is not written down in this repository, in an issue, or in
+anything the deploy installs on the machine, and the script refuses to run without it, so
+the only place it lives is the shell that runs the deploy.
+
+Cloudflare terminates TLS and forwards plain HTTP to the origin's port 80. There is no
+proxy on the VM and no certificate on it: the unit binds 80 itself, as the unprivileged
+`fit` user, with `AmbientCapabilities=CAP_NET_BIND_SERVICE` and nothing else in its
+bounding set. That pairing is the whole reason `PORT=80` and the capability have to agree,
+and `scripts/deploy/deploy.spec.ts` fails if they stop agreeing.
+
+The build runs locally: the VM has 2 GB and cannot hold Vite beside the running server.
+What crosses is `build/`, the `package.json` beside it, and a production `node_modules`
+resolved from `bun.lock` — `adapter-node` leaves every `dependencies` entry external, so
+the server bundle really does need them. `scripts/deploy/deploy.ts` then installs the
+pinned Node from nodejs.org if the machine is missing it, lands the release in
+`/opt/fit/releases/<commit>/`, writes `/etc/fit/fit.env` only when it is absent and
+`fit.service` always, switches `/opt/fit/current`, restarts the unit, waits for it to
+answer, prunes all but the last five releases, and runs the smoke check.
+
+On the machine: a system user `fit`; releases under `/opt/fit`; the SQLite database under
+`/var/lib/fit`, which is `0700` and the only path `ProtectSystem=strict` leaves writable;
+Node under `/opt/node`.
+
+`/etc/fit/fit.env` is `0600` and root-owned, and `scripts/deploy/fit.env.example` is the
+template it is written from: `ORIGIN=https://fit.psilva.org`, which is also the origin
+policy's allow-list; `HOST=0.0.0.0` and `PORT=80`; `FIT_CLIENT_ADDRESS=forwarded` with
+`ADDRESS_HEADER=cf-connecting-ip`, so the sign-in throttle keys on the visitor rather than
+on Cloudflare; and `FIT_DB_PATH=/var/lib/fit/app.sqlite`. There are no secrets in it yet.
+When there are, Gabriel places them in that file by hand and the deploy leaves them alone.
+
+The smoke check is `bun run deploy:smoke`, and the deploy ends with it: `/signin` answers
+with a page this app built rather than with whatever else could be listening on that port,
+an anonymous session read is refused as `unauthenticated`, a throwaway account registers,
+signs out, signs back in and reads itself back, and `/opt/fit/current` points at the commit
+that was deployed. It writes `reports/deploy/smoke.json`, which is what the comment on the
+story being deployed is written from. It leaves the throwaway account behind — nothing
+deletes accounts yet — under a `smoke.` username. `--tunnel` on either command runs it
+through an SSH port forward to the origin instead of through Cloudflare, which is how a
+deploy is checked when the public name is the thing that is broken.
+
+Known, and Gabriel's to decide if either becomes a problem: the zone is on Cloudflare's
+Flexible SSL mode, so the hop from Cloudflare to the origin is unencrypted — moving to Full
+would mean a certificate and a proxy on the VM, and a different `HOST` and `PORT` in the
+environment file. And because Cloudflare rewrites `CF-Connecting-IP`, every smoke check run
+through the public name is throttled as one address; ten registrations an hour is the
+ceiling on deploys per hour.
+
+The Android build is pointed at the same server by `FIT_CAPACITOR_SERVER_URL`, which must
+be `https://`.
 
 ## Resuming after a context reset
 
