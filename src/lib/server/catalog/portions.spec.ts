@@ -136,6 +136,25 @@ describe('withPortions', () => {
 		expect(portionsOf(catalog, [1])).toEqual([[{ unit: 'cup', grams: 244 }]]);
 	});
 
+	it('keeps the first row naming a unit even once other units are held', () => {
+		// Two units are already held when the second tablespoon row arrives, which
+		// is what separates "no held portion names this unit" from "not every held
+		// portion names it": the second reading of a unit is a duplicate however
+		// many other units came before it.
+		const catalog = catalogOf([
+			[1, '1 Tbsp (15 ml)', 13.5, 1],
+			[1, '1 tsp', 4.5, 0],
+			[1, '100 g', 100, 0],
+			[1, '2 Tbsp', 27, 0]
+		]);
+		expect(portionsOf(catalog, [1])).toEqual([
+			[
+				{ unit: 'tbsp', grams: 13.5 },
+				{ unit: 'tsp', grams: 4.5 }
+			]
+		]);
+	});
+
 	it('breaks a tie between two rows of the same standing on the label text', () => {
 		const catalog = catalogOf([
 			[1, '2 cup', 500, 0],
