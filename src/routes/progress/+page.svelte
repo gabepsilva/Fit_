@@ -6,6 +6,7 @@
 		microTargets,
 		rollingAverages
 	} from '$lib/domain/tdee';
+	import { displayWeight, weightToKg, weightUnitAbbr, weightUnitName } from '$lib/domain/units';
 	import { tend } from '$lib/state/tend.svelte';
 	import AvgRow from '$lib/components/AvgRow.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -13,20 +14,23 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Input from '$lib/ui/Input.svelte';
 
-	let kg = $state('');
+	let enteredWeight = $state('');
 
 	const profile = $derived(tend.profile);
 	const targets = $derived(profile ? computeTargets(profile) : null);
 	const week = $derived(profile ? rollingAverages(profile.log, 7) : null);
 	const micros = $derived(profile ? microTargets(profile) : null);
 	const weeks = $derived(profile ? calmWeeks(profile.log) : 0);
+	const units = $derived(tend.state.units);
+	const weightAbbr = $derived(weightUnitAbbr(units));
+	const weightName = $derived(weightUnitName(units));
 
 	function saveWeight(event: SubmitEvent) {
 		event.preventDefault();
-		const n = Number(kg);
+		const n = Number(enteredWeight);
 		if (!n) return;
-		tend.addWeight(n);
-		kg = '';
+		tend.addWeight(weightToKg(n, units));
+		enteredWeight = '';
 	}
 </script>
 
@@ -45,19 +49,21 @@
 			<div class="flex items-baseline justify-between">
 				<h2 class="font-display text-xl tracking-tight">Weight</h2>
 				<p class="tabular text-muted-foreground text-sm">
-					{latestWeight(profile.weights).toFixed(1)} kg
+					{displayWeight(latestWeight(profile.weights), units)}
+					<span class="sr-only">{weightName}</span>
+					<span aria-hidden="true">{weightAbbr}</span>
 				</p>
 			</div>
 			<div class="mt-3 h-44">
-				<WeightChart weights={profile.weights} />
+				<WeightChart weights={profile.weights} units={tend.state.units} />
 			</div>
 			<form class="mt-3 flex gap-2" onsubmit={saveWeight}>
 				<Input
-					id="kg"
+					id="weight"
 					inputmode="decimal"
-					placeholder="Today’s kg"
-					aria-label="Today’s weight in kilograms"
-					bind:value={kg}
+					placeholder="Today’s {weightAbbr}"
+					aria-label="Today’s weight in {weightName}"
+					bind:value={enteredWeight}
 				/>
 				<Button type="submit">Save</Button>
 			</form>
@@ -69,11 +75,10 @@
 			<p class="text-muted-foreground text-sm">kcal / day, inferred</p>
 			<p class="text-muted-foreground mt-3 text-sm leading-relaxed">
 				{#if tdee.usingAdaptive}
+					{@const trend = displayWeight(tdee.kgPerWeek, units)}
 					From {tdee.loggedDays} logged days and {tdee.sampleSize} weigh-ins over {tdee.weightSpanDays}
-					days. Average intake {tdee.avgIntake} kcal. Weight trend {tdee.kgPerWeek > 0
-						? '+'
-						: ''}{tdee.kgPerWeek}
-					kg/week. Target is TDEE {targets.source === 'override'
+					days. Average intake {tdee.avgIntake} kcal. Weight trend {trend > 0 ? '+' : ''}{trend}
+					{weightAbbr}/week. Target is TDEE {targets.source === 'override'
 						? '(manual)'
 						: 'adjusted for your aim'}: {targets.kcal} kcal.
 				{:else}

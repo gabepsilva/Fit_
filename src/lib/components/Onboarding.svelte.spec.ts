@@ -17,6 +17,7 @@ async function toStepThree() {
 beforeEach(() => {
 	localStorage.clear();
 	vi.restoreAllMocks();
+	tend.state.units = 'metric';
 });
 
 describe('Onboarding', () => {
@@ -115,6 +116,28 @@ describe('Onboarding', () => {
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await page.getByRole('button', { name: 'Start empty' }).click();
 		expect(complete.mock.calls[0]?.[0].profile.weights[0]?.kg).toBe(72);
+	});
+
+	it('asks for height and weight in feet, inches and pounds under the imperial preference', async () => {
+		tend.state.units = 'imperial';
+		await toStepTwo();
+		await expect.element(page.getByLabelText('Weight lb')).toBeInTheDocument();
+		await expect.element(page.getByLabelText('Height, feet')).toBeInTheDocument();
+		await expect.element(page.getByLabelText('Height, inches')).toBeInTheDocument();
+	});
+
+	it('stores the imperial reading back as canonical kg and cm, unrounded to the display precision', async () => {
+		const complete = vi.spyOn(tend, 'completeOnboarding').mockImplementation(() => undefined);
+		tend.state.units = 'imperial';
+		await toStepTwo();
+		await page.getByLabelText('Weight lb').fill('160');
+		await page.getByLabelText('Height, feet').fill('5');
+		await page.getByLabelText('Height, inches').fill('9');
+		await page.getByRole('button', { name: 'Continue' }).click();
+		await page.getByRole('button', { name: 'Start empty' }).click();
+		const profile = complete.mock.calls[0]?.[0].profile;
+		expect(profile?.weights[0]?.kg).toBeCloseTo(72.6, 1);
+		expect(profile?.heightCm).toBeCloseTo(175.3, 1);
 	});
 
 	it('requests a household profile when asked', async () => {

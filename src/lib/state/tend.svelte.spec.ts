@@ -1386,6 +1386,40 @@ describe('the load unit and the rest length', () => {
 	});
 });
 
+describe('the units preference', () => {
+	it('opens on metric', () => {
+		const store = freshStore();
+		expect(store.state.units).toBe('metric');
+	});
+
+	it('takes the other system and writes it down at once', () => {
+		const store = freshStore();
+		store.setUnits('imperial');
+		expect(store.state.units).toBe('imperial');
+		expect(stored().units).toBe('imperial');
+		expect(reloaded().state.units).toBe('imperial');
+	});
+
+	it('gives an older payload lacking the field the metric default', () => {
+		localStorage.setItem(STORAGE_KEY, JSON.stringify({ onboarded: true, workouts: [] }));
+		const store = new TendStore();
+		store.hydrate();
+		expect(store.state.units).toBe('metric');
+	});
+
+	it('rides along in a document taken from another device, unlike a load already logged', () => {
+		const store = freshStore();
+		store.replace({ onboarded: true, units: 'imperial' });
+		expect(store.state.units).toBe('imperial');
+	});
+
+	it('is present in the persisted document so it syncs with the rest of the state', () => {
+		const store = freshStore();
+		store.setUnits('imperial');
+		expect(Object.keys(stored())).toContain('units');
+	});
+});
+
 describe('training across a reload', () => {
 	it('saves each step of a session as it happens', () => {
 		const store = inSession();

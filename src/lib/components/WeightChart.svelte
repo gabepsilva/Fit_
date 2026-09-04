@@ -1,8 +1,9 @@
 <script lang="ts">
-	import type { WeightEntry } from '$lib/domain/types';
+	import type { UnitSystem, WeightEntry } from '$lib/domain/types';
+	import { displayWeight, weightUnitName } from '$lib/domain/units';
 	import { monthDay } from '$lib/domain/utils';
 
-	let { weights }: { weights: WeightEntry[] } = $props();
+	let { weights, units = 'metric' }: { weights: WeightEntry[]; units?: UnitSystem } = $props();
 
 	const WIDTH = 320;
 	const HEIGHT = 140;
@@ -32,13 +33,13 @@
 			path: xy.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' '),
 			gridlines: [0, 0.5, 1].map((t) => ({
 				y: PAD.top + t * plotH,
-				label: (max - t * span).toFixed(1)
+				label: displayWeight(max - t * span, units).toFixed(1)
 			})),
 			firstDate: monthDay(first.date),
 			lastDate: monthDay(last.date),
 			caption:
 				`Weight trend from ${monthDay(first.date)} to ${monthDay(last.date)}, ` +
-				`${first.kg} to ${last.kg} kilograms`
+				`${displayWeight(first.kg, units)} to ${displayWeight(last.kg, units)} ${weightUnitName(units)}`
 		};
 	});
 </script>

@@ -47,4 +47,12 @@ describe('WeightChart', () => {
 		await render(WeightChart, { props: { weights: readings([80, 80, 80]) } });
 		expect(document.querySelector('path')?.getAttribute('d')).toBeTruthy();
 	});
+
+	it('reads the spoken trend in pounds when the preference is imperial', async () => {
+		await render(WeightChart, {
+			props: { weights: readings([80, 79]), units: 'imperial' }
+		});
+		const label = document.querySelector('svg')?.getAttribute('aria-label');
+		expect(label).toMatch(/176\.4 to 174\.2 pounds/);
+	});
 });
