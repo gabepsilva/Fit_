@@ -1,0 +1,76 @@
+import { expect, test, type Page } from '@playwright/test';
+import {
+	clearRegistrationThrottle,
+	openEmptyJournal,
+	signInThroughApi
+} from '../../tests/e2e-support';
+
+/**
+ * The units preference (PR #73) only ever changes how a stored weight is
+ * *read*; the kilograms on the account never change. PR review caught a
+ * real regression class here: rounding a converted value before storing it,
+ * which round-trips 160 lb through kg and back as 160.1 lb. These tests
+ * drive the preference through the real screens (`/you` for the toggle,
+ * `/progress` for the reading) rather than calling the domain functions
+ * directly, so a UI-level reintroduction of that bug is caught too.
+ */
+
+test.beforeEach(clearRegistrationThrottle);
+
+async function switchUnits(page: Page, label: 'Metric' | 'Imperial') {
+	await page.getByRole('button', { name: 'Open menu' }).click();
+	await page.getByRole('link', { name: 'You' }).click();
+	await expect(page.getByRole('heading', { name: 'You', level: 1 })).toBeVisible();
+	await page.getByRole('button', { name: label }).click();
+	await expect(page.getByRole('button', { name: label })).toHaveAttribute('aria-pressed', 'true');
+}
+
+async function openProgress(page: Page) {
+	await page.getByRole('button', { name: 'Open menu' }).click();
+	await page.getByRole('link', { name: 'Progress' }).click();
+	await expect(page.getByRole('heading', { name: 'Progress', level: 1 })).toBeVisible();
+}
+
+test.describe('the units preference, read on Progress and set on You', () => {
+	test.beforeEach(async ({ page, baseURL }) => {
+		await signInThroughApi(page, baseURL ?? '');
+		await openEmptyJournal(page);
+	});
+
+	test('round-trips a pounds entry through metric and back without drift', async ({ page }) => {
+		await switchUnits(page, 'Imperial');
+		await openProgress(page);
+
+		// 160 lb is the exact value review caught drifting to 160.1 lb after a
+		// metric round trip, because a rounded-for-display value had leaked
+		// into storage instead of the exact conversion.
+		await page.getByLabel('Today’s weight in pounds').fill('160');
+		await page.getByRole('button', { name: 'Save' }).click();
+		await expect(page.getByText(/160\.0/)).toBeVisible();
+
+		await switchUnits(page, 'Metric');
+		await openProgress(page);
+		// 160 lb is exactly 72.574... kg; the display rounds it to one place.
+		await expect(page.getByText(/72\.6/)).toBeVisible();
+
+		await switchUnits(page, 'Imperial');
+		await openProgress(page);
+		// Back to pounds: still exactly 160.0, not 160.1 — nothing stored ever
+		// changed, only the reading did.
+		await expect(page.getByText(/160\.0/)).toBeVisible();
+	});
+
+	test('persists the units preference across a reload', async ({ page }) => {
+		await switchUnits(page, 'Imperial');
+		await page.reload();
+		await page.getByRole('button', { name: 'Open menu' }).click();
+		await page.getByRole('link', { name: 'You' }).click();
+		await expect(page.getByRole('button', { name: 'Imperial' })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+
+		await openProgress(page);
+		await expect(page.getByLabel('Today’s weight in pounds')).toBeVisible();
+	});
+});

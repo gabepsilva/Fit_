@@ -123,10 +123,29 @@ export async function signOutThroughDrawer(page: Page): Promise<void> {
  * text fails here, naming the box, instead of as a timeout further down.
  */
 export async function openLogSheetAndType(page: Page, what: string): Promise<void> {
-	await page.getByRole('button', { name: 'Log food' }).click();
-	const sheet = page.getByRole('dialog');
-	await expect(sheet.getByRole('button', { name: 'Close' })).toBeFocused();
+	await openLogSheet(page);
 	const box = page.getByLabel('What you ate');
 	await box.fill(what);
 	await expect(box).toHaveValue(what);
+}
+
+/**
+ * Open the log sheet and wait out the same focus move `openLogSheetAndType`
+ * documents, without assuming which tab or field comes next — callers that
+ * switch tabs (e.g. to Scan) before typing anything share this wait instead
+ * of re-deriving it.
+ */
+export async function openLogSheet(page: Page): Promise<void> {
+	await page.getByRole('button', { name: 'Log food' }).click();
+	const sheet = page.getByRole('dialog');
+	await expect(sheet.getByRole('button', { name: 'Close' })).toBeFocused();
+}
+
+/** Onboard onto an empty journal, so anything logged afterwards is logged here. */
+export async function openEmptyJournal(page: Page): Promise<void> {
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await page.getByRole('button', { name: 'Continue' }).click();
+	await page.getByRole('button', { name: 'Start empty' }).click();
+	await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
 }

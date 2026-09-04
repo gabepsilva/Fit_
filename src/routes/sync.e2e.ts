@@ -2,6 +2,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import {
 	clearRegistrationThrottle,
 	freshUsername,
+	openEmptyJournal,
 	openLogSheetAndType,
 	returnThroughApi,
 	signInThroughApi,
@@ -19,15 +20,6 @@ import {
 const PASSWORD = 'salt-and-pepper-mill';
 
 test.beforeEach(clearRegistrationThrottle);
-
-/** Onboard onto an empty journal, so anything on the log afterwards was logged here. */
-async function openEmptyJournal(page: Page) {
-	await page.goto('/');
-	await page.getByRole('button', { name: 'Continue' }).click();
-	await page.getByRole('button', { name: 'Continue' }).click();
-	await page.getByRole('button', { name: 'Start empty' }).click();
-	await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
-}
 
 async function logTwoEggs(page: Page) {
 	await openLogSheetAndType(page, 'two eggs');
