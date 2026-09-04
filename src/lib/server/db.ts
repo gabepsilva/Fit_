@@ -113,6 +113,18 @@ const MIGRATIONS = [
 
 	-- The expiry index was rebuilt with its table.
 	create index sign_in_throttle_expiry on sign_in_throttle (window_ends_at);
+	`,
+	`
+	-- One JSON document per household: the whole client-side store, versioned
+	-- so a stale writer loses to whoever wrote last rather than clobbering it.
+	create table household_state (
+		household_id text primary key references household (id) on delete cascade,
+		format       text not null,
+		body         text not null,
+		version      integer not null,
+		updated_at   text not null,
+		updated_by   text not null references account (id)
+	) strict;
 	`
 ];
 
