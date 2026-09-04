@@ -77,7 +77,8 @@ const UNIT_WORD_CASES: ParseCase[] = [
 	['1 slice sourdough', 1, 'sourdough', 0.96],
 	['2 slices toast', 2, 'sourdough', 0.96],
 	['1 cup oats', 1, 'oats', 0.96],
-	['2 cups brown rice', 1, 'brown-rice', 0.96],
+	// A serving of brown rice is one cup, so two cups is two servings (#94).
+	['2 cups brown rice', 2, 'brown-rice', 0.96],
 	['2 tbsp peanut butter', 1, 'peanut-butter', 0.96],
 	['1 tsp honey', 1, 'honey', 1],
 	['1 scoop whey', 1, 'whey', 0.96],
@@ -394,11 +395,26 @@ describe('parseLocalText quantities', () => {
 	});
 
 	it.each([
-		['2 cups milk', 'cups', 'whole-milk'],
-		['2 cups brown rice', 'cups', 'brown-rice'],
+		// Whole milk is "1 cup", 244 g; brown rice "1 cup", 195 g; peanut butter
+		// "2 tbsp", 32 g. Each food's own label says what one of its units weighs.
+		['2 cups milk', 'cups', 'whole-milk', 2],
+		['2 cups brown rice', 'cups', 'brown-rice', 2],
+		['2 tbsp peanut butter', 'tbsp', 'peanut-butter', 1],
+		['1 tbsp peanut butter', 'tbsp', 'peanut-butter', 0.5]
+	])('reads the volume in "%s" off the food itself', (text, unit, id, servings) => {
+		const item = firstItem(text);
+		expect(item?.foodId).toBe(id);
+		expect(item?.servings).toBe(servings);
+		expect(item?.quantity?.unit).toBe(unit);
+		expect(item?.quantity?.kind).toBe('volume');
+	});
+
+	it.each([
+		// Oats are "1/2 cup dry": a label that does not state a volume outright is
+		// not read for one. Milk is "1 cup", which says nothing about millilitres.
 		['3/4 cup oats', 'cup', 'oats'],
 		['250 ml milk', 'ml', 'whole-milk'],
-		['2 tbsp peanut butter', 'tbsp', 'peanut-butter']
+		['1 tsp milk', 'tsp', 'whole-milk']
 	])(
 		'records one serving for the volume in "%s" rather than inventing a number',
 		(text, unit, id) => {

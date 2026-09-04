@@ -140,6 +140,21 @@ describe('ProposalRow', () => {
 			.toBeInTheDocument();
 	});
 
+	it('says how many millilitres the food’s serving is, beside its weight', async () => {
+		const item: QuantifiedItem = {
+			...matched,
+			servings: 2,
+			quantity: { amount: 2, unit: 'tbsp', kind: 'volume' }
+		};
+		// Olive oil is served by the tablespoon: 14 g, 119 kcal.
+		const oil = FOOD_BY_ID['olive-oil'];
+		await render(ProposalRow, {
+			props: { item, step: 0.5, matching: false, resolved: oil, ...handlers }
+		});
+		await expect.element(page.getByText('1 tbsp (15 ml)')).toBeInTheDocument();
+		await expect.element(page.getByText('2 servings · 28 g')).toBeInTheDocument();
+	});
+
 	it('says nothing about a unit it did use', async () => {
 		const item: QuantifiedItem = {
 			...matched,

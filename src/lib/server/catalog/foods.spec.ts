@@ -109,6 +109,7 @@ describe('searchFoods', () => {
 			barcode: '00000000000035',
 			license: 'public-domain',
 			serving: { label: 'serving', grams: 100 },
+			portions: [],
 			per100g: {
 				kcal: 100,
 				protein: 5,
@@ -122,6 +123,33 @@ describe('searchFoods', () => {
 			quality: 94,
 			sources: 9
 		});
+	});
+
+	it('carries what one of each volume unit weighs for the food', () => {
+		// "1 cup" weighing 244 g. The fixture also holds "2 cup" at 500 g, which
+		// names the same unit; the food's own serving rows are read in order and
+		// the first to name a unit is the one kept.
+		const found = searchFoods(db, 'whole milk', 5).find((food) => food.id === 4);
+		expect(found?.portions).toEqual([{ unit: 'cup', grams: 244 }]);
+	});
+
+	it('leaves out a serving row that states no volume', () => {
+		// "1 PUDDING CUP" and "100 g" are both `food_serving` rows on this food.
+		const found = searchFoods(db, 'whole milk', 5).find((food) => food.id === 4);
+		expect(found?.portions?.map((portion) => portion.unit)).toEqual(['cup']);
+	});
+
+	it('carries the portions of a food a barcode names', () => {
+		const [found] = foodsByBarcode(db, '00000000000103');
+		expect(found?.portions).toEqual([
+			{ unit: 'tsp', grams: 5.3 },
+			{ unit: 'tbsp', grams: 16 }
+		]);
+	});
+
+	it('carries an empty list for a food the catalog gave no household measure', () => {
+		const [found] = foodsByBarcode(db, '00000000000035');
+		expect(found?.portions).toEqual([]);
 	});
 
 	it('reads a column whose type has changed as absent rather than guessing', () => {

@@ -32,6 +32,20 @@ describe('LogRow', () => {
 		await expect.element(page.getByText(`2 × ${entry.servingLabel}`)).toBeInTheDocument();
 	});
 
+	it('says how many millilitres a volume serving is', async () => {
+		// A serving of whole milk is one cup; the millilitres are the unit's own
+		// definition, so they can be shown without knowing the food.
+		const entry = logFromFood({
+			foodId: 'whole-milk',
+			servings: 2,
+			meal: 'breakfast',
+			date: '2026-06-01',
+			source: 'manual'
+		});
+		await render(LogRow, { props: { item: entry, open: false, step: 0.5, ontoggle: vi.fn() } });
+		await expect.element(page.getByText('2 × 1 cup (240 ml)')).toBeInTheDocument();
+	});
+
 	it('shows the energy', async () => {
 		const entry = item();
 		await render(LogRow, { props: { item: entry, open: false, step: 0.5, ontoggle: vi.fn() } });

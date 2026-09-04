@@ -1,3 +1,5 @@
+import type { Portion } from './portions';
+
 export type Provenance = 'usda' | 'off' | 'lab' | 'brand' | 'community';
 
 /** Every meal a log entry can belong to, in the order the interface offers them. */
@@ -67,6 +69,12 @@ export type Food = {
 	provenance: Provenance;
 	servingLabel: string;
 	grams: number;
+	/**
+	 * What one of each household measure weighs for this food, when the catalog
+	 * says. A tablespoon of oil is 13.5 g and a tablespoon of flour 8 g, so this
+	 * is per food and never a constant; absent means the catalog did not say.
+	 */
+	portions?: readonly Portion[] | undefined;
 	kcal: number;
 	protein: number;
 	carbs: number;

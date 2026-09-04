@@ -1,6 +1,7 @@
 <script lang="ts">
 	import X from '@lucide/svelte/icons/x';
 	import { FOOD_BY_ID } from '$lib/domain/foods';
+	import { withVolumeHint } from '$lib/domain/portions';
 	import { describeRecorded, resolveQuantity, type QuantifiedItem } from '$lib/domain/quantity';
 	import type { Food } from '$lib/domain/types';
 	import FoodSearch from './FoodSearch.svelte';
@@ -35,6 +36,9 @@
 	// to the catalog can turn a quantity the parser had to decline into one it can use.
 	const declined = $derived(item.quantity ? resolveQuantity(item.quantity, food).declined : null);
 	const recorded = $derived(describeRecorded(item.servings, food, declined));
+	// The millilitres are the unit's own definition, so they can be shown beside
+	// any label. The grams beside them are the food's and come from `recorded`.
+	const serving = $derived(withVolumeHint(food?.servingLabel ?? 'serving'));
 </script>
 
 <li class="bg-background rounded-2xl p-3">
@@ -62,7 +66,7 @@
 		</button>
 	</div>
 	<div class="mt-2 flex items-center justify-between">
-		<p class="text-muted-foreground text-xs">{food?.servingLabel ?? 'serving'}</p>
+		<p class="text-muted-foreground text-xs">{serving}</p>
 		<QuantityStepper
 			bind:value={() => item.servings, (n: number) => onchange({ ...item, servings: n })}
 			{step}
