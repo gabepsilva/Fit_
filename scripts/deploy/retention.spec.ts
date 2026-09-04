@@ -3,8 +3,8 @@ import { access, mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it } from 'vitest';
-import { ASSET_GENERATIONS, IMMUTABLE_ASSETS, RELEASE_ASSETS } from './retention';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ASSET_GENERATIONS, IMMUTABLE_ASSETS, RELEASE_ASSETS, RELEASE_STAMP } from './retention';
 import { pruneReleasesScript, retainAssetsScript } from './retention';
 
 /**
@@ -19,11 +19,10 @@ const bash = promisify(execFile);
 /** How many releases the machine keeps whole, as `config.ts` sets it. */
 const KEPT = 5;
 
-let root: string | undefined;
+const roots: string[] = [];
 
-afterEach(async () => {
-	if (root !== undefined) await rm(root, { recursive: true, force: true });
-	root = undefined;
+afterAll(async () => {
+	await Promise.all(roots.map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
 type Machine = {
@@ -35,12 +34,14 @@ type Machine = {
 	/** The retention step of a deploy, then the switch, then the prune. */
 	deploy: (release: string, generations?: number) => Promise<void>;
 	chunks: (release: string) => Promise<string[]>;
+	/** The releases still holding everything a rollback would need. */
+	whole: () => Promise<string[]>;
 	exists: (relative: string) => Promise<boolean>;
 };
 
 async function machine(): Promise<Machine> {
-	root = await mkdtemp(path.join(os.tmpdir(), 'fit-retention-'));
-	const base = root;
+	const base = await mkdtemp(path.join(os.tmpdir(), 'fit-retention-'));
+	roots.push(base);
 	const releasesRoot = path.join(base, 'releases');
 	const currentLink = path.join(base, 'current');
 	await mkdir(releasesRoot, { recursive: true });
@@ -76,6 +77,17 @@ async function machine(): Promise<Machine> {
 		},
 		chunks: async (release) =>
 			(await readdir(path.join(releasesRoot, release, IMMUTABLE_ASSETS, 'chunks'))).sort(),
+		whole: async () => {
+			const kept: string[] = [];
+			for (const release of (await readdir(releasesRoot)).sort()) {
+				const present = await access(path.join(releasesRoot, release, 'node_modules')).then(
+					() => true,
+					() => false
+				);
+				if (present) kept.push(release);
+			}
+			return kept;
+		},
 		exists: async (relative) =>
 			access(path.join(base, relative))
 				.then(() => true)
@@ -114,6 +126,61 @@ describe('the assets a release serves after the one before it is replaced', () =
 	});
 });
 
+/**
+ * Enough deploys that the window is made entirely of releases pruning has
+ * already been over. A dozen does not show a window that drifts; the damage
+ * takes a few more deploys to reach the assets still being served.
+ */
+const SETTLED = Array.from({ length: 16 }, (_, index) => `r${String(index + 1).padStart(2, '0')}`);
+
+describe('a machine that has been deploying for a while', () => {
+	// Sixteen deploys is the cost of the question, so all three answers are
+	// read off one machine rather than three identical ones.
+	let fit: Machine;
+
+	beforeAll(async () => {
+		fit = await machine();
+		for (const release of SETTLED) await fit.deploy(release);
+	}, 60_000);
+
+	it('serves an unbroken run of the most recent releases, with no release missing from the middle', async () => {
+		// The window is only worth having if it is contiguous: a hole in it is a
+		// shell of exactly that age that still gets 404s, and nothing about the
+		// deploy would say which age that is.
+		const newest = SETTLED.slice(-(ASSET_GENERATIONS + 1));
+		expect(await fit.chunks(newest[newest.length - 1] ?? '')).toEqual(
+			newest.map((release) => `${release}.js`).sort()
+		);
+	});
+
+	it('still keeps the whole of as many releases as a rollback is promised', async () => {
+		expect(await fit.whole()).toEqual(SETTLED.slice(-KEPT));
+	});
+
+	it('settles at a bounded number of release directories, oldest removed outright', async () => {
+		expect(await fit.exists(path.join('releases', SETTLED[0] ?? ''))).toBe(false);
+		expect((await readdir(fit.releasesRoot)).length).toBe(KEPT + ASSET_GENERATIONS);
+	});
+
+	it('leaves a stripped release able to say when it was deployed', async () => {
+		// Its position in the order is the whole of what pruning must not
+		// destroy: without it the next deploy reads a mtime pruning wrote.
+		const stripped = SETTLED[SETTLED.length - KEPT - 1] ?? '';
+		expect(await fit.exists(path.join('releases', stripped, RELEASE_STAMP))).toBe(true);
+	});
+});
+
+describe('a machine deployed to before any of this existed', () => {
+	it('orders the releases it finds by age, so the first deploy under it carries the right ones forward', async () => {
+		// Nothing on the machine has a stamp, and nothing has been stripped
+		// either, so the mtime it still has is the honest answer — once.
+		const fit = await machine();
+		for (const release of ['r01', 'r02', 'r03']) await fit.ship(release);
+		await fit.deploy('r04', 2);
+		expect(await fit.chunks('r04')).toEqual(['r02.js', 'r03.js', 'r04.js']);
+	});
+});
+
 describe('pruning old releases', () => {
 	it('keeps the live release and the ones a rollback needs, whole', async () => {
 		const fit = await machine();
@@ -128,13 +195,5 @@ describe('pruning old releases', () => {
 		expect(await fit.exists(path.join('releases', 'a', RELEASE_ASSETS, 'chunks', 'a.js'))).toBe(
 			true
 		);
-	});
-
-	it('removes a release older than every asset still being served', async () => {
-		const fit = await machine();
-		const releases = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'];
-		for (const release of releases) await fit.deploy(release);
-		expect(await fit.exists(path.join('releases', 'a'))).toBe(false);
-		expect((await readdir(fit.releasesRoot)).length).toBe(KEPT + ASSET_GENERATIONS);
 	});
 });

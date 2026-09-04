@@ -48,6 +48,23 @@ export const IMMUTABLE_ASSETS = 'build/client/_app/immutable';
 export const RELEASE_ASSETS = '.assets';
 
 /**
+ * When a release was deployed, written by the deploy that did it.
+ *
+ * Age used to be read from the directory's own mtime, which is wrong the
+ * moment anything writes into the directory — and pruning does exactly that:
+ * stripping a release of everything but its assets stamps the parent with the
+ * time of the prune, so the oldest releases on the machine looked like the
+ * newest. `ls -t` then handed out an order that had nothing to do with when
+ * anything was released. Over thirty simulated deploys the effect was a
+ * permanent hole three releases back in the window and a rollback depth of
+ * three where five was promised.
+ *
+ * So the order is recorded rather than inferred, and pruning preserves this
+ * file for the same reason it preserves the assets.
+ */
+export const RELEASE_STAMP = '.deployed-at';
+
+/**
  * Hard-link every file under one directory into another, never overwriting.
  *
  * Hashed names make a collision a file that is already the same file, so the
@@ -67,6 +84,25 @@ const LINK_TREE = `link_tree() {
 	done
 }`;
 
+/**
+ * Every release under the current directory, newest first.
+ *
+ * Nanoseconds since the epoch, zero-padded to a fixed width by construction,
+ * so a plain lexical sort is the numeric one and no shell has to do
+ * arithmetic on a nineteen-digit number. A release from before this file
+ * existed has its stamp backfilled once, from the mtime it still has because
+ * nothing has stripped it yet.
+ */
+const RELEASE_ORDER = `release_order() {
+	for directory in */; do
+		directory=\${directory%/}
+		[ -d "$directory" ] || continue
+		[ -f "$directory/${RELEASE_STAMP}" ] ||
+			printf '%s000000000\\n' "$(stat -c %Y "$directory")" > "$directory/${RELEASE_STAMP}"
+		printf '%s %s\\n' "$(cat "$directory/${RELEASE_STAMP}")" "$directory"
+	done | sort -r | cut -d' ' -f2
+}`;
+
 export type Retention = {
 	/** The release directory being deployed. */
 	target: string;
@@ -76,20 +112,6 @@ export type Retention = {
 };
 
 /**
- * The releases before this one, newest first — the live one included, because
- * this runs before the symlink moves and the release still serving requests is
- * the one a stale shell is most likely to be a generation behind.
- *
- * A release that predates this retention has no `.assets` of its own; its
- * `_app/immutable` has inherited nothing, so it is the pristine copy and is
- * used as one. That makes the first deploy after this change carry forward
- * what is already on the machine rather than starting the window empty.
- */
-function previousReleases(count: number): string {
-	return `ls -1dt */ 2>/dev/null | sed 's#/$##' | grep -vx "$(basename "$target")" | head -n ${count} || true`;
-}
-
-/**
  * The new release's own assets, recorded, and the assets of the releases
  * behind it, linked in beside them.
  *
@@ -97,15 +119,28 @@ function previousReleases(count: number): string {
  * release's own output rather than everything it had inherited — otherwise
  * each deploy would carry the whole history forward one release further and
  * the bound below would not be one.
+ *
+ * The releases it reaches back through include the live one, because this
+ * runs before the symlink moves and the release still serving requests is the
+ * one a stale shell is most likely to be a generation behind. A release that
+ * predates this retention has no `.assets` of its own; its `_app/immutable`
+ * has inherited nothing, so it is the pristine copy and is used as one.
  */
 export function retainAssetsScript(retention: Retention): string {
 	return `${LINK_TREE}
 
+${RELEASE_ORDER}
+
 target=${shellQuote(retention.target)}
+cd ${shellQuote(retention.releasesRoot)}
+# %N is not universal; without it a whole second is the resolution, which is
+# still finer than the gap between two deploys of the same machine.
+stamp=$(date -u +%s%N)
+if [ -z "$stamp" ] || [ -n "\${stamp//[0-9]/}" ]; then stamp="$(date -u +%s)000000000"; fi
+printf '%s\\n' "$stamp" > "$target/${RELEASE_STAMP}"
 rm -rf "$target/${RELEASE_ASSETS}"
 link_tree "$target/${IMMUTABLE_ASSETS}" "$target/${RELEASE_ASSETS}"
-cd ${shellQuote(retention.releasesRoot)}
-for release in $(${previousReleases(retention.generations)}); do
+for release in $(release_order | grep -vx "$(basename "$target")" | head -n ${retention.generations} || true); do
 	assets="$release/${RELEASE_ASSETS}"
 	[ -d "$assets" ] || assets="$release/${IMMUTABLE_ASSETS}"
 	link_tree "$assets" "$target/${IMMUTABLE_ASSETS}"
@@ -135,13 +170,15 @@ export type Prune = {
 export function pruneReleasesScript(prune: Prune): string {
 	return `${LINK_TREE}
 
+${RELEASE_ORDER}
+
 cd ${shellQuote(prune.releasesRoot)}
 live=$(basename "$(readlink -f ${shellQuote(prune.currentLink)})")
-others=$(ls -1dt */ 2>/dev/null | sed 's#/$##' | grep -vx "$live" || true)
+others=$(release_order | grep -vx "$live" || true)
 for directory in $(echo "$others" | tail -n +${prune.kept} | head -n ${prune.generations}); do
 	[ -d "$directory/${RELEASE_ASSETS}" ] ||
 		link_tree "$directory/${IMMUTABLE_ASSETS}" "$directory/${RELEASE_ASSETS}"
-	find "$directory" -mindepth 1 -maxdepth 1 ! -name ${shellQuote(RELEASE_ASSETS)} -exec rm -rf -- {} +
+	find "$directory" -mindepth 1 -maxdepth 1 ! -name ${shellQuote(RELEASE_ASSETS)} ! -name ${shellQuote(RELEASE_STAMP)} -exec rm -rf -- {} +
 done
 for directory in $(echo "$others" | tail -n +${prune.kept + prune.generations}); do
 	rm -rf -- "$directory"
