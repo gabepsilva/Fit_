@@ -1,7 +1,4 @@
 <script lang="ts">
-	import AlertTriangle from '@lucide/svelte/icons/alert-triangle';
-	import CloudOff from '@lucide/svelte/icons/cloud-off';
-	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
 	import { sync } from '$lib/state/sync.svelte';
 
 	/**
@@ -32,7 +29,10 @@
 		class="bg-secondary text-secondary-foreground mx-5 mt-3 flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium"
 		role="status"
 	>
-		<CloudOff class="size-4 shrink-0" aria-hidden="true" />
+		<span
+			class="border-secondary-foreground/70 size-2 shrink-0 rounded-full border-2"
+			aria-hidden="true"
+		></span>
 		Offline. Your changes are saved on this device and will send once you're back online.
 	</p>
 {:else if sync.status === 'error'}
@@ -40,12 +40,15 @@
 		class="bg-destructive text-destructive-foreground mx-5 mt-3 flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium"
 		role="status"
 	>
-		<AlertTriangle class="size-4 shrink-0" aria-hidden="true" />
+		<span class="bg-destructive-foreground size-2 shrink-0 rounded-full" aria-hidden="true"></span>
 		Couldn't reach the server. Your changes are saved here and we'll keep trying.
 	</p>
 {:else if showBusy}
 	<p class="text-muted-foreground mx-5 mt-3 flex items-center gap-2 text-xs" role="status">
-		<LoaderCircle class="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+		<span
+			class="border-muted-foreground/30 border-t-muted-foreground size-3.5 shrink-0 animate-spin rounded-full border-2"
+			aria-hidden="true"
+		></span>
 		Saving…
 	</p>
 {/if}
