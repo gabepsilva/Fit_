@@ -1,6 +1,6 @@
 import { expect, type Page, type Locator } from '@playwright/test';
 import { test } from '../../../tests/preview-server';
-import { freshUsername } from '../../../tests/e2e-support';
+import { freshUsername, openSampleJournal } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -137,9 +137,7 @@ test.describe('creating an account', () => {
 		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 
 		// And the drawer, once there is one, names who is signed in.
-		await page.getByRole('button', { name: 'Continue' }).click();
-		await page.getByRole('button', { name: 'Continue' }).click();
-		await page.getByRole('button', { name: 'Open the sample journal' }).click();
+		await openSampleJournal(page);
 		await page.getByRole('button', { name: 'Open menu' }).click();
 		await expect(page.getByText('Robin', { exact: true })).toBeVisible();
 		await expect(page.getByText(`@${username}`)).toBeVisible();

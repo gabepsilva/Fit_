@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { test } from '../../../tests/preview-server';
-import { freshUsername, signOutThroughDrawer } from '../../../tests/e2e-support';
+import { freshUsername, openSampleJournal, signOutThroughDrawer } from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -34,14 +34,6 @@ async function axeViolations(page: Page) {
 async function reachSignIn(page: Page, path = '/') {
 	await page.goto(path);
 	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
-}
-
-/** Take the sample journal, so there is something on the device to come back to. */
-async function openSampleJournal(page: Page) {
-	await page.getByRole('button', { name: 'Continue' }).click();
-	await page.getByRole('button', { name: 'Continue' }).click();
-	await page.getByRole('button', { name: 'Open the sample journal' }).click();
-	await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
 }
 
 async function attempt(page: Page, username: string, password: string) {

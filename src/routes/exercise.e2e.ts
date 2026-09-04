@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { test } from '../../tests/preview-server';
-import { signInThroughApi } from '../../tests/e2e-support';
+import { openSampleJournal, signInThroughApi } from '../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /** Onboarding seeds meals but no training, so every run starts from an empty rotation. */
@@ -8,9 +8,7 @@ async function onboard(page: Page, baseURL: string) {
 	// The tab is behind the gate like everything else, so the account comes first.
 	await signInThroughApi(page, baseURL);
 	await page.goto('/');
-	await page.getByRole('button', { name: 'Continue' }).click();
-	await page.getByRole('button', { name: 'Continue' }).click();
-	await page.getByRole('button', { name: 'Open the sample journal' }).click();
+	await openSampleJournal(page);
 	await page.getByRole('button', { name: 'Open menu' }).click();
 	await page.getByRole('link', { name: 'Exercise' }).click();
 	await expect(page.getByRole('heading', { name: 'Nothing here yet', level: 1 })).toBeVisible();
