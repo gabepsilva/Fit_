@@ -11,7 +11,13 @@ const TOKEN = 't'.repeat(43);
 const database = {} as DatabaseSync;
 const auth = { account: {}, session: {}, households: [] } as unknown as Auth;
 
-type RequestOptions = { method?: string; origin?: string; authorization?: string };
+type RequestOptions = {
+	method?: string;
+	origin?: string;
+	authorization?: string;
+	/** What the route or the static middleware answered with, when it matters. */
+	resolved?: Response;
+};
 
 function handleInput(
 	cookie: string | undefined,
@@ -28,7 +34,7 @@ function handleInput(
 	};
 	return {
 		event: event as unknown as Parameters<Handle>[0]['event'],
-		resolve: vi.fn(() => Promise.resolve(new Response('resolved')))
+		resolve: vi.fn(() => Promise.resolve(options.resolved ?? new Response('resolved')))
 	};
 }
 
@@ -133,5 +139,36 @@ describe('createHandle origin policy', () => {
 		const input = handleInput(TOKEN, { origin: 'https://elsewhere.example' });
 		const response = await createHandle(resolves)(input);
 		expect(await response.text()).toBe('resolved');
+	});
+});
+
+/**
+ * A build reaches the phones that are already running the previous one.
+ *
+ * `ssr = false` makes the page shell nothing but the bootstrap for one hashed
+ * bundle, and `adapter-node` sends it with no `Cache-Control`, no `ETag` and no
+ * `Last-Modified`. That is not "do not cache" — it is no freshness information
+ * at all, which leaves a cache free to invent one. Android's WebView invented a
+ * generous one and served a build from the morning for the rest of the day,
+ * asking for chunks the deploys had since removed.
+ */
+describe('createHandle cache policy', () => {
+	it('makes the page shell revalidate, so a stale client cannot keep serving it', async () => {
+		const response = await createHandle(resolves)(handleInput(TOKEN));
+		expect(response.headers.get('cache-control')).toBe('no-cache');
+	});
+
+	it('leaves the hashed bundle its year, rather than revalidating what can never change', async () => {
+		const immutable = new Response('export{}', {
+			headers: { 'cache-control': 'public, max-age=31536000, immutable' }
+		});
+		const response = await createHandle(resolves)(handleInput(TOKEN, { resolved: immutable }));
+		expect(response.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+	});
+
+	it('covers a refusal too, so no response leaves without saying how long it lasts', async () => {
+		const input = handleInput(TOKEN, { method: 'POST', origin: 'https://evil.example' });
+		const response = await createHandle(resolves)(input);
+		expect(response.headers.get('cache-control')).toBe('no-cache');
 	});
 });
