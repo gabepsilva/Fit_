@@ -5,6 +5,7 @@
 	import { emptyProfile } from '$lib/domain/profile';
 	import { computeTargets } from '$lib/domain/tdee';
 	import type { Injection, LoadUnit, UnitSystem } from '$lib/domain/types';
+	import { heightFromFeetInches, heightToFeetInches } from '$lib/domain/units';
 	import { todayISO, uid } from '$lib/domain/utils';
 	import { tend } from '$lib/state/tend.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
@@ -30,6 +31,25 @@
 
 	const profile = $derived(tend.profile);
 	const targets = $derived(profile ? computeTargets(profile) : null);
+
+	// Read straight off the profile — an uncontrolled field, like a native
+	// form, rather than a draft synced back on every keystroke. Nothing but
+	// `saveHeight` ever writes `heightCm`, and it only reads the submitted
+	// form values, so switching the units preference to look never drifts
+	// the stored figure.
+	function saveHeight(event: SubmitEvent) {
+		event.preventDefault();
+		const data = new FormData(event.currentTarget as HTMLFormElement);
+		const cm =
+			tend.state.units === 'imperial'
+				? heightFromFeetInches(Number(data.get('height-ft')), Number(data.get('height-in')))
+				: Number(data.get('height-cm'));
+		// A height has to be a positive number to mean anything; a blank or
+		// non-numeric field, or zero or negative, is left unsaved.
+		if (!Number.isFinite(cm) || cm <= 0) return;
+		tend.patchActive((p) => ({ ...p, heightCm: cm }));
+		toast('Height saved.');
+	}
 
 	function setGlp1(on: boolean) {
 		tend.patchActive((p) => ({
@@ -114,6 +134,37 @@
 			<p class="text-muted-foreground mt-3 text-xs">
 				Shared meal plans honor every profile’s restrictions. Logs stay separate.
 			</p>
+			<form class="mt-4" onsubmit={saveHeight}>
+				<p class="text-muted-foreground text-sm font-medium">Height</p>
+				{#if tend.state.units === 'imperial'}
+					{@const feetInches = heightToFeetInches(profile.heightCm)}
+					<div class="mt-1.5 flex gap-1">
+						<Input
+							name="height-ft"
+							inputmode="numeric"
+							placeholder="Feet"
+							aria-label="Height, feet"
+							value={feetInches.feet}
+						/>
+						<Input
+							name="height-in"
+							inputmode="numeric"
+							placeholder="Inches"
+							aria-label="Height, inches"
+							value={feetInches.inches}
+						/>
+					</div>
+				{:else}
+					<Input
+						name="height-cm"
+						class="mt-1.5"
+						inputmode="numeric"
+						aria-label="Height in centimeters"
+						value={Math.round(profile.heightCm)}
+					/>
+				{/if}
+				<Button class="mt-2" size="sm" type="submit">Save height</Button>
+			</form>
 		</section>
 
 		<section class="bg-card rounded-3xl p-4 shadow-border">
