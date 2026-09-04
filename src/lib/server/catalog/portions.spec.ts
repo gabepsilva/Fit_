@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { withPortions } from './portions';
 
@@ -23,6 +23,30 @@ function portionsOf(db: DatabaseSync, ids: number[]) {
 		db,
 		ids.map((id) => ({ id }))
 	).map((food) => food.portions);
+}
+
+/**
+ * The catalog, counting how many times a statement is read.
+ *
+ * `withPortions` only ever calls `prepare`, so standing in for the connection
+ * is a one-method object. Counting reads rather than prepares is the point: the
+ * per-food version this replaced prepared once too, and paid its cost in a
+ * `.all()` per food.
+ */
+function countingReads(db: DatabaseSync) {
+	const counted = { reads: 0 };
+	const catalog = {
+		prepare: (sql: string) => {
+			const statement = db.prepare(sql);
+			return {
+				all: (...values: SQLInputValue[]) => {
+					counted.reads += 1;
+					return statement.all(...values);
+				}
+			};
+		}
+	};
+	return { counted, catalog: catalog as unknown as DatabaseSync };
 }
 
 describe('withPortions', () => {
@@ -62,6 +86,41 @@ describe('withPortions', () => {
 			[],
 			[]
 		]);
+	});
+
+	it('reads the whole page in one statement rather than one per food', () => {
+		// The regression: a twenty-food search page crossed into SQLite twenty
+		// times for portions, once per row it had already found.
+		const { counted, catalog } = countingReads(db);
+		withPortions(catalog, [{ id: 1 }, { id: 2 }, { id: 99 }]);
+		expect(counted.reads).toBe(1);
+	});
+
+	it('reads a food named twice on one page once, and answers for both', () => {
+		const { counted, catalog } = countingReads(db);
+		expect(withPortions(catalog, [{ id: 1 }, { id: 1 }])).toEqual([
+			{
+				id: 1,
+				portions: [
+					{ unit: 'tbsp', grams: 13.5 },
+					{ unit: 'tsp', grams: 4.5 }
+				]
+			},
+			{
+				id: 1,
+				portions: [
+					{ unit: 'tbsp', grams: 13.5 },
+					{ unit: 'tsp', grams: 4.5 }
+				]
+			}
+		]);
+		expect(counted.reads).toBe(1);
+	});
+
+	it('asks nothing of the catalog when there are no foods to ask about', () => {
+		const { counted, catalog } = countingReads(db);
+		expect(withPortions(catalog, [])).toEqual([]);
+		expect(counted.reads).toBe(0);
 	});
 
 	it('answers nothing when there are no foods to ask about', () => {
