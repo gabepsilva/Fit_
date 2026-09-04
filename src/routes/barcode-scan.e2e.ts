@@ -63,6 +63,24 @@ async function openScanTab(page: Page) {
 	await page.getByRole('button', { name: 'Scan' }).click();
 }
 
+/** Scans a barcode two foods share and waits for the disambiguation prompt. */
+async function presentAmbiguousChoice(page: Page) {
+	const first = catalogFood(1, 'Chocolate Chip Cookie Dough Bar');
+	const second = catalogFood(2, 'Chocolate Chip Cookie Dough Bar, Family Size');
+	await page.route('**/api/foods/barcode*', (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ barcode: AMBIGUOUS_BARCODE, ambiguous: true, foods: [first, second] })
+		})
+	);
+	await openScanTab(page);
+	await page.getByLabel('Barcode digits').fill(AMBIGUOUS_BARCODE);
+	await page.getByRole('button', { name: 'Look it up' }).click();
+	await expect(page.getByText('That barcode names more than one food. Which is it?')).toBeVisible();
+	return { first, second };
+}
+
 test.describe('scanning a barcode', () => {
 	test.beforeEach(async ({ page, baseURL }) => {
 		await signInThroughApi(page, baseURL ?? '');
@@ -119,30 +137,31 @@ test.describe('scanning a barcode', () => {
 	test('lists both foods a duplicated barcode names, and logs neither on its own', async ({
 		page
 	}) => {
-		const first = catalogFood(1, 'Chocolate Chip Cookie Dough Bar');
-		const second = catalogFood(2, 'Chocolate Chip Cookie Dough Bar, Family Size');
-		await page.route('**/api/foods/barcode*', (route) =>
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({
-					barcode: AMBIGUOUS_BARCODE,
-					ambiguous: true,
-					foods: [first, second]
-				})
-			})
-		);
-		await openScanTab(page);
-		await page.getByLabel('Barcode digits').fill(AMBIGUOUS_BARCODE);
-		await page.getByRole('button', { name: 'Look it up' }).click();
-
-		await expect(
-			page.getByText('That barcode names more than one food. Which is it?')
-		).toBeVisible();
+		const { first, second } = await presentAmbiguousChoice(page);
 		await expect(page.getByText(first.name, { exact: true })).toBeVisible();
 		await expect(page.getByText(second.name, { exact: true })).toBeVisible();
 		// Neither is auto-picked: no proposal exists yet, and the sheet is still open on the choice.
 		await expect(page.getByText('Parsed on-device — tap to correct')).toHaveCount(0);
 		await expect(page.getByRole('dialog')).toBeVisible();
+	});
+
+	test('logs the one food picked from a duplicated barcode’s list, not the other', async ({
+		page
+	}) => {
+		const { second } = await presentAmbiguousChoice(page);
+		// The click is on the food's own name, not a role/name lookup: both listed
+		// foods share "Chocolate Chip Cookie Dough Bar" as a prefix of their
+		// accessible name (brand and kcal follow it), so only an exact text match
+		// picks the second one and not the first.
+		await page.getByText(second.name, { exact: true }).click();
+
+		await expect(page.getByText('Parsed on-device — tap to correct')).toBeVisible();
+		await expect(page.getByText(second.name, { exact: true })).toBeVisible();
+
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		await expect(page.getByRole('dialog')).toBeHidden();
+		await expect(page.getByText(second.name, { exact: true })).toBeVisible();
+		// The other match from the same barcode was never proposed or logged.
+		await expect(page.getByText('Chocolate Chip Cookie Dough Bar', { exact: true })).toHaveCount(0);
 	});
 });
