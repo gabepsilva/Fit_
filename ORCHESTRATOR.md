@@ -93,6 +93,20 @@ read when a session starts, so a session older than a definition falls back to
 | `solver`   | opus   | high   | Unclear failures, the sync client, anything on the auth boundary or the store |
 | `reviewer` | opus   | high   | Review of a builder's or solver's change before it reaches `main`             |
 
+Each rung names a capability, not a vendor. The `mechanic` and `builder` rungs go to an
+OpenCode free model first, run headless in the slice's worktree with `opencode run --dir
+<worktree> -m <provider/model> "<prompt>"`. Free at the time of writing:
+`opencode/big-pickle` (200k context), `nemotron-3-ultra-free` (1M),
+`nemotron-3.5-lightning-free` (262k), `muse-spark-1.3-contributor-free` (1M),
+`mimo-v2.5-free`, `ling-3.0-flash-fin-free`, and the local `ai1` provider. Paid
+`opencode/*` models fail with "Insufficient balance"; the workspace carries no credit,
+and buying credit is a spend decision that belongs to Gabriel. Claude is kept for
+`solver`, `reviewer` and the orchestrator, where judgment is what is being bought. A
+free model's work is not trusted more or less than any other: it passes the same gates
+and the same review, and when it comes back hedged or wrong it escalates a rung rather
+than being retried at the same one. Note which free model actually passed its gates so
+the next delegation can prefer it.
+
 Rules:
 
 - Default to the smallest rung that can do the job. Escalate when a smaller agent returns
@@ -105,6 +119,9 @@ Rules:
   with the orchestrator. Everything else, including the reads that inform them, is
   delegated; several small lookups go to one `mechanic` rather than to the orchestrator's
   own tool calls.
+- Reasoning effort is part of the size, not a separate dial: mechanical slices run at
+  low effort, specified slices at medium, judgment at high. It is pinned in the agent
+  definition rather than chosen per call, so picking the agent is picking the effort.
 
 ## Cost
 
@@ -115,6 +132,10 @@ Cost is a constraint Gabriel set, not a preference.
   AI, and any SaaS.
 - Prefer what is already here: `node:sqlite`, a single self-hosted VM, Cloudflare in front
   for TLS.
+- Prefer a free model over a paid one for every rung that can carry the work, and
+  prefer the smallest rung that can. The orchestrator's own tool calls are the most
+  expensive tokens in the loop and are the exception, not the rule: if an agent can
+  return the conclusion, an agent does, even for a two-line read.
 - Slices are short, prompts are precise, and lookups go to the cheapest agent.
 
 ## Product state and priorities, as of 2026-09-03
