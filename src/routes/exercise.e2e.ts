@@ -127,8 +127,14 @@ test.describe('once a routine is in the rotation', () => {
 	});
 
 	test('has no detectable accessibility violations in the library', async ({ page }) => {
+		// Each screen is waited for before the next click. The rotation's `Plan`
+		// button and the routine sheet's `Edit` sit in the same top-right slot, so
+		// a click dispatched while the first navigation is still settling lands on
+		// the wrong one and ends up on the planner.
 		await page.getByRole('link', { name: /Full body/ }).click();
+		await expect(page.getByRole('button', { name: 'Start this session' })).toBeVisible();
 		await page.getByRole('link', { name: 'Edit' }).click();
+		await expect(page.getByRole('button', { name: 'Add from library' })).toBeVisible();
 		await page.getByRole('button', { name: 'Add from library' }).click();
 		await expect(page.getByRole('dialog')).toBeVisible();
 		expect(await axeViolations(page)).toEqual([]);

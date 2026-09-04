@@ -84,6 +84,7 @@ export class TendStore {
 
 	private pendingWrite: ReturnType<typeof setTimeout> | null = null;
 	private lifecycleFlushBound = false;
+	private onWrite: (() => void) | null = null;
 
 	get profile(): Profile | null {
 		return this.state.profiles.find((p) => p.id === this.state.activeProfileId) ?? null;
@@ -129,6 +130,54 @@ export class TendStore {
 	private write() {
 		if (!this.hydrated) return;
 		globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify($state.snapshot(this.state)));
+		this.onWrite?.();
+	}
+
+	/**
+	 * Be told whenever the document changes, which `write()` above is the one
+	 * funnel for. `sync.svelte.ts` uses it as the signal to push, in preference
+	 * to an effect over a snapshot of `state`: an effect outside a component
+	 * needs its own root, only runs at all in a client build, and would deep-clone
+	 * the whole document on every keystroke to notice what this already knows.
+	 *
+	 * `replace()` and `clear()` below are deliberately silent. They are the sync
+	 * module putting the server's answer into the store, and reporting those back
+	 * to it as local changes would push a document straight back where it came
+	 * from.
+	 */
+	watch(listener: () => void) {
+		this.onWrite = listener;
+	}
+
+	/**
+	 * Take a document from the server in place of this device's. Merged over
+	 * `emptyState()` exactly as `hydrate()` merges, so a document written by an
+	 * older client cannot leave a key undefined, and any debounced write still
+	 * pending is dropped rather than allowed to undo what was just taken.
+	 */
+	replace(document: Partial<TendState>) {
+		this.cancelPendingWrite();
+		this.state = { ...emptyState(), ...document };
+		this.writeSilently();
+	}
+
+	/**
+	 * Keep nothing. Signing out empties the device, so the key is removed rather
+	 * than overwritten with an empty document — `resetAll()` leaves one behind,
+	 * and a leftover document is what the next account would find.
+	 */
+	clear() {
+		this.cancelPendingWrite();
+		this.state = emptyState();
+		globalThis.localStorage?.removeItem(STORAGE_KEY);
+	}
+
+	/** `write()` without the notification: see `watch()`. */
+	private writeSilently() {
+		const listener = this.onWrite;
+		this.onWrite = null;
+		this.write();
+		this.onWrite = listener;
 	}
 
 	private cancelPendingWrite() {

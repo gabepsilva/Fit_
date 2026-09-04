@@ -20,14 +20,21 @@ library, a month and year planner, and training progress.
 
 The backend is one module deep. `src/lib/server/db.ts` opens SQLite through Node's built-in
 `node:sqlite` and owns the migration list; `users/` holds accounts, sessions, passwords and
-household membership; `src/hooks.server.ts` resolves the session once per request onto
-`locals.auth`. `src/routes/api/` carries registration, sign-in and the two sign-outs, and
+household membership; `state/` holds one versioned JSON document per household;
+`src/hooks.server.ts` resolves the session once per request onto `locals.auth`.
+`src/routes/api/` carries registration, sign-in, the two sign-outs and `/api/state`, and
 `/signin` and `/signup` are the forms that call them.
 
-**The server signs people in, and does nothing else yet.** No sync is wired: the app keeps
-every gram and every workout in `localStorage`, and the store's methods remain the call sites
-that will one day talk to the server. An account can be created and used to sign in, but it
-carries no data.
+**The data belongs to the account, not to the phone.** `state/sync.svelte.ts` reads the
+household's document when the session is confirmed and writes it back after every change,
+coalesced to one request in flight and one queued. The server stores the document opaquely
+and versions it; a device that pushes from a stale version is refused with the current
+document, adopts it, and says so. `localStorage` is still where the store lives moment to
+moment, so the app works with no network and sends what is waiting when one returns — and a
+device that has a journal the server has never seen pushes it rather than being emptied by
+it. Signing out clears both the document and the sync record from the device, after asking
+if anything is still unsent. Merging two devices that edited while apart is not built:
+the later version wins and the device that was behind is told.
 
 Signing in is nevertheless how the app opens. `AppShell.svelte` sends anyone without a session
 to `/signin`, carrying `?next=` for the page they asked for, and renders nothing while it goes

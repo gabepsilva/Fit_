@@ -1,0 +1,433 @@
+import { resolve } from '$app/paths';
+import { toast } from 'svelte-sonner';
+import type { TendState } from '$lib/domain/types';
+import { STORAGE_KEY, tend } from './tend.svelte';
+import type { TendStore } from './tend.svelte';
+
+/**
+ * The conversation with `/api/state`.
+ *
+ * The server holds one opaque JSON document per household and a version number.
+ * This module decides when to read it, when to write it, and — the only part
+ * that can lose somebody's data — which copy wins when the two disagree. Four
+ * rules cover that:
+ *
+ * 1. A device with a document of its own and a server with none pushes. That is
+ *    how every device predating sync migrates, and there is one chance at it per
+ *    device: adopting an empty server would empty the phone instead.
+ * 2. A device the server refuses as stale adopts what came back and says so. It
+ *    never merges and never overwrites; merging is a later story, and silence is
+ *    what would make the loss invisible.
+ * 3. Nothing is marked sent until a write carrying it has been accepted.
+ * 4. An answer that arrives after this device signed out is not acted on.
+ *
+ * The whole `TendState` document is synced, `onboarded` and `activeProfileId`
+ * included: with one account per household both belong to the account rather
+ * than to the device.
+ */
+
+export const SYNC_STORAGE_KEY = 'tend.sync.v1';
+
+/** The one format the server is told about; it stores the body without reading it. */
+const STATE_FORMAT = 'tend.v1';
+
+/** A write refused because someone else's went first. */
+const STALE_STATUS = 409;
+
+const BEHIND_MESSAGE = 'This device was behind, so it reloaded your newer data.';
+
+/**
+ * What this device knows about the household's document between visits: whose
+ * it is, how far it has got, and whether it is holding anything unsent.
+ */
+export type SyncRecord = {
+	householdId: string;
+	version: number;
+	dirty: boolean;
+};
+
+export type SyncStatus = 'idle' | 'loading' | 'saving' | 'waiting' | 'stale' | 'error';
+
+/** The document as both a read and a refused write hand it back. */
+type RemoteDocument = { version: number; body: Record<string, unknown> | null };
+
+/**
+ * Why an exchange produced no document: nothing arrived, or what arrived was not
+ * one. Bare strings rather than a tagged object, so there is no shape a caller
+ * can read past.
+ */
+type NoDocument = 'unreachable' | 'refused';
+
+type ReadOutcome = RemoteDocument | NoDocument;
+
+/** A write answers with a version too; `stale` says whose it is. */
+type WriteOutcome = ({ stale: boolean } & RemoteDocument) | NoDocument;
+
+type Answer = { status: number; body: unknown };
+
+/**
+ * The endpoint's answer: its status and its parsed body, or `null` for a request
+ * that never arrived. An answer that is not JSON counts as never arriving,
+ * because this endpoint only ever writes JSON — whatever produced it, a captive
+ * portal or a proxy, was not the server, and nothing was learned.
+ *
+ * `credentials` stays at the default, which carries the session cookie.
+ */
+async function ask(init: RequestInit): Promise<Answer | null> {
+	try {
+		const response = await fetch(resolve('/api/state'), init);
+		return { status: response.status, body: (await response.json()) as unknown };
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * The `version` and `body` an answer names, or `null` when it names no version
+ * and so is not a document at all — which is what a refusal such as a 401 looks
+ * like. `?? {}` rather than a type guard: an answer that is not an object reads
+ * as one with no fields, and fails the same check.
+ */
+function documentIn(value: unknown): RemoteDocument | null {
+	const answer = (value ?? {}) as { version?: unknown; body?: unknown };
+	if (!Number.isInteger(answer.version)) return null;
+	return { version: answer.version as number, body: documentBody(answer.body) };
+}
+
+/**
+ * A body is a document only when it is a JSON object. `null` — which is what a
+ * household with nothing stored reads as — and anything else are the same
+ * answer: there is nothing here to adopt.
+ */
+function documentBody(body: unknown): Record<string, unknown> | null {
+	if (typeof body !== 'object' || Array.isArray(body)) return null;
+	return body as Record<string, unknown> | null;
+}
+
+async function readRemote(): Promise<ReadOutcome> {
+	const answer = await ask({ method: 'GET' });
+	if (answer === null) return 'unreachable';
+	return documentIn(answer.body) ?? 'refused';
+}
+
+/**
+ * A stale refusal is the only one that carries information, and it answers with
+ * the same fields a read does, so one adoption path serves both. A success whose
+ * body names no version is treated as a refusal: the write may well have landed,
+ * and the next attempt is told so by a refusal carrying exactly what it wrote.
+ */
+async function writeRemote(version: number, body: TendState): Promise<WriteOutcome> {
+	const answer = await ask({
+		method: 'PUT',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ version, format: STATE_FORMAT, body })
+	});
+	if (answer === null) return 'unreachable';
+	const document = documentIn(answer.body);
+	if (document === null) return 'refused';
+	return { stale: answer.status === STALE_STATUS, ...document };
+}
+
+/**
+ * Whether this device has written a document of its own. The store only reaches
+ * storage after a real change, so the key's presence is exactly "something has
+ * been recorded here" — which is what decides a migration, and it asks nothing
+ * about `TendState`'s shape to find out.
+ */
+function hasLocalDocument(): boolean {
+	return typeof globalThis.localStorage?.getItem(STORAGE_KEY) === 'string';
+}
+
+function recordIn(value: unknown): SyncRecord | null {
+	const record = (value ?? {}) as Partial<SyncRecord>;
+	if (typeof record.householdId !== 'string' || !Number.isInteger(record.version)) return null;
+	return {
+		householdId: record.householdId,
+		version: record.version as number,
+		dirty: record.dirty === true
+	};
+}
+
+function readRecord(): SyncRecord | null {
+	const raw = globalThis.localStorage?.getItem(SYNC_STORAGE_KEY);
+	try {
+		// A device with no record stringifies to text that JSON either reads as
+		// nothing or refuses outright, and both mean the same thing here.
+		return recordIn(JSON.parse(String(raw)));
+	} catch {
+		return null;
+	}
+}
+
+export class SyncStore {
+	/** What the conversation is doing, for anything that wants to show it. */
+	status = $state<SyncStatus>('idle');
+
+	/** The version this device and the server last agreed on. */
+	version = $state(0);
+
+	private readonly store: TendStore;
+
+	/** The household being synced, and `null` when nothing is. */
+	private householdId: string | null = null;
+
+	/**
+	 * Whether the store holds something the server has not accepted. Cleared as
+	 * a request is built rather than when one succeeds, so a change arriving
+	 * while a request is in the air is not called sent by the answer to a
+	 * request that never carried it.
+	 */
+	private dirty = false;
+
+	/** The household whose document has been read; `null` until a read lands. */
+	private pulledFor: string | null = null;
+
+	private inFlight: Promise<void> | null = null;
+	private retryBound = false;
+
+	constructor(store: TendStore) {
+		this.store = store;
+	}
+
+	/**
+	 * Begin syncing this household, after the session is known. Idempotent for
+	 * the household already running, so it can sit in an effect.
+	 *
+	 * A record naming a different household means this device belonged to someone
+	 * else: the document goes before anything is read, so the next account cannot
+	 * be handed the last one's journal — nor push it to their own.
+	 */
+	async start(householdId: string): Promise<void> {
+		if (this.householdId === householdId) return;
+		this.householdId = householdId;
+		this.pulledFor = null;
+		const record = readRecord();
+		if (record !== null && record.householdId !== householdId) {
+			this.store.clear();
+			this.version = 0;
+			this.dirty = false;
+		} else {
+			this.version = record?.version ?? 0;
+			// No record and a document of its own is a device that predates sync:
+			// what it holds has never been sent, whatever the absent record says.
+			this.dirty = record?.dirty ?? hasLocalDocument();
+		}
+		this.store.watch(() => this.changed());
+		this.bindRetries();
+		this.save();
+		await this.schedule();
+	}
+
+	/**
+	 * Stop syncing. The document stays on the device; only signing out empties
+	 * it. The watcher is left in place: `changed()` reaches nothing while there
+	 * is no household, and a stopped module has no teardown to get wrong.
+	 */
+	stop(): void {
+		this.householdId = null;
+		this.dirty = false;
+		this.version = 0;
+		this.status = 'idle';
+	}
+
+	/**
+	 * Send everything outstanding and say whether the server now has it. What
+	 * `AccountMenu` asks before it signs out, so unsent changes are a question
+	 * rather than a silent loss.
+	 */
+	async flush(): Promise<boolean> {
+		await this.schedule();
+		return !this.dirty;
+	}
+
+	/** Signing out: stop, and leave nothing of this account on the device. */
+	forget(): void {
+		this.stop();
+		this.store.clear();
+		globalThis.localStorage?.removeItem(SYNC_STORAGE_KEY);
+	}
+
+	/**
+	 * A local change: outstanding until a write carrying it has been accepted.
+	 *
+	 * A stopped module ignores them. The watcher stays installed for the life of
+	 * the store — there is no teardown to get wrong that way — so this is where a
+	 * device that has signed out stops counting what it writes as unsent.
+	 */
+	private changed(): void {
+		if (this.householdId === null) return;
+		this.dirty = true;
+		this.save();
+		void this.schedule();
+	}
+
+	/**
+	 * The three moments a device that could not reach the server gets another
+	 * chance. Bound once and never removed: `schedule()` does nothing while
+	 * nothing is being synced, so there is no teardown and no window in which a
+	 * listener is missing.
+	 */
+	private bindRetries(): void {
+		if (this.retryBound) return;
+		if (typeof globalThis.addEventListener !== 'function') return;
+		this.retryBound = true;
+		globalThis.addEventListener('online', () => void this.schedule());
+		globalThis.addEventListener('visibilitychange', () => {
+			if (globalThis.document.visibilityState === 'visible') void this.schedule();
+		});
+	}
+
+	/**
+	 * One conversation at a time. `Promise.resolve().then` defers the work by a
+	 * microtask so `inFlight` is set before it starts, and anything raised while
+	 * it runs waits on the same promise rather than opening a second one.
+	 */
+	private schedule(): Promise<void> {
+		if (this.householdId === null) return Promise.resolve();
+		if (this.inFlight !== null) return this.inFlight;
+		this.inFlight = Promise.resolve()
+			.then(() => this.drain())
+			.finally(() => {
+				this.inFlight = null;
+			});
+		return this.inFlight;
+	}
+
+	/**
+	 * A read if this household has not been read yet, then one send, then one
+	 * more for a change that arrived while that send was in the air. Anything
+	 * later stays marked dirty and rides the next trigger, so this is bounded
+	 * rather than a loop a fast writer could spin.
+	 */
+	private async drain(): Promise<void> {
+		if (this.pulledFor !== this.householdId) await this.pull();
+		// A read that never landed leaves the household unread, and writing from
+		// a version this device only guessed at is what the version check exists
+		// to prevent.
+		if (this.pulledFor !== this.householdId) return;
+		// A device the read was refused for is not one a write will be accepted
+		// from either.
+		if (this.status === 'error') return;
+		// One send, and one more only when that one was accepted and a change
+		// arrived while it was in the air. A refusal or a dropped connection
+		// waits for a trigger rather than being hammered.
+		// A device that signed out while the send was in the air never gets here:
+		// `changed()` stops counting its writes, so there is nothing newer to
+		// send and the emptied store is never offered to the account just left.
+		if (this.dirty && (await this.push())) await this.push();
+	}
+
+	/**
+	 * Read the household's document. The household counts as read whether it
+	 * answered with a document or refused this device — a refusal is about the
+	 * device, not the document, and asking again at once would only be refused
+	 * again — but not when nothing arrived at all.
+	 */
+	private async pull(): Promise<void> {
+		this.status = 'loading';
+		const result = await readRemote();
+		if (result === 'unreachable') {
+			this.status = this.dirty ? 'waiting' : 'idle';
+			return;
+		}
+		this.pulledFor = this.householdId;
+		if (result === 'refused') {
+			this.status = 'error';
+			return;
+		}
+		this.receive(result, this.dirty || hasLocalDocument());
+	}
+
+	/**
+	 * Send the document. `true` means it was accepted and a change arrived while
+	 * it was in the air, so there is something newer still to send. `again` is
+	 * false for the one extra attempt a refusal can earn, so a server that
+	 * refuses cannot be talked into an unbounded exchange.
+	 */
+	private async push(again = true): Promise<boolean> {
+		const body = $state.snapshot(this.store.state);
+		this.status = 'saving';
+		this.dirty = false;
+		const result = await writeRemote(this.version, body);
+		if (result === 'unreachable' || result === 'refused') {
+			// Nothing was accepted, so nothing was sent, whichever it was. The
+			// record is left as it stands: it already says this device is holding
+			// something, and it is never less dirty than the store.
+			this.dirty = true;
+			this.status = result === 'unreachable' ? 'waiting' : 'error';
+			return false;
+		}
+		if (result.stale) {
+			this.receive(result, true);
+			// Adopting leaves nothing to send, so this is the other case: a
+			// refusal carrying no document, meaning the version written from no
+			// longer exists. `receive` has recorded the one the server does hold,
+			// and the document goes out again from there.
+			if (this.dirty && again) await this.push(false);
+			return false;
+		}
+		this.version = result.version;
+		this.save();
+		this.status = 'idle';
+		return this.dirty;
+	}
+
+	/**
+	 * Take in what the server says it holds — the one path a read and a refused
+	 * write share, because a refusal answers with the fields a read does.
+	 *
+	 * `hadOwnWork` says whether this device is holding something of its own, and
+	 * decides the announcement: an adoption that displaces real work is said out
+	 * loud, while a device merely receiving the account's document for the first
+	 * time is not interrupted.
+	 */
+	private receive(remote: RemoteDocument, hadOwnWork: boolean): void {
+		// Signed out while this answer was in the air: it describes an account
+		// that is no longer on this device, and putting it into the store would
+		// hand the next person the last one's journal.
+		if (this.householdId === null) return;
+		if (remote.body === null) {
+			// Nothing stored for this household. This device's document, if it has
+			// one, becomes the first version; it is never emptied to match.
+			this.version = remote.version;
+			if (hasLocalDocument()) this.dirty = true;
+			this.save();
+			this.status = 'idle';
+			return;
+		}
+		if (remote.version > this.version) {
+			this.adopt(remote.version, remote.body, hadOwnWork);
+			return;
+		}
+		// The server is at or behind the version this device recorded, so what is
+		// here is the later document and belongs on the server rather than the
+		// other way round.
+		if (remote.version < this.version) this.dirty = true;
+		this.version = remote.version;
+		this.save();
+		this.status = 'idle';
+	}
+
+	/**
+	 * Replace the document with the server's. `replace()` is silent by design, so
+	 * the store's own write is not reported back as a local change and pushed
+	 * straight out again.
+	 */
+	private adopt(version: number, body: Record<string, unknown>, announce: boolean): void {
+		this.store.replace(body);
+		this.version = version;
+		this.dirty = false;
+		this.save();
+		this.status = announce ? 'stale' : 'idle';
+		if (announce) toast(BEHIND_MESSAGE);
+	}
+
+	private save(): void {
+		const householdId = this.householdId;
+		if (householdId === null) return;
+		const record: SyncRecord = { householdId, version: this.version, dirty: this.dirty };
+		globalThis.localStorage?.setItem(SYNC_STORAGE_KEY, JSON.stringify(record));
+	}
+}
+
+export const sync = new SyncStore(tend);

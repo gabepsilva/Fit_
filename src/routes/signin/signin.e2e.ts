@@ -1,5 +1,9 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { clearRegistrationThrottle, freshUsername } from '../../../tests/e2e-support';
+import {
+	clearRegistrationThrottle,
+	freshUsername,
+	signOutThroughDrawer
+} from '../../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 /**
@@ -41,13 +45,6 @@ async function openSampleJournal(page: Page) {
 	await page.getByRole('button', { name: 'Continue' }).click();
 	await page.getByRole('button', { name: 'Open the sample journal' }).click();
 	await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
-}
-
-/** End the session from the drawer, which is the only place that offers it. */
-async function signOut(page: Page) {
-	await page.getByRole('button', { name: 'Open menu' }).click();
-	await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
 }
 
 async function attempt(page: Page, username: string, password: string) {
@@ -107,12 +104,13 @@ test.describe('with an account already registered', () => {
 		await expect(page.getByText(`@${username} · Kitchen`)).toBeVisible();
 	});
 
-	test('leaves the journal exactly where it was', async ({ page }) => {
+	test('brings the journal back from the account it belongs to', async ({ page }) => {
 		await attempt(page, username, PASSWORD);
 		await openSampleJournal(page);
-		await signOut(page);
+		await signOutThroughDrawer(page);
 
-		// Signing out closes the app; it does not empty the device.
+		// Signing out empties the device — `sync.e2e.ts` asserts that directly —
+		// so what comes back here comes back from the server, not from storage.
 		await attempt(page, username, PASSWORD);
 		await expect(page.getByRole('heading', { name: 'breakfast' })).toBeVisible();
 	});
@@ -120,7 +118,7 @@ test.describe('with an account already registered', () => {
 	test('returns to the destination it turned away', async ({ page }) => {
 		await attempt(page, username, PASSWORD);
 		await openSampleJournal(page);
-		await signOut(page);
+		await signOutThroughDrawer(page);
 
 		await reachSignIn(page, '/progress');
 		await attempt(page, username, PASSWORD);

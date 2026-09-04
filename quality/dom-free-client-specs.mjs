@@ -29,6 +29,7 @@ export const DOM_FREE_CLIENT_SPECS = [
 	'src/lib/components/exercise/routine-tone.svelte.spec.ts',
 	'src/lib/state/log-ui.svelte.spec.ts',
 	'src/lib/state/session.svelte.spec.ts',
+	'src/lib/state/sync.svelte.spec.ts',
 	'src/lib/state/tend.svelte.spec.ts',
 	'src/lib/ui/cn.svelte.spec.ts',
 	'src/lib/ui/dictation.svelte.spec.ts',

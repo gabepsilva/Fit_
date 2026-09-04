@@ -3,6 +3,8 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import type { SignedInSession } from '$lib/auth/api';
 import { session } from '$lib/state/session.svelte';
+import { sync, SYNC_STORAGE_KEY } from '$lib/state/sync.svelte';
+import { STORAGE_KEY, tend } from '$lib/state/tend.svelte';
 import AccountMenu from './AccountMenu.svelte';
 
 type Sent = { path: string; method: string | undefined };
@@ -39,14 +41,29 @@ function signedIn() {
 }
 
 beforeEach(() => {
+	sync.stop();
+	tend.clear();
 	localStorage.clear();
 	session.current = null;
 	session.hydrated = false;
 });
 
 afterEach(() => {
+	sync.stop();
 	vi.restoreAllMocks();
 });
+
+/**
+ * A device holding a change the server has never taken: it has a document of
+ * its own, and every request it makes is dropped.
+ */
+async function withUnsentChanges() {
+	tend.hydrate();
+	tend.togglePantry('oats');
+	vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+	await sync.start('h-1');
+	vi.restoreAllMocks();
+}
 
 /**
  * There is no signed-out half to test: the drawer lives inside the gate, so a
@@ -106,6 +123,54 @@ describe('AccountMenu', () => {
 		await render(AccountMenu);
 		await page.getByRole('button', { name: 'Sign out everywhere' }).click();
 		await vi.waitFor(() => expect(session.signedIn).toBe(false));
+	});
+
+	it('asks before dropping a change the server has never taken', async () => {
+		signedIn();
+		await withUnsentChanges();
+		answer(204);
+		await render(AccountMenu);
+		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+		await expect
+			.element(page.getByText('Some of what you logged has not reached the server yet.'))
+			.toBeInTheDocument();
+		expect(session.signedIn).toBe(true);
+	});
+
+	it('signs out anyway once the person says so', async () => {
+		signedIn();
+		await withUnsentChanges();
+		answer(204);
+		await render(AccountMenu);
+		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+		await page.getByRole('button', { name: 'Sign out anyway' }).click();
+		await vi.waitFor(() => expect(session.signedIn).toBe(false));
+	});
+
+	it('goes back to offering the sign-out when the person keeps the changes', async () => {
+		signedIn();
+		await withUnsentChanges();
+		answer(204);
+		await render(AccountMenu);
+		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+		await page.getByRole('button', { name: 'Keep them' }).click();
+		await expect
+			.element(page.getByRole('button', { name: 'Sign out', exact: true }))
+			.toBeInTheDocument();
+		expect(session.signedIn).toBe(true);
+	});
+
+	it('leaves neither the journal nor the sync record behind', async () => {
+		signedIn();
+		answer(204);
+		tend.hydrate();
+		tend.togglePantry('oats');
+		localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify({ householdId: 'h-1', version: 1 }));
+		await render(AccountMenu);
+		await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+		await vi.waitFor(() => expect(session.signedIn).toBe(false));
+		expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+		expect(localStorage.getItem(SYNC_STORAGE_KEY)).toBeNull();
 	});
 
 	it('keeps the record when nothing was asked and nothing answered', async () => {

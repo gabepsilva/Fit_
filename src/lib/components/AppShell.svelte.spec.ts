@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { emptyProfile } from '$lib/domain/profile';
 import { logUi } from '$lib/state/log-ui.svelte';
 import { session, SESSION_STORAGE_KEY } from '$lib/state/session.svelte';
+import { sync } from '$lib/state/sync.svelte';
 import { STORAGE_KEY, tend } from '$lib/state/tend.svelte';
 import AppShellHarness from './AppShellHarness.svelte';
 
@@ -64,6 +65,9 @@ beforeEach(() => {
 	localStorage.clear();
 	logUi.open = false;
 	logUi.tab = 'type';
+	// A module singleton like the two below: left running, it would keep watching
+	// the store and answering the next test's stubbed fetch.
+	sync.stop();
 	tend.resetAll();
 	tend.hydrated = false;
 	// The session store is a module singleton, so a previous render's hydration
@@ -303,5 +307,27 @@ describe('AppShell, signed in', () => {
 		stubFetch();
 		await render(AppShellHarness, { props: { body: 'Page body' } });
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith('/signin', { replaceState: true }));
+	});
+});
+
+describe('AppShell and the household document', () => {
+	/** Every path a request took, so one endpoint can be picked out of the rest. */
+	function fetchedPaths(): string[] {
+		return vi
+			.mocked(globalThis.fetch)
+			.mock.calls.map(([input]) => (typeof input === 'string' ? input : ''));
+	}
+
+	it('asks for the household’s document once there is a session to ask with', async () => {
+		seedReturningVisit();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+		await vi.waitFor(() => expect(fetchedPaths()).toContain('/api/state'));
+	});
+
+	it('asks for nothing before anyone has signed in', async () => {
+		seedOnboardedStorage();
+		await render(AppShellHarness, { props: { body: 'Page body' } });
+		await vi.waitFor(() => expect(goto).toHaveBeenCalled());
+		expect(fetchedPaths()).not.toContain('/api/state');
 	});
 });
