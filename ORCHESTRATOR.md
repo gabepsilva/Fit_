@@ -148,6 +148,35 @@ Rules:
   low effort, specified slices at medium, judgment at high. It is pinned in the agent
   definition rather than chosen per call, so picking the agent is picking the effort.
 
+## aarmy
+
+`aarmy` (also `agents-army`, Gabriel's own tool, `~/.local/bin/aarmy`) drives a CLI agent
+through a persisted session. Use it wherever it removes friction, and do not use it where it
+adds any; it is a convenience, not a layer the loop is obliged to go through.
+
+Where it helps. It has a first-class OpenCode backend, so `aarmy create NAME -b opencode -m
+opencode/big-pickle` puts a free model behind a named agent, which is the ladder's mechanic
+and builder rungs without hand-rolling an invocation. It keeps the session, so `talk` resumes
+a conversation and `fork` branches one, instead of every call starting from nothing. It takes
+`--schema` with a validating repair loop, which is worth more than it sounds: a reply that
+must satisfy a schema is harder to fabricate than a prose report, and prose reports from
+agents have been wrong here more than once. It maps a team name to a working directory, so
+the agent runs where it should without the caller composing a `cd`. And `--prompt-file`,
+`--timeout` and non-tty-safe stdin mean it is meant to be driven by a script rather than a
+person.
+
+Where it does not help yet. `talk` is blocking and foreground — one turn per invocation,
+`subprocess.run` under the hood, no completion signal. So an orchestrator that wants several
+agents working at once must background them itself and poll, which is exactly the friction
+that makes a Claude subagent the easier choice and quietly defeats the free-model rule above.
+It also does not create git worktrees; a team points at one that already exists, and making
+and removing it stays the caller's job. Those two gaps are filed as issues on this repository
+and are meant to be fixed upstream in `agents-army` rather than worked around here.
+
+Until the first of those lands, prefer `aarmy` for work that is naturally one turn at a time
+and benefits from a session or a schema, and keep using Claude subagents where several pieces
+of work need to run at once and report back on their own.
+
 ## Cost
 
 Cost is a constraint Gabriel set, not a preference.
