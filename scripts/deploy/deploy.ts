@@ -171,10 +171,35 @@ function template(name: string): string {
 	return readFileSync(path.join(templateDirectory, name), 'utf8');
 }
 
-/** A file written on the machine byte for byte, without a heredoc's opinions about `$`. */
-function installFile(contents: string, destination: string, mode: string): string {
+/** Who owns a template's copy on the machine. A test installs as itself instead. */
+const ROOT_OWNED = 'root:root';
+
+/**
+ * A file written on the machine byte for byte, without a heredoc's opinions
+ * about `$`.
+ *
+ * Staged beside its destination and renamed over it, rather than piped into
+ * `install /dev/stdin`: Ubuntu 26.04 ships uutils coreutils rather than GNU,
+ * and its `install` reads a source it can name — so `/dev/stdin` worked on a
+ * machine that had never been deployed to and failed with `ENOENT` on every
+ * deploy after, which is a failure no first deploy can show you. The rename
+ * also makes replacing the live unit atomic, which the pipe never was.
+ *
+ * It is one parenthesised group because the caller puts it on the right of
+ * `||`, where a bare `&&` chain would run its tail regardless of the test.
+ */
+export function installFile(
+	contents: string,
+	destination: string,
+	mode: string,
+	owner: string = ROOT_OWNED
+): string {
 	const encoded = Buffer.from(contents, 'utf8').toString('base64');
-	return `echo ${encoded} | base64 -d | install -o root -g root -m ${mode} /dev/stdin ${destination}`;
+	return (
+		`( staged=$(mktemp ${destination}.XXXXXX) && echo ${encoded} | base64 -d > "$staged"` +
+		` && chown ${owner} "$staged" && chmod ${mode} "$staged"` +
+		` && mv -f "$staged" ${destination} )`
+	);
 }
 
 /**
@@ -237,4 +262,7 @@ export async function deploy(argv: string[]): Promise<boolean> {
 	return smoke([...(options.tunnel ? ['--tunnel'] : []), '--commit', release]);
 }
 
-process.exitCode = (await deploy(process.argv.slice(2))) ? 0 : 1;
+// Guarded, so importing this module to test a piece of it does not deploy.
+if (import.meta.main) {
+	process.exitCode = (await deploy(process.argv.slice(2))) ? 0 : 1;
+}

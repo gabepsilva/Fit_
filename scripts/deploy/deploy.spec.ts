@@ -1,6 +1,12 @@
+import { execFile } from 'node:child_process';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { promisify } from 'node:util';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { installFile } from './deploy';
+import { hostUser } from '../security/shared';
 import { addressSource } from '../../src/lib/server/client-address';
 import { applicationDatabasePath } from '../../src/lib/server/db';
 import { configuredOrigins } from '../../src/lib/server/origin-policy';
@@ -158,5 +164,74 @@ describe('the smoke check\u2019s client-address header', () => {
 	it('is supplied when the check reaches the origin directly', () => {
 		// Nothing else would set it, and `getClientAddress()` throws without it.
 		expect(standsInForProxy('http://127.0.0.1:41234')).toBe(true);
+	});
+});
+
+describe('installing a template on the machine', () => {
+	const bash = promisify(execFile);
+	let scratch: string | undefined;
+
+	afterAll(async () => {
+		if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+	});
+
+	/** As the machine runs it, except owned by whoever is running the test. */
+	async function install(contents: string, destination: string): Promise<string> {
+		const command = installFile(contents, destination, '0644', hostUser());
+		await bash('bash', ['-euo', 'pipefail', '-c', command]);
+		return readFile(destination, 'utf8');
+	}
+
+	it('names its source, rather than reading the shell\u2019s standard input', () => {
+		// uutils coreutils, which Ubuntu 26.04 ships, cannot install from
+		// `/dev/stdin` onto a destination that exists. GNU coreutils can, so a
+		// host running GNU cannot tell you this by failing; the shape has to be
+		// asserted directly.
+		expect(installFile('x\n', '/etc/fit/fit.env', '0600')).not.toContain('/dev/stdin');
+	});
+
+	it('writes the same bytes over a destination that already exists', async () => {
+		// The first deploy of a machine creates these files and every one after
+		// replaces them, so only the second install can show this failing.
+		scratch = await mkdtemp(path.join(os.tmpdir(), 'fit-deploy-'));
+		const destination = path.join(scratch, 'fit.service');
+		expect(await install('first\n', destination)).toBe('first\n');
+		expect(await install('second\n', destination)).toBe('second\n');
+	});
+
+	it('is one command, so a caller may put it after `||`', async () => {
+		// `A || B && C` runs C either way. The deploy writes the environment file
+		// only when it is absent, and that guard is exactly this shape.
+		const destination = path.join(scratch ?? os.tmpdir(), 'guarded');
+		await bash('bash', [
+			'-euo',
+			'pipefail',
+			'-c',
+			`true || ${installFile('unwanted\n', destination, '0644', hostUser())}`
+		]);
+		await expect(readFile(destination, 'utf8')).rejects.toThrow('ENOENT');
+	});
+
+	it('carries content the shell would otherwise interpret', async () => {
+		const destination = path.join(scratch ?? os.tmpdir(), 'literal');
+		const awkward = 'ExecStart=/opt/node/bin/node build $HOME `id` "quoted" \\\n';
+		expect(await install(awkward, destination)).toBe(awkward);
+	});
+
+	it('leaves no staged file behind when a step after mktemp fails', async () => {
+		// An owner no user on the test machine can `chown` to makes that step
+		// fail without touching the filesystem otherwise, which is the shape of
+		// a failure a real deploy could hit (e.g. a bad mode or a full disk).
+		const directory = await mkdtemp(path.join(os.tmpdir(), 'fit-deploy-fail-'));
+		const destination = path.join(directory, 'fit.service');
+		const command = installFile(
+			'doomed\n',
+			destination,
+			'0644',
+			'nonexistent-owner:nonexistent-group'
+		);
+		await expect(bash('bash', ['-euo', 'pipefail', '-c', command])).rejects.toThrow();
+		expect(await readdir(directory)).toEqual([]);
+		await rm(directory, { recursive: true, force: true });
 	});
 });
