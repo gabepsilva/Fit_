@@ -10,6 +10,29 @@ Keep it true. Any change to roles, priorities, the agent ladder or the deploy go
 same pull request that changes the fact, and the dated section below is rewritten rather
 than appended to.
 
+## DEVELOPMENT-ONLY PERMISSIONS — REMOVE ALL OF THIS BEFORE PRODUCTION
+
+**GABRIEL: THIS SECTION IS TEMPORARY. DELETE IT, AND UNDO WHAT IT ALLOWS, ON THE DAY THE
+APP GOES TO PRODUCTION.** Everything below is a safety rule switched off on purpose while
+the app has no real users. Each one is dangerous once it does.
+
+**1. THE ORCHESTRATOR MAY BYPASS BRANCH PROTECTION.** Granted 2026-09-04. `main` requires
+an approving review and an up-to-date head, and `enforce_admins` is off, so a merge made
+through the `gh` CLI as an administrator goes through without either. The orchestrator is
+authorized to do that rather than wait. It still does not merge a pull request whose
+checks are failing, and it still sends anything past mechanical through the `reviewer`
+agent first — the bypass buys speed, not permission to skip the gates.
+_To remove: stop bypassing, and turn on `enforce_admins` so the rule binds everyone._
+
+**2. ANY DATA IN THE DATABASE MAY BE DELETED AT ANY TIME.** Granted 2026-09-04. Until
+production there is nothing in `app.sqlite` worth keeping: any account, any row, the whole
+file may be deleted whenever a task needs it, without asking.
+_To remove: delete this, and the ordinary rule under "What needs Gabriel" — never delete
+user data without Gabriel — takes effect again._
+
+Nothing else in this file is suspended. Spending money, handling credentials, lowering a
+gate threshold and reversing a parked decision all still need Gabriel.
+
 ## Roles
 
 **Gabriel** (`@gabepsilva`) is the product owner, the end user, and the infrastructure.
@@ -211,11 +234,8 @@ feature is built. There is no iOS shell.
   credential; it asks Gabriel to place it and says where.
 - Lowering any gate threshold, changing branch protection, or reversing anything this file
   parks.
-- Deleting user data, once there is user data. Gabriel set the rule on 2026-09-04 that
-  until the app reaches production there is nothing in the database worth keeping: any
-  account, any row, the whole file may be deleted whenever a task needs it, without
-  asking. That permission ends at the production launch, and this bullet takes its
-  ordinary meaning again the moment real people have accounts.
+- Deleting user data — suspended until production by the development-only permissions at
+  the top of this file, which is where it goes back on.
 
 ## Deploy, as of 2026-09-03
 
