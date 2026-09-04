@@ -202,12 +202,20 @@ feature is built. There is no iOS shell.
 ## What needs Gabriel
 
 - Product decisions: what a feature does, the flow, the wording of any promise the app
-  makes to a person.
+  makes to a person. Not how it looks: Gabriel handed the design over on 2026-09-04, so
+  layout, color, type and the shape of a control are the orchestrator's to decide and to
+  defend. He is the end user and will say when something reads wrong; that is feedback to
+  act on, not a veto to wait for.
 - Any spend, as above.
 - Infrastructure access: the VM, DNS, Cloudflare, secrets. The orchestrator never handles a
   credential; it asks Gabriel to place it and says where.
-- Deleting user data, lowering any gate threshold, changing branch protection, or
-  reversing anything this file parks.
+- Lowering any gate threshold, changing branch protection, or reversing anything this file
+  parks.
+- Deleting user data, once there is user data. Gabriel set the rule on 2026-09-04 that
+  until the app reaches production there is nothing in the database worth keeping: any
+  account, any row, the whole file may be deleted whenever a task needs it, without
+  asking. That permission ends at the production launch, and this bullet takes its
+  ordinary meaning again the moment real people have accounts.
 
 ## Deploy, as of 2026-09-03
 
