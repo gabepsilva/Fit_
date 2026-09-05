@@ -262,7 +262,10 @@ export const fixtures: GateFixture[] = [
 		description: 'A scheduled tier that can no longer open an issue when it goes red.',
 		apply: (root) =>
 			edit(root, '.github/workflows/mutation-audit.yml', (content) =>
-				content.replace('      issues: write\n', '')
+				// Every job in the file, not just one: `surfacesFailure` reads the
+				// whole workflow source, so as long as any job still declares
+				// `issues: write` the file as a whole can still surface a failure.
+				content.replaceAll('      issues: write\n', '')
 			)
 	},
 	{
@@ -272,10 +275,7 @@ export const fixtures: GateFixture[] = [
 		description: 'A hosted mutation job omitted from the protected merge-gate aggregator.',
 		apply: (root) =>
 			edit(root, '.github/workflows/ci.yml', (content) =>
-				content.replace(
-					'needs: [static, unit, mutation, build, e2e, e2e-report, security, self-test]',
-					'needs: [static, unit, build, e2e, e2e-report, security, self-test]'
-				)
+				content.replace('        mutation,\n', '')
 			)
 	},
 	{
@@ -298,11 +298,44 @@ export const fixtures: GateFixture[] = [
 		name: 'unrun-self-test-group',
 		gate: 'check:ci-contract',
 		failureIncludes: 'CI workflow does not run every gate self-test group: mutation',
-		description: 'A gate self-test group dropped from the hosted matrix.',
+		description: 'A gate self-test group dropped from the hosted workflow.',
+		apply: (root) =>
+			edit(root, '.github/workflows/ci.yml', (content) =>
+				content.replace('      SELF_TEST_GROUP: mutation\n', '')
+			)
+	},
+	{
+		// self-test-mutation is allowed to report `skipped`, but only when
+		// self-test-scope says the group was not needed -- otherwise a scope
+		// job that itself failed (or any other cause of a skip) would sail
+		// through all-green disguised as "nothing to run here". This fixture
+		// removes the step that tells those apart and proves the general
+		// `success`-only loop below it is not enough on its own.
+		name: 'ungated-conditional-self-test-skip',
+		gate: 'check:ci-contract',
+		failureIncludes:
+			"all-green does not gate the following conditional self-test jobs' skipped result on their own scope output: self-test-mutation",
+		description: "all-green no longer checks self-test-mutation's skip against its scope output.",
 		apply: (root) =>
 			edit(root, '.github/workflows/ci.yml', (content) =>
 				content.replace(
-					'          - group: mutation\n            docker: false\n            browser: false\n',
+					`      - name: Require self-test-mutation to have succeeded, or been correctly skipped
+        env:
+          RESULT: \${{ needs.self-test-mutation.result }}
+          MUTATION_NEEDED: \${{ needs.self-test-scope.outputs.mutation-needed }}
+        run: |
+          echo "self-test-mutation: $RESULT (self-test-scope mutation-needed=$MUTATION_NEEDED)"
+          if [[ "$RESULT" == "success" ]]; then
+            exit 0
+          fi
+          if [[ "$RESULT" == "skipped" && "$MUTATION_NEEDED" == "false" ]]; then
+            echo "Skipped correctly: self-test-scope found nothing that could break the mutation self-test group."
+            exit 0
+          fi
+          echo "::error::self-test-mutation is $RESULT but self-test-scope reports mutation-needed=$MUTATION_NEEDED; it must succeed, or be skipped only when not needed."
+          exit 1
+
+`,
 					''
 				)
 			)

@@ -13,6 +13,14 @@ name: Scheduled mutation audit
 #
 # Thresholds are untouched. Not blocking is not the same as not measuring: a
 # lowered number would make this report understate the debt it exists to find.
+#
+# A fifth job, `scheduled-self-test-mutation`, joined on 2026-09-05: it is not
+# a mutation lane over the app and it is not debt reporting, it is the gate
+# self-test's `mutation` group -- proof that Stryker itself still kills a
+# planted mutant. It left the pull-request matrix in `ci.yml` because only a
+# handful of paths can break it (see `scripts/quality/self-test-scope.ts`),
+# but it still needs to run somewhere every day so a regression in the
+# self-test cannot hide between the PRs that happen to touch those paths.
 on:
   schedule:
     - cron: '41 4 * * *'
@@ -163,4 +171,89 @@ jobs:
               await github.rest.issues.createComment({ owner, repo, issue_number: previous.number, body });
             } else {
               await github.rest.issues.create({ owner, repo, title: 'Mutation debt from the daily audit', body, labels: ['quality'] });
+            }
+
+  # The gate self-test's `mutation` group moved off the pull-request path on
+  # 2026-09-05 (product owner): it proves Stryker itself still kills a planted
+  # mutant in a fixture project, not the app, so `scripts/quality/gate.ts ci
+  # --job self-test` with `SELF_TEST_GROUP=mutation` only reruns there when
+  # `scripts/quality/self-test-scope.ts` finds a changed path that could break
+  # it (the gate scripts, `quality/`, the Stryker configs, the workflows, or
+  # the toolchain pins). It still has to run every day regardless of what
+  # changed, or a regression in Stryker's own kill behavior could sit
+  # undetected between the PRs that happen to touch those paths. Unlike the
+  # lanes above, this one is a real gate, not a debt report -- a failure here
+  # means the self-test fixtures no longer prove what they claim to -- so the
+  # step is not swallowed with `continue-on-error` silently; it still opens an
+  # issue the same way, using its own marker, rather than failing the workflow
+  # loudly with no other trace.
+  scheduled-self-test-mutation:
+    name: Scheduled gate self-test (mutation)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      SELF_TEST_GROUP: mutation
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Restore Bun package cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run the mutation self-test group
+        id: self-test
+        continue-on-error: true
+        run: bun scripts/quality/gate.ts ci --job self-test
+
+      - name: Upload self-test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scheduled-self-test-mutation-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            reports/
+
+      # Same marker-comment pattern as the debt issue above, so a lane that
+      # stays red for a week does not file seven issues.
+      - name: Raise an issue when the mutation self-test group fails
+        if: steps.self-test.outcome == 'failure'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = '<!-- scheduled-self-test-mutation -->';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `${marker}\nThe gate self-test's \`mutation\` group failed on the daily schedule: ${run}. That group moved off the pull-request path on 2026-09-05 and now only runs there when \`scripts/quality/self-test-scope.ts\` finds a path that can break it; this daily run is what still catches a regression on a day nothing touched those paths. See \`reports/quality/self-test.json\` in the run's artifact for which fixture failed. Unlike the debt lanes above, this one is a real gate: the self-test fixtures no longer prove what they claim to until it is fixed.`;
+            const { owner, repo } = context.repo;
+            const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'quality' });
+            const previous = issues.find((issue) => issue.body?.includes(marker));
+
+            if (previous) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: previous.number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title: 'Gate self-test (mutation) failing on the daily schedule', body, labels: ['quality'] });
             }

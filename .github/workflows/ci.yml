@@ -474,11 +474,56 @@ jobs:
           path: |
             reports/
 
-  # Three runners, split by what a fixture costs and what it needs installed:
-  # the nested Stryker runs, the nested browser runs, and everything else.
+  # Decides whether the self-test's `mutation` group (below) can find anything
+  # on this run. That group proves Stryker itself still kills a planted
+  # mutant in a fixture project -- it never mutates the app -- so only the
+  # gate scripts, the mutation policy, the workflows that wire it up, and the
+  # toolchain pins it runs under can break it. Skipping it otherwise is what
+  # took it off the pull-request critical path (~300s) in favor of
+  # mobile-safari e2e (~200-235s); it still runs daily regardless of what
+  # changed, in mutation-audit.yml (product owner, 2026-09-05). See
+  # `scripts/quality/self-test-scope.ts` for the exact globs.
+  self-test-scope:
+    name: Gate self-test scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      mutation-needed: ${{ steps.scope.outputs.needed }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Decide whether the mutation self-test group can break
+        id: scope
+        env:
+          SELF_TEST_SCOPE_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'HEAD^' }}
+        run: bun scripts/quality/self-test-scope.ts
+
+  # Two runners here, split by what a fixture costs and what it needs
+  # installed: the nested browser runs and everything else.
   # `scripts/quality/self-test-groups.ts` owns that split and
-  # `check:ci-contract` proves this matrix still covers all of it, so a fixture
+  # `check:ci-contract` proves this matrix, plus the standalone
+  # `self-test-mutation` job below, still covers every group, so a fixture
   # added later cannot fall out of CI.
+  #
+  # The `mutation` group is not in this matrix: a job-level `if:` cannot
+  # reference `matrix.*` (GitHub Actions restricts that context to `github`,
+  # `needs`, `vars` and `inputs`), which is what a per-leg conditional skip
+  # would need. `self-test-mutation`, below, is its own job for exactly that
+  # reason.
   self-test:
     name: Gate self-test (${{ matrix.group }})
     runs-on: ubuntu-24.04
@@ -490,9 +535,6 @@ jobs:
           - group: browser
             docker: false
             browser: true
-          - group: mutation
-            docker: false
-            browser: false
           - group: static
             docker: true
             browser: false
@@ -569,19 +611,118 @@ jobs:
           path: |
             reports/
 
+  # The `mutation` self-test group, split out of the matrix above because it
+  # runs conditionally: `if:` here reads `needs.self-test-scope`, which a
+  # job-level condition can do (unlike `matrix.*`). It reports a skipped
+  # (neutral) check when `self-test-scope` found nothing that could break it,
+  # and a real run otherwise -- the same fixtures, same gate command, just its
+  # own job so the condition is legal. Runs daily regardless of the condition,
+  # as `scheduled-self-test-mutation` in mutation-audit.yml.
+  self-test-mutation:
+    name: Gate self-test (mutation)
+    needs: [self-test-scope]
+    if: needs.self-test-scope.outputs.mutation-needed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      SELF_TEST_GROUP: mutation
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .tool-versions
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .tool-versions
+
+      - name: Restore Bun package cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      # Proves the mutation gate itself still kills a planted mutant. Without
+      # this, the mutation lanes' thresholds are assertions nobody has tested.
+      - name: Run gate self-test
+        run: bun scripts/quality/gate.ts ci --job self-test
+
+      - name: Upload self-test reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: self-test-reports-mutation-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            reports/
+
   all-green:
     name: Quality and security
     if: always()
-    needs: [static, unit, mutation, build, e2e, e2e-report, security, self-test]
+    needs:
+      [
+        static,
+        unit,
+        mutation,
+        build,
+        e2e,
+        e2e-report,
+        security,
+        self-test,
+        self-test-scope,
+        self-test-mutation
+      ]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every gate to pass
+      # self-test-mutation is the one job allowed to be `skipped`: it is
+      # skipped only when self-test-scope found nothing that could break the
+      # mutation self-test group (mutation-needed == 'false'). A skip for any
+      # other reason -- self-test-scope itself failing, say -- must still fail
+      # the merge gate, so this is checked explicitly against the scope
+      # output rather than by loosening the general loop below for everyone.
+      - name: Require self-test-mutation to have succeeded, or been correctly skipped
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          RESULT: ${{ needs.self-test-mutation.result }}
+          MUTATION_NEEDED: ${{ needs.self-test-scope.outputs.mutation-needed }}
         run: |
-          echo "Gate results: $RESULTS"
-          for result in $RESULTS; do
+          echo "self-test-mutation: $RESULT (self-test-scope mutation-needed=$MUTATION_NEEDED)"
+          if [[ "$RESULT" == "success" ]]; then
+            exit 0
+          fi
+          if [[ "$RESULT" == "skipped" && "$MUTATION_NEEDED" == "false" ]]; then
+            echo "Skipped correctly: self-test-scope found nothing that could break the mutation self-test group."
+            exit 0
+          fi
+          echo "::error::self-test-mutation is $RESULT but self-test-scope reports mutation-needed=$MUTATION_NEEDED; it must succeed, or be skipped only when not needed."
+          exit 1
+
+      - name: Require every other gate to pass
+        env:
+          STATIC: ${{ needs.static.result }}
+          UNIT: ${{ needs.unit.result }}
+          MUTATION: ${{ needs.mutation.result }}
+          BUILD: ${{ needs.build.result }}
+          E2E: ${{ needs.e2e.result }}
+          E2E_REPORT: ${{ needs.e2e-report.result }}
+          SECURITY: ${{ needs.security.result }}
+          SELF_TEST: ${{ needs.self-test.result }}
+          SELF_TEST_SCOPE: ${{ needs.self-test-scope.result }}
+        run: |
+          echo "Gate results: static=$STATIC unit=$UNIT mutation=$MUTATION build=$BUILD e2e=$E2E e2e-report=$E2E_REPORT security=$SECURITY self-test=$SELF_TEST self-test-scope=$SELF_TEST_SCOPE"
+          for result in "$STATIC" "$UNIT" "$MUTATION" "$BUILD" "$E2E" "$E2E_REPORT" "$SECURITY" "$SELF_TEST" "$SELF_TEST_SCOPE"; do
             if [[ "$result" != "success" ]]; then
               echo "::error::A required gate did not succeed."
               exit 1

@@ -250,3 +250,30 @@ thing that would make the whole arrangement pointless.
 
 What this trades away is honest: mutation debt outside the security lane is now noticed
 within a day, in an issue, rather than at the moment it is introduced.
+
+### Why `Gate self-test (mutation)` also left the pull-request path
+
+Decided 2026-09-05 by Gabriel, the product owner. `Gate self-test (mutation)` was the
+longest job on every pull request (~300s, see the sharding numbers above) and it does not
+mutate the app: it runs Stryker against fixture projects under `scripts/quality/` to prove
+the mutation gate itself still kills a planted mutant. Only a change to the gate scripts,
+`quality/`, the Stryker configs, the workflows that wire the self-test up, or the toolchain
+pins it runs under can break it, so a pull request that touches none of those cannot break
+it either.
+
+`scripts/quality/self-test-scope.ts` diffs the pull request (or push) against its base and
+checks the changed paths against exactly those globs: `scripts/quality/**`, `quality/**`,
+`stryker*.config.*` at the repo root, `.github/workflows/**`, `package.json`, `bun.lock`,
+and `.tool-versions`. A new `self-test-scope` job in `ci.yml` runs that check first; the
+`self-test` job's `mutation` matrix leg then carries `if: matrix.group != 'mutation' ||
+needs.self-test-scope.outputs.mutation-needed == 'true'`, so it reports a skipped (neutral)
+check rather than running unconditionally, while `browser` and `static` still run on every
+pull request. `check:ci-contract` still asserts that the matrix declares all three groups;
+that assertion is about the matrix's shape, not the condition, so nothing there needed to
+change.
+
+Skipping it on the pull requests that cannot reach it moves the longest job on a typical
+pull request from `Gate self-test (mutation)` (~300s) to the `mobile-safari` end-to-end
+shard (~200-235s). Nothing is removed: the group still runs every day regardless of what
+changed, as `scheduled-self-test-mutation` in `mutation-audit.yml`, which is why this PR
+(it touches `.github/workflows/**`) is itself proof the trigger fires when it should.
