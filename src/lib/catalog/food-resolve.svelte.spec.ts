@@ -53,6 +53,7 @@ describe('resolveFoodNames', () => {
 		const [target, init] = fetching.mock.calls[0] ?? [];
 		expect(typeof target === 'string' ? target : '').toContain('/api/foods/resolve');
 		expect(init?.method).toBe('POST');
+		expect(init?.headers).toEqual({ 'content-type': 'application/json' });
 		expect(init?.body).toBe(JSON.stringify({ queries: ['eggs', 'toast'] }));
 	});
 
@@ -96,6 +97,15 @@ describe('resolveFoodNames', () => {
 
 	it('reads a server with no catalog as unreachable, not as an empty answer', async () => {
 		expect(await resolveFoodNames(['eggs'], answering(503))).toEqual({ kind: 'unreachable' });
+	});
+
+	it('trusts the status over the body, so a refusal carrying rows is still unreachable', async () => {
+		// A 503 from a server with no catalog can still carry a well-formed body.
+		// Reading the rows off it would show foods nothing actually matched.
+		const fetching = answering(503, {
+			items: [{ query: 'cheerios', food: CEREAL, alternatives: [] }]
+		});
+		expect(await resolveFoodNames(['cheerios'], fetching)).toEqual({ kind: 'unreachable' });
 	});
 
 	it('reads a refused body as unreachable', async () => {

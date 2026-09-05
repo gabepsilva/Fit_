@@ -14,14 +14,14 @@ import type { Food, Meal } from './types';
  */
 
 /** What the row says when the catalog had nothing for the text. */
-export const NOT_FOUND_NOTE = 'Not found in the catalog';
+const NOT_FOUND_NOTE = 'Not found in the catalog';
 
 /**
  * What the row says when the catalog row's serving weighs nothing, so the
  * quantity had nothing to divide by. Saying so is the difference between a
  * guess and a silent one.
  */
-export const PORTION_UNKNOWN_NOTE = 'Portion unknown, set the servings';
+const PORTION_UNKNOWN_NOTE = 'Portion unknown, set the servings';
 
 export type FoodProposalInput = {
 	/** The words the food was named by: the typed phrase, or the model's label. */

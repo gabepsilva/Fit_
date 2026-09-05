@@ -18,14 +18,20 @@ import type { Food } from './types';
  * text, which beats the share of the query's words the food accounts for.
  */
 function scoreFood(q: string, food: Food) {
-	const names = [food.name, food.brand ?? '', ...food.aliases].join(' ').toLowerCase();
+	// One space between every part the food is findable by, and no gap where a
+	// food carries no brand: the text is searched as text, so a doubled space
+	// would keep a query that spans the name and an alias from matching.
+	const parts = [food.name, food.brand, ...food.aliases].filter((part) => part !== undefined);
+	const names = parts.join(' ').toLowerCase();
 	if (food.name.toLowerCase() === q) return 1;
 	if (food.aliases.some((a) => a.toLowerCase() === q)) return 0.96;
 	if (names.includes(q) && q.length > 2) return 0.86;
 	const qt = tokenize(q);
 	const nt = new Set(tokenize(names));
-	if (!qt.length) return 0;
 	const overlap = qt.filter((t) => nt.has(t) || [...nt].some((n) => n.includes(t) && t.length > 3));
+	// A query with no words at all divides zero by zero, and the threshold in
+	// `findFoods` turns the result away as it turns away every weak score. A
+	// guard here would be a branch nothing could observe.
 	return overlap.length / qt.length;
 }
 

@@ -29,6 +29,14 @@ describe('findFoods', () => {
 		expect(scored('mcdonald mcmuffin', 3)).toEqual([['egg-mcmuffin', 1]]);
 	});
 
+	it('joins the name, the brand and the aliases with one space each', () => {
+		// A query that runs from the end of the name into the first alias. It only
+		// reads as a fragment of the food's text if the parts are joined by single
+		// spaces and a food with no brand leaves no gap between them. Egg is
+		// brandless, and its first alias follows its name.
+		expect(scored('large eggs', 3)).toEqual([['egg-large', 0.86]]);
+	});
+
 	it('splits a possessive brand at its apostrophe, so a query without one only partly matches', () => {
 		expect(scored('mcdonalds egg mcmuffin', 1)).toEqual([['egg-mcmuffin', 2 / 3]]);
 	});

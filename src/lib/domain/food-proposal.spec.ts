@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { foodProposal, NOT_FOUND_NOTE, PORTION_UNKNOWN_NOTE } from './food-proposal';
+import { foodProposal } from './food-proposal';
 import { resetProposalIds } from './proposal-id';
 import type { QuantitySpec } from './quantity';
 import type { Food } from './types';
@@ -79,7 +79,7 @@ describe('foodProposal', () => {
 			confidence: 0.6
 		});
 		expect(proposal.servings).toBe(1);
-		expect(proposal.note).toBe(PORTION_UNKNOWN_NOTE);
+		expect(proposal.note).toBe('Portion unknown, set the servings');
 	});
 
 	it('keeps the words and the quantity of a food nothing was found for', () => {
@@ -104,7 +104,7 @@ describe('foodProposal', () => {
 			meal: 'lunch',
 			confidence: 0
 		});
-		expect(proposal.note).toBe(NOT_FOUND_NOTE);
+		expect(proposal.note).toBe('Not found in the catalog');
 	});
 
 	it('lets a caller that could not reach the catalog say that instead', () => {

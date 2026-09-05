@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFixtureCatalog } from '../../../../tests/catalog-fixture';
 import type { Auth } from '../users/types';
+import { MAX_BODY_BYTES } from '../api';
 import {
 	MAX_QUERIES,
 	MAX_QUERY_LENGTH,
@@ -42,6 +43,27 @@ function eventFor(
 
 function asking(...queries: string[]): ResolveEvent {
 	return eventFor({ queries });
+}
+
+/**
+ * A request that declares no length, so the text ceiling is what decides. A real
+ * `Request` sets `content-length` from its body, which would refuse an oversized
+ * one at the header and leave the second check untested.
+ */
+function streaming(body: string): ResolveEvent {
+	return {
+		request: {
+			headers: new Headers({ 'content-type': 'application/json' }),
+			text: () => Promise.resolve(body)
+		} as unknown as Request,
+		locals: { auth: SIGNED_IN }
+	};
+}
+
+/** A body of exactly `length` characters that asks about one name. */
+function padded(length: number): string {
+	const around = JSON.stringify({ queries: ['milk'], pad: '' });
+	return JSON.stringify({ queries: ['milk'], pad: 'x'.repeat(length - around.length) });
 }
 
 async function bodyOf(response: Response): Promise<Record<string, unknown>> {
@@ -164,9 +186,19 @@ describe('resolveFoodNames', () => {
 	});
 
 	it('refuses a body that declares no content type at all', async () => {
+		// `Request` puts `text/plain` on a string body, so the header has to be
+		// taken off again to reach the "no content type" branch at all.
+		const event = eventFor({ queries: ['milk'] });
+		event.request.headers.delete('content-type');
+		expect((await resolveFoodNames(catalog, event)).status).toBe(400);
+	});
+
+	it('refuses a form-encoded body, which is what a cross-site form can produce', async () => {
 		const response = await resolveFoodNames(
 			catalog,
-			eventFor({ queries: ['milk'] }, SIGNED_IN, {})
+			eventFor({ queries: ['milk'] }, SIGNED_IN, {
+				'content-type': 'application/x-www-form-urlencoded'
+			})
 		);
 		expect(response.status).toBe(400);
 	});
@@ -192,10 +224,36 @@ describe('resolveFoodNames', () => {
 		expect(response.status).toBe(400);
 	});
 
-	it('refuses a body past the ceiling even when it claims to be short', async () => {
+	it('accepts a body declared at exactly the ceiling', async () => {
+		const response = await resolveFoodNames(
+			catalog,
+			eventFor({ queries: ['milk'] }, SIGNED_IN, {
+				'content-type': 'application/json',
+				'content-length': String(MAX_BODY_BYTES)
+			})
+		);
+		expect(response.status).toBe(200);
+	});
+
+	it('refuses text past the ceiling even when nothing declared a length', async () => {
 		// The header is only what the sender says; the text is what arrived.
-		const padded = JSON.stringify({ queries: ['milk'], pad: 'x'.repeat(5000) });
-		const response = await resolveFoodNames(catalog, eventFor(padded));
-		expect(response.status).toBe(400);
+		expect((await resolveFoodNames(catalog, streaming(padded(MAX_BODY_BYTES + 1)))).status).toBe(
+			400
+		);
+	});
+
+	it('accepts text of exactly the ceiling', async () => {
+		expect((await resolveFoodNames(catalog, streaming(padded(MAX_BODY_BYTES)))).status).toBe(200);
+	});
+
+	it('refuses a body whose stream cannot be read', async () => {
+		const broken: ResolveEvent = {
+			request: {
+				headers: new Headers({ 'content-type': 'application/json' }),
+				text: () => Promise.reject(new Error('socket closed'))
+			} as unknown as Request,
+			locals: { auth: SIGNED_IN }
+		};
+		expect((await resolveFoodNames(catalog, broken)).status).toBe(400);
 	});
 });

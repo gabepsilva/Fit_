@@ -66,6 +66,19 @@ function declaresJson(request: Request): boolean {
 }
 
 /**
+ * The body as something the caller can read fields off, or `null` for text that
+ * is not JSON at all. JSON's own `null` comes back as it is, and is turned away
+ * beside the text that could not be parsed.
+ */
+function fieldsOf(raw: string): Record<string, unknown> | null {
+	try {
+		return JSON.parse(raw) as Record<string, unknown> | null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * The names asked about, or the refusal.
  *
  * An empty list is refused rather than answered with an empty result: nothing
@@ -87,16 +100,11 @@ async function readResolveBody(request: Request): Promise<ParsedResolveBody> {
 	}
 	if (raw.length > MAX_BODY_BYTES) return REFUSED;
 
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(raw);
-	} catch {
-		return REFUSED;
-	}
-	// A string, a number and JSON's own `null` all answer `undefined` for the
-	// field, which `namesQueries` already turns away, so there is no separate
-	// "is this an object" test for a body no caller could get past it.
-	const fields = (parsed ?? {}) as Record<string, unknown>;
+	const fields = fieldsOf(raw);
+	if (fields === null) return REFUSED;
+	// A string and a number answer `undefined` for the field, which
+	// `namesQueries` already turns away, so there is no separate "is this an
+	// object" test for a body no caller could get past it.
 	const queries = fields['queries'];
 	if (!namesQueries(queries)) return REFUSED;
 	return { ok: true, queries };
