@@ -39,8 +39,8 @@ test.describe('the units preference, read on Progress and set on You', () => {
 		// 160 lb is the exact value review caught drifting to 160.1 lb after a
 		// metric round trip, because a rounded-for-display value had leaked
 		// into storage instead of the exact conversion.
-		await page.getByLabel('Today’s weight in pounds').fill('160');
-		await page.getByRole('button', { name: 'Save' }).click();
+		await page.getByLabel('Weight in pounds').fill('160');
+		await page.getByRole('button', { name: 'Today', exact: true }).click();
 		await expect(page.getByText(/160\.0/)).toBeVisible();
 
 		await switchUnits(page, 'Metric');
@@ -66,6 +66,6 @@ test.describe('the units preference, read on Progress and set on You', () => {
 		);
 
 		await openProgress(page);
-		await expect(page.getByLabel('Today’s weight in pounds')).toBeVisible();
+		await expect(page.getByLabel('Weight in pounds')).toBeVisible();
 	});
 });
