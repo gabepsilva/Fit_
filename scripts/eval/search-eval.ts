@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { catalogPath } from '../../src/lib/server/catalog/connection.ts';
 import { searchTerms, singular } from '../../src/lib/server/catalog/query.ts';
 import { searchSql } from '../../src/lib/server/catalog/ranking.ts';
+import { prepared } from '../../src/lib/server/catalog/statements.ts';
 
 /** How deep a person is credited with looking. Precision is measured over this many rows. */
 const PRECISION_DEPTH = 3;
@@ -102,7 +103,7 @@ const FOLDED_NAME = "trim(replace(lower(name), char(160), ' '))";
 function ranked(db: DatabaseSync, typed: string, limit: number): string[] {
 	const terms = searchTerms(typed);
 	if (terms === null) return [];
-	const rows = db.prepare(searchSql('f.name')).all({
+	const rows = prepared(db, searchSql('f.name')).all({
 		match: terms.match,
 		text: terms.text,
 		singular: singular(terms.text),
