@@ -155,30 +155,42 @@
 				<p class="text-muted-foreground text-sm font-medium">Height</p>
 				{#if tend.state.units === 'imperial'}
 					{@const feetInches = heightToFeetInches(profile.heightCm)}
-					<div class="mt-1.5 flex gap-1">
-						<Input
-							name="height-ft"
-							inputmode="numeric"
-							placeholder="Feet"
-							aria-label="Height, feet"
-							value={feetInches.feet}
-						/>
-						<Input
-							name="height-in"
-							inputmode="numeric"
-							placeholder="Inches"
-							aria-label="Height, inches"
-							value={feetInches.inches}
-						/>
+					<div class="mt-1.5 flex gap-3">
+						<div class="flex items-center gap-2">
+							<Input
+								id="you-height-ft"
+								name="height-ft"
+								class="w-24"
+								inputmode="numeric"
+								aria-label="Height, feet"
+								value={feetInches.feet}
+							/>
+							<Label for="you-height-ft">ft</Label>
+						</div>
+						<div class="flex items-center gap-2">
+							<Input
+								id="you-height-in"
+								name="height-in"
+								class="w-24"
+								inputmode="numeric"
+								aria-label="Height, inches"
+								value={feetInches.inches}
+							/>
+							<Label for="you-height-in">in</Label>
+						</div>
 					</div>
 				{:else}
-					<Input
-						name="height-cm"
-						class="mt-1.5"
-						inputmode="numeric"
-						aria-label="Height in centimeters"
-						value={Math.round(profile.heightCm)}
-					/>
+					<div class="mt-1.5 flex items-center gap-2">
+						<Input
+							id="you-height-cm"
+							name="height-cm"
+							class="w-24"
+							inputmode="numeric"
+							aria-label="Height in centimeters"
+							value={Math.round(profile.heightCm)}
+						/>
+						<Label for="you-height-cm">cm</Label>
+					</div>
 				{/if}
 				<Button class="mt-2" size="sm" type="submit">Save height</Button>
 			</form>
