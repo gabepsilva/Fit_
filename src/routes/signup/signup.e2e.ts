@@ -121,7 +121,10 @@ test.describe('creating an account', () => {
 	test('states the rules before anything is rejected', async ({ page }) => {
 		await expect(page.getByText('3 to 32 characters: letters, digits, and . _ -')).toBeVisible();
 		await expect(page.getByText('At least 10 characters. Length beats punctuation.')).toBeVisible();
-		await expect(page.getByLabel('Household')).toBeVisible();
+	});
+
+	test('renders no Household input field', async ({ page }) => {
+		await expect(page.getByLabel('Household')).toHaveCount(0);
 	});
 
 	test('has no detectable accessibility violations', async ({ page }) => {

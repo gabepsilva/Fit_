@@ -47,7 +47,6 @@
 	let kg = $state(78);
 	let activity = $state<Activity>('light');
 	let restrictions = $state<Restriction[]>(['nut-free']);
-	let household = $state(false);
 
 	const units = $derived(tend.state.units);
 	// Only meaningful once `units` is imperial, but always computed so the
@@ -106,7 +105,7 @@
 			restrictions,
 			weights: [{ id: uid('w-'), date: todayISO(), kg }]
 		});
-		tend.completeOnboarding({ profile, household, useSample });
+		tend.completeOnboarding({ profile, household: false, useSample });
 	}
 </script>
 
@@ -272,7 +271,7 @@
 			</div>
 
 			<div>
-				<p class="text-muted-foreground text-sm font-medium">Household filters</p>
+				<p class="text-muted-foreground text-sm font-medium">Dietary filters</p>
 				<div class="mt-2 flex flex-wrap gap-2">
 					{#each RESTRICTIONS as r (r.id)}
 						{@const on = restrictions.includes(r.id)}
@@ -306,15 +305,6 @@
 				Sample data lets you feel adaptive TDEE, micronutrients, and a week of meals immediately.
 				Nothing leaves this device.
 			</p>
-			<div class="bg-card mt-8 flex items-center justify-between gap-3 rounded-2xl px-4 py-4">
-				<div>
-					<p class="font-medium">Add a household profile</p>
-					<p class="text-muted-foreground text-xs">
-						Jordan, vegetarian. Shared plan honors both plates.
-					</p>
-				</div>
-				<Switch aria-label="Add a household profile" bind:checked={household} />
-			</div>
 			<div class="mt-auto flex flex-col gap-2 pt-10">
 				<Button size="lg" class="w-full" onclick={() => finish(true)}>
 					Open the sample journal

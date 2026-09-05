@@ -59,7 +59,7 @@ describe('Onboarding', () => {
 			.toHaveAttribute('data-state', 'checked');
 	});
 
-	it('toggles a household filter on', async () => {
+	it('toggles a dietary filter on', async () => {
 		await toStepTwo();
 		await page.getByRole('button', { name: 'Vegan' }).click();
 		await expect
@@ -155,11 +155,17 @@ describe('Onboarding', () => {
 		expect(kgToLb(storedKg)).toBeCloseTo(160, 9);
 	});
 
-	it('requests a household profile when asked', async () => {
+	it('renders no household profile switch', async () => {
+		await toStepThree();
+		await expect
+			.element(page.getByRole('switch', { name: 'Add a household profile' }))
+			.not.toBeInTheDocument();
+	});
+
+	it('always completes onboarding with household false', async () => {
 		const complete = vi.spyOn(tend, 'completeOnboarding').mockImplementation(() => undefined);
 		await toStepThree();
-		await page.getByRole('switch', { name: 'Add a household profile' }).click();
 		await page.getByRole('button', { name: 'Start empty' }).click();
-		expect(complete).toHaveBeenCalledWith(expect.objectContaining({ household: true }));
+		expect(complete).toHaveBeenCalledWith(expect.objectContaining({ household: false }));
 	});
 });

@@ -77,10 +77,10 @@ describe('AccountMenu', () => {
 		await expect.element(page.getByText('Robin', { exact: true })).toBeInTheDocument();
 	});
 
-	it('names the household every row is filtered by', async () => {
+	it('shows only the username, not the household it is filtered by', async () => {
 		signedIn();
 		await render(AccountMenu);
-		await expect.element(page.getByText('@robin · Home')).toBeInTheDocument();
+		await expect.element(page.getByText('@robin', { exact: true })).toBeInTheDocument();
 	});
 
 	it('ends this device’s session at the current-session endpoint', async () => {

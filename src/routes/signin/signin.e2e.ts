@@ -84,11 +84,11 @@ test.describe('with an account already registered', () => {
 		await expect(page.getByRole('heading', { name: 'Tend' })).toBeVisible();
 	});
 
-	test('names the account and the household in the drawer', async ({ page }) => {
+	test('names the account in the drawer', async ({ page }) => {
 		await attempt(page, username, PASSWORD);
 		await openSampleJournal(page);
 		await page.getByRole('button', { name: 'Open menu' }).click();
-		await expect(page.getByText(`@${username} · Kitchen`)).toBeVisible();
+		await expect(page.getByText(`@${username}`, { exact: true })).toBeVisible();
 	});
 
 	test('brings the journal back from the account it belongs to', async ({ page }) => {

@@ -12,7 +12,6 @@
 	let username = $state('');
 	let displayName = $state('');
 	let password = $state('');
-	let householdName = $state('');
 	let busy = $state(false);
 	let problem = $state<FormProblem | null>(null);
 
@@ -22,14 +21,16 @@
 		return problem?.field === field ? problem.message : undefined;
 	}
 
-	// Blank household falls back to the display name; every row is filtered by household_id.
+	// Household name is not collected from the person; every row is filtered by
+	// household_id, and the API still requires the field, so it falls back to
+	// the display name.
 	function submitted() {
 		const name = displayName.trim();
 		return {
 			username: username.trim(),
 			displayName: name,
 			password,
-			householdName: householdName.trim() === '' ? name : householdName.trim()
+			householdName: name
 		};
 	}
 
@@ -92,15 +93,6 @@
 			autocomplete="new-password"
 			hint="At least 10 characters. Length beats punctuation."
 			error={fieldError('password')}
-		/>
-
-		<AuthField
-			id="signup-household"
-			label="Household"
-			bind:value={householdName}
-			autocomplete="off"
-			hint="Optional. The kitchen everyone's plates belong to; your name by default."
-			error={fieldError('householdName')}
 		/>
 
 		<Button type="submit" size="lg" disabled={busy}>

@@ -74,9 +74,7 @@
 	<SectionLabel>Account</SectionLabel>
 	{#if session.signedIn && session.account}
 		<p class="mt-1 truncate text-sm font-medium">{session.account.displayName}</p>
-		<p class="text-muted-foreground truncate text-xs">
-			@{session.account.username}{session.household ? ` · ${session.household.name}` : ''}
-		</p>
+		<p class="text-muted-foreground truncate text-xs">@{session.account.username}</p>
 		{#if confirming === null}
 			<Button
 				variant="outline"

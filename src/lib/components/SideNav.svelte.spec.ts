@@ -90,7 +90,7 @@ describe('SideNav', () => {
 		// drawer on it.
 		session.begin(SESSION);
 		await render(SideNav, { props: { open: true, pathname: '/' } });
-		await expect.element(page.getByText('@robin · Home')).toBeInTheDocument();
+		await expect.element(page.getByText('@robin', { exact: true })).toBeInTheDocument();
 	});
 
 	it('offers the sign-out to someone who is signed in', async () => {

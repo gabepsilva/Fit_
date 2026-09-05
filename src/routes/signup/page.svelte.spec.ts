@@ -102,7 +102,7 @@ describe('sign-up page', () => {
 		);
 	});
 
-	it('names the household after the person when they did not name one', async () => {
+	it('names the household after the person, with no input for it', async () => {
 		const sent = answer(CREATED, 201);
 		await open();
 		await fillIn('robin', 'Robin', 'a-long-password');
@@ -110,13 +110,9 @@ describe('sign-up page', () => {
 		await vi.waitFor(() => expect(sent[0]?.body.householdName).toBe('Robin'));
 	});
 
-	it('sends the household somebody did name', async () => {
-		const sent = answer(CREATED, 201);
+	it('renders no Household input field', async () => {
 		await open();
-		await fillIn('robin', 'Robin', 'a-long-password');
-		await page.getByLabelText('Household').fill('The Kitchen');
-		await create();
-		await vi.waitFor(() => expect(sent[0]?.body.householdName).toBe('The Kitchen'));
+		await expect.element(page.getByLabelText('Household')).not.toBeInTheDocument();
 	});
 
 	it('remembers the account it just created', async () => {
