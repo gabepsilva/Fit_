@@ -275,6 +275,18 @@ describe('TodayView', () => {
 			await expect.element(page.getByRole('group', { name: 'Weight' })).toBeInTheDocument();
 		});
 
+		it('marks each week-strip day with what was logged that day', async () => {
+			const yesterday = addDaysISO(todayISO(), -1);
+			const twoDaysAgo = addDaysISO(todayISO(), -2);
+			logFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast', date: todayISO() });
+			tend.addWeight(80, yesterday);
+			tend.state.workouts.push(finishedWorkout(twoDaysAgo));
+			await render(TodayView);
+			await expect.element(page.getByText('food logged')).toBeInTheDocument();
+			await expect.element(page.getByText('weight logged')).toBeInTheDocument();
+			await expect.element(page.getByText('exercise logged')).toBeInTheDocument();
+		});
+
 		it('keeps the day log within the first phone-sized viewport', async () => {
 			logFood({ foodId: 'egg-large', servings: 2, meal: 'breakfast' });
 			await page.viewport(390, 844);
