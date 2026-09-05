@@ -3,16 +3,16 @@ import { logUi } from './log-ui.svelte';
 
 beforeEach(() => {
 	logUi.open = false;
-	logUi.tab = 'type';
+	logUi.tab = 'search';
 	logUi.meal = null;
 });
 
 describe('logUi', () => {
-	it('is closed, on the typing tab, with no meal, before anything asks it to open', async () => {
+	it('is closed, on the search tab, with no meal, before anything asks it to open', async () => {
 		vi.resetModules();
 		const fresh = await import('./log-ui.svelte');
 		expect(fresh.logUi.open).toBe(false);
-		expect(fresh.logUi.tab).toBe('type');
+		expect(fresh.logUi.tab).toBe('search');
 		expect(fresh.logUi.meal).toBeNull();
 	});
 
@@ -31,8 +31,8 @@ describe('logUi', () => {
 		expect(logUi.open).toBe(true);
 	});
 
-	it('starts on the typing tab', () => {
-		expect(logUi.tab).toBe('type');
+	it('starts on the search tab', () => {
+		expect(logUi.tab).toBe('search');
 	});
 
 	it('opens on the way in it was asked for', () => {
@@ -45,11 +45,11 @@ describe('logUi', () => {
 		expect(logUi.open).toBe(true);
 	});
 
-	it('falls back to typing when no way in is named', () => {
+	it('falls back to search when no way in is named', () => {
 		logUi.show('scan');
 		logUi.open = false;
 		logUi.show();
-		expect(logUi.tab).toBe('type');
+		expect(logUi.tab).toBe('search');
 	});
 
 	it('defaults the meal to null when none is named', () => {

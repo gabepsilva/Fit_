@@ -87,6 +87,25 @@ describe('LogSheet', () => {
 			.toBeInTheDocument();
 	});
 
+	it('opens on the search tab by default, not the typing tab', async () => {
+		await render(LogSheet);
+		logUi.show();
+		await expect
+			.element(page.getByPlaceholder('Search foods, brands, barcodes'))
+			.toBeInTheDocument();
+		await expect
+			.element(page.getByRole('button', { name: 'Search', exact: true }))
+			.toHaveAttribute('aria-pressed', 'true');
+	});
+
+	it('lists Search first among the tabs', async () => {
+		await render(LogSheet);
+		logUi.show();
+		await expect.element(page.getByRole('dialog')).toBeInTheDocument();
+		const tabs = page.getByRole('button', { name: /^(Search|Type|Photo|Upload|Voice|Scan)$/ });
+		expect(tabs.elements()[0]?.textContent?.trim()).toBe('Search');
+	});
+
 	it('opens on the photo tab when the camera asked for it', async () => {
 		await render(LogSheet);
 		logUi.show('photo');

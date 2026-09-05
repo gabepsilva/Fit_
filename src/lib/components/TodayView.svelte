@@ -32,7 +32,7 @@
 	}
 
 	function logMeal(meal: Meal) {
-		logUi.show('type', meal);
+		logUi.show(undefined, meal);
 	}
 </script>
 
