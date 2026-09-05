@@ -353,6 +353,59 @@ describe('LogSheet', () => {
 		expect(add.mock.calls[0]?.[0]).toHaveLength(2);
 	});
 
+	it('does not remount a proposal row when its own stepper is tapped', async () => {
+		// Regression: keying the list by object identity would remount the very
+		// row whose stepper was tapped, since `onchange` emits a fresh object for
+		// that proposal. Keying by a stable id must leave the DOM node in place.
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await expect.element(page.getByText(/Parsed on-device/)).toBeInTheDocument();
+		const row = document.querySelector('li');
+		await page.getByRole('button', { name: 'Increase' }).click();
+		expect(document.querySelector('li')).toBe(row);
+	});
+
+	it('keeps the match panel on the same proposal when an earlier one is removed', async () => {
+		// Regression #112: the panel was tracked by index. Removing an earlier
+		// proposal shifted every later index, moving the open panel onto
+		// whatever proposal now sits at that position instead of following the
+		// proposal it was actually opened for.
+		await openSheet();
+		await page
+			.getByLabelText('What you ate')
+			.fill('two eggs, one banana, xyzzy nonexistent gruel, chicken breast');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await page.getByRole('button', { name: 'Match to catalog' }).click();
+		await expect.element(page.getByLabelText('Find a catalog match')).toBeInTheDocument();
+
+		await page
+			.getByRole('button', { name: /^Remove/ })
+			.first()
+			.click();
+
+		const panelRow = Array.from(document.querySelectorAll('li')).find((li) =>
+			li.querySelector('input[placeholder="Find a catalog match"]')
+		);
+		expect(panelRow?.textContent).toContain('gruel');
+		expect(panelRow?.textContent).not.toContain('chicken breast');
+	});
+
+	it('closes the match panel when the proposal it belongs to is removed', async () => {
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs, xyzzy nonexistent gruel');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await page.getByRole('button', { name: 'Match to catalog' }).click();
+		await expect.element(page.getByLabelText('Find a catalog match')).toBeInTheDocument();
+
+		await page
+			.getByRole('button', { name: /^Remove/ })
+			.nth(1)
+			.click();
+
+		expect(document.body.textContent).not.toContain('Find a catalog match');
+	});
+
 	it('puts the catalog search away when the match panel is closed again', async () => {
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('xyzzy nonexistent gruel');

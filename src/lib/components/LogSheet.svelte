@@ -12,6 +12,7 @@
 	import { guessMeal, hydrateProposal, parseLocalText } from '$lib/domain/parse-text';
 	import { defaultServings, servingStep } from '$lib/domain/profile';
 	import { matchToFood, type QuantifiedItem } from '$lib/domain/quantity';
+	import { nextProposalId, type Proposal } from '$lib/domain/proposal-id';
 	import type { Food, Meal } from '$lib/domain/types';
 	import { MEALS } from '$lib/domain/types';
 	import { todayISO } from '$lib/domain/utils';
@@ -39,8 +40,8 @@
 	let text = $state('');
 	let meal = $state<Meal>(guessMeal());
 	let listening = $state(false);
-	let proposals = $state<QuantifiedItem[]>([]);
-	let matchIndex = $state<number | null>(null);
+	let proposals = $state<Proposal[]>([]);
+	let matchId = $state<string | null>(null);
 	let dictation: Dictation | null = null;
 	/**
 	 * Foods the server catalog answered with, by the id `propose` put on the
@@ -56,7 +57,7 @@
 	function reset() {
 		proposals = [];
 		text = '';
-		matchIndex = null;
+		matchId = null;
 		listening = false;
 		fromCatalog = {};
 		logUi.tab = 'type';
@@ -71,6 +72,7 @@
 		proposals = [
 			...proposals,
 			{
+				id: nextProposalId(),
 				foodId: food.id,
 				query: food.name,
 				name: food.name,
@@ -87,7 +89,8 @@
 		if (!trimmed) return;
 		// Only the on-device parser runs for now; assisted parsing needs a server that is not built yet.
 		const local = parseLocalText(trimmed, meal);
-		proposals = local.items.map(hydrateProposal);
+		proposals = local.items.map((item) => ({ ...hydrateProposal(item), id: nextProposalId() }));
+		matchId = null;
 		if (!local.allMatched) {
 			toast('Some items need a catalog match — tap "Match to catalog".');
 		}
@@ -233,23 +236,28 @@
 					Parsed on-device — tap to correct
 				</div>
 				<ul class="flex flex-col gap-2">
-					{#each proposals as p, i (`${p.query}-${i}`)}
+					{#each proposals as p (p.id)}
 						<ProposalRow
 							item={p}
 							{step}
-							matching={matchIndex === i}
+							matching={matchId === p.id}
 							resolved={p.foodId ? fromCatalog[p.foodId] : undefined}
-							onmatch={() => (matchIndex = matchIndex === i ? null : i)}
+							onmatch={() => (matchId = matchId === p.id ? null : p.id)}
 							onpickmatch={(food: Food) => {
 								// Matching a proposal reaches the same search, so a catalog
 								// food arrives here too and has to be remembered the same way.
 								remember(food);
-								proposals = proposals.map((x, idx) => (idx === i ? matchToFood(x, food) : x));
-								matchIndex = null;
+								proposals = proposals.map((x) =>
+									x.id === p.id ? { ...matchToFood(x, food), id: x.id } : x
+								);
+								matchId = null;
 							}}
 							onchange={(next: QuantifiedItem) =>
-								(proposals = proposals.map((x, idx) => (idx === i ? next : x)))}
-							onremove={() => (proposals = proposals.filter((_, idx) => idx !== i))}
+								(proposals = proposals.map((x) => (x.id === p.id ? { ...next, id: x.id } : x)))}
+							onremove={() => {
+								proposals = proposals.filter((x) => x.id !== p.id);
+								if (matchId === p.id) matchId = null;
+							}}
 						/>
 					{/each}
 				</ul>
