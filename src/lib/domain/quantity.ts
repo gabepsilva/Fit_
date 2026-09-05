@@ -1,4 +1,5 @@
 import { gramsPerVolumeUnit } from './portions';
+import { canonicalUnit, isVolumeUnit, type CanonicalUnit } from './unit-spellings';
 import type { Food, ProposedItem } from './types';
 
 /**
@@ -17,39 +18,21 @@ export type QuantityKind = 'serving' | 'mass' | 'volume';
 const OUNCE = 28.349523125;
 const POUND = 453.59237;
 
-/**
- * Grams in one of each unit the parser accepts, with `0` for the units of
- * volume, whose weight is a property of the food rather than of the unit and so
- * is never listed here — `portions.ts` reads it off the food. The zero is what
- * `classifyUnit` reads to tell the two kinds apart. Mass conversions are exact
- * by definition of the international pound.
- */
-const UNIT_GRAMS: Record<string, number> = {
-	g: 1,
-	gram: 1,
-	grams: 1,
-	kg: 1000,
-	oz: OUNCE,
-	ounce: OUNCE,
-	ounces: OUNCE,
-	lb: POUND,
-	lbs: POUND,
-	pound: POUND,
-	pounds: POUND,
-	cup: 0,
-	cups: 0,
-	tbsp: 0,
-	tsp: 0,
-	ml: 0,
-	l: 0
-};
+/** The canonical units `isVolumeUnit` says are not a volume. */
+type MassUnit = Exclude<CanonicalUnit, 'tsp' | 'tbsp' | 'cup' | 'ml' | 'l'>;
 
 /**
- * Every unit worth reading off the front of a phrase. Order does not matter: an
- * alternation built from it is anchored to what follows, so "150grams" cannot
- * settle for the "g" it tries first.
+ * Grams in one of each unit of mass `unit-spellings.ts` converts to a canonical
+ * unit. Units of volume hold no entry here: their weight is a property of the
+ * food rather than of the unit, so `portions.ts` reads it off the food
+ * instead. Mass conversions are exact by definition of the international pound.
  */
-export const MEASURE_UNITS: readonly string[] = Object.keys(UNIT_GRAMS);
+const UNIT_GRAMS: Record<MassUnit, number> = {
+	g: 1,
+	kg: 1000,
+	oz: OUNCE,
+	lb: POUND
+};
 
 export type QuantitySpec = {
 	/** The number the person typed. */
@@ -74,10 +57,9 @@ export type ResolvedQuantity = {
 type ServingWeight = Pick<Food, 'grams'> & Partial<Pick<Food, 'servingLabel' | 'portions'>>;
 
 export function classifyUnit(unit: string): QuantityKind {
-	// `Object.hasOwn`, not a lookup: "constructor" and "toString" are on every object.
-	const u = unit.toLowerCase();
-	if (!Object.hasOwn(UNIT_GRAMS, u)) return 'serving';
-	return UNIT_GRAMS[u] === 0 ? 'volume' : 'mass';
+	const canonical = canonicalUnit(unit);
+	if (canonical === null) return 'serving';
+	return isVolumeUnit(canonical) ? 'volume' : 'mass';
 }
 
 /**
@@ -98,9 +80,17 @@ function roundServings(n: number): number {
  * when it has never been told.
  */
 function gramsTyped(spec: QuantitySpec, food: ServingWeight | null | undefined): number | null {
-	if (spec.kind !== 'volume') return spec.amount * (UNIT_GRAMS[spec.unit.toLowerCase()] ?? 1);
-	const perUnit = gramsPerVolumeUnit(spec.unit, food);
-	return perUnit === null ? null : spec.amount * perUnit;
+	if (spec.kind === 'volume') {
+		const perUnit = gramsPerVolumeUnit(spec.unit, food);
+		return perUnit === null ? null : spec.amount * perUnit;
+	}
+	const unit = canonicalUnit(spec.unit);
+	// `classifyUnit` only ever produces `kind: 'mass'` for a unit it has already
+	// canonicalized into one of `UNIT_GRAMS`'s keys, so this guard exists for a
+	// `QuantitySpec` built by hand with a `kind` its own `unit` disagrees with —
+	// treated as one gram per unit rather than thrown away.
+	if (unit === null || isVolumeUnit(unit)) return spec.amount;
+	return spec.amount * UNIT_GRAMS[unit];
 }
 
 export function resolveQuantity(

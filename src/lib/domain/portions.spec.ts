@@ -26,6 +26,7 @@ describe('volumeUnit', () => {
 		['teaspoon', 'tsp'],
 		['teaspoons', 'tsp'],
 		['tbsp', 'tbsp'],
+		['tbsp.', 'tbsp'],
 		['tbsps', 'tbsp'],
 		['tbs', 'tbsp'],
 		['tablespoon', 'tbsp'],
