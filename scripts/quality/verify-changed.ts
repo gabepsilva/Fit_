@@ -376,4 +376,6 @@ async function main(): Promise<void> {
 	if (!summary.ok) process.exitCode = summaryExitCode(summary);
 }
 
-await main();
+if (import.meta.main) {
+	await main();
+}
