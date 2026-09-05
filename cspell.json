@@ -2,6 +2,7 @@
 	"version": "0.2",
 	"language": "en,en-CA",
 	"useGitignore": true,
+	"ignoreRegExpList": ["/\\.[A-Za-z0-9_-]{8}\\.js/"],
 	"files": ["**/*.{js,json,jsonc,md,mjs,svelte,toml,ts,yaml,yml}"],
 	"ignorePaths": [
 		"android/**",

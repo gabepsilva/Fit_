@@ -1,6 +1,6 @@
 # SQLite query plans
 
-Catalog statements run against the live catalog file.
+Catalog statements run against the in-memory fixture schema (`tests/catalog-fixture.ts`) — no catalog file is installed on this machine.
 
 ## Statements
 

@@ -13,7 +13,8 @@ import type { RouteSample } from './phone-paint-metrics.ts';
  * recording `domContentLoaded`, largest contentful paint (falling back to
  * `loadEventEnd` where the browser reports no LCP), and transferred bytes.
  * Also the time to open the log sheet, and — where a catalog is installed —
- * one search round trip.
+ * one search round trip, warmed first (see `sampleCatalogSearch`) so the
+ * sample is the client's cost rather than the server's cold catalog open.
  *
  * Run through `playwright test --config scripts/perf/phone-paint.config.ts`
  * rather than as a vitest spec: it needs a real browser and the preview
@@ -102,9 +103,25 @@ async function sampleCatalogSearch(
 	}
 	await page.goto('/today', { waitUntil: 'load' });
 	await openLogSheet(page);
+	const box = page.getByLabel('Search foods, brands, barcodes');
+	// A search this run has not asked yet is a cold one: `getCatalog()` opens
+	// the 1.4 GB catalog file on the server's first request to reach it, and
+	// that request's own query pages in btree and FTS leaves this fresh
+	// process has never read, which measured multiple seconds on this
+	// machine — nothing a browser or client change touches. A server that
+	// has been running for any length of time in production has already
+	// paid that cost once; timing a search this run has already asked once
+	// before is what makes the sample below the client's own round trip
+	// rather than a replay of the server's cold start.
+	const warmUpResponse = page.waitForResponse((candidate) =>
+		candidate.url().includes('/api/foods?')
+	);
+	await box.fill('milk');
+	await warmUpResponse;
+	await box.fill('');
 	const started = Date.now();
 	const response = page.waitForResponse((candidate) => candidate.url().includes('/api/foods?'));
-	await page.getByLabel('Search foods, brands, barcodes').fill('milk');
+	await box.fill('milk');
 	await response;
 	const ms = Date.now() - started;
 	await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click();
