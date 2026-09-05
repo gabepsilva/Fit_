@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { DatabaseSync } from 'node:sqlite';
+import { withinLimits } from '$lib/domain/resolve-limits';
 import { apiError, MAX_BODY_BYTES } from '../api';
 import { ready } from './endpoints';
 import { resolveFood } from './resolve';
@@ -20,22 +21,6 @@ export type ResolveEvent = {
 	locals: App.Locals;
 };
 
-/**
- * How many names one sentence may ask about.
- *
- * Each one is a full-text search of the catalog, so the cap is what stops a
- * single request buying an unbounded number of them. Twelve is far more foods
- * than a sentence a person types by hand holds; the client keeps whatever is
- * past it as an unmatched proposal rather than dropping it silently.
- */
-export const MAX_QUERIES = 12;
-
-/**
- * The longest a single name may be. A food name past eighty characters is not
- * a name, and the ranking has nothing to do with the tail of it.
- */
-export const MAX_QUERY_LENGTH = 80;
-
 /** One code for every way the body is wrong: none of them says anything about stored state. */
 type ParsedResolveBody = { ok: true; queries: string[] } | { ok: false };
 
@@ -43,12 +28,13 @@ const REFUSED = { ok: false } as const;
 
 /**
  * Whether the field is a list of names this endpoint will search for: present,
- * non-empty, within the cap, and every entry a string no longer than one name.
+ * every entry a string, and the list within the caps `resolve-limits.ts` sets
+ * for both sides of the wire.
  */
 function namesQueries(value: unknown): value is string[] {
 	if (!Array.isArray(value)) return false;
-	if (value.length === 0 || value.length > MAX_QUERIES) return false;
-	return value.every((query) => typeof query === 'string' && query.length <= MAX_QUERY_LENGTH);
+	if (!value.every((query) => typeof query === 'string')) return false;
+	return withinLimits(value);
 }
 
 /**
@@ -81,9 +67,9 @@ function fieldsOf(raw: string): Record<string, unknown> | null {
 /**
  * The names asked about, or the refusal.
  *
- * An empty list is refused rather than answered with an empty result: nothing
- * the client does produces one, so a body that carries none is a caller that
- * built it by hand, and answering it would spend a round trip saying nothing.
+ * The caps come from `resolve-limits.ts`, which both sides of the wire read, so
+ * the client cannot build a request this refuses; they are still checked here,
+ * because a client that ignores them is exactly what this has to turn away.
  * `MAX_BODY_BYTES` is `api.ts`'s ceiling for a handful of short strings, and
  * twelve names of eighty characters sits well inside it.
  */

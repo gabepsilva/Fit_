@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CatalogFoodPayload } from '$lib/domain/catalog-food';
-import { MAX_QUERIES, resolveFoodNames } from './food-resolve';
+import { MAX_QUERIES, MAX_QUERY_LENGTH } from '$lib/domain/resolve-limits';
+import { resolveFoodNames } from './food-resolve';
 
 const CEREAL: CatalogFoodPayload = {
 	id: 4213,
@@ -155,5 +156,34 @@ describe('resolveFoodNames', () => {
 
 	it('caps at the number of names one request may carry', () => {
 		expect(MAX_QUERIES).toBe(12);
+	});
+
+	it('trims a name past the length cap instead of letting the request be refused', async () => {
+		// The endpoint refuses the whole body over one long name, and that refusal
+		// reads as "unreachable" — so one long phrase would cost the rest of the
+		// sentence its answer and blame the connection for it.
+		const long =
+			'1 bowl homemade slow cooked spicy moroccan chickpea sweet potato and red lentil stew with preserved lemon';
+		expect(long.length).toBeGreaterThan(MAX_QUERY_LENGTH);
+		const fetching = answering(200, {
+			items: [
+				{ query: long.slice(0, MAX_QUERY_LENGTH), food: CEREAL, alternatives: [] },
+				{ query: 'eggs', food: CEREAL, alternatives: [] }
+			]
+		});
+		const outcome = await resolveFoodNames([long, 'eggs'], fetching);
+
+		const posted = fetching.mock.calls[0]?.[1]?.body;
+		const sent = JSON.parse(typeof posted === 'string' ? posted : '{}') as { queries: string[] };
+		expect(sent.queries[0]).toBe(long.slice(0, MAX_QUERY_LENGTH));
+		expect(sent.queries[0]).toHaveLength(MAX_QUERY_LENGTH);
+		// The second name is sent whole: only what is over the cap is trimmed.
+		expect(sent.queries[1]).toBe('eggs');
+		expect(outcome.kind).toBe('resolved');
+		if (outcome.kind !== 'resolved') return;
+		expect(outcome.items.map((item) => item.food?.name ?? null)).toEqual([
+			'HONEY NUT CHEERIOS',
+			'HONEY NUT CHEERIOS'
+		]);
 	});
 });

@@ -1,4 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * Toasts are the sheet's only way of saying what it did with a row it could not
+ * log, and nothing here mounts a `Toaster` — `AppShell` owns that — so they are
+ * recorded rather than read off the DOM. Same shape as `sync.svelte.spec.ts`.
+ */
+const announced = vi.hoisted(() => [] as string[]);
+vi.mock('svelte-sonner', () => ({
+	toast: (message: string) => {
+		announced.push(message);
+	}
+}));
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { emptyProfile } from '$lib/domain/profile';
@@ -186,6 +198,7 @@ beforeEach(() => {
 	logUi.tab = 'type';
 	logUi.meal = null;
 	vi.restoreAllMocks();
+	announced.length = 0;
 	onboard();
 });
 
@@ -304,6 +317,57 @@ describe('LogSheet', () => {
 		await expect
 			.element(page.getByRole('button', { name: 'Match to catalog' }))
 			.toBeInTheDocument();
+	});
+
+	it('resolves a phrase longer than the endpoint accepts, and the rows beside it', async () => {
+		// Regression: the client capped the number of names but not their length,
+		// so one long phrase was refused with the whole body and every row in the
+		// sentence came back as "matching needs the server".
+		const long =
+			'1 bowl homemade slow cooked spicy moroccan chickpea sweet potato and red lentil stew with preserved lemon';
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		resolvesTo(CHICKEN, EGG);
+		await openSheet();
+		await page.getByLabelText('What you ate').fill(`${long}, two eggs`);
+		await page.getByRole('button', { name: 'Parse' }).click();
+
+		await expect.element(page.getByText('Chicken breast, grilled').first()).toBeInTheDocument();
+		await expect.element(page.getByText('Egg, large').first()).toBeInTheDocument();
+		expect(announced.some((line) => line.includes('Matching needs the server'))).toBe(false);
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add.mock.calls[0]?.[0]).toHaveLength(2);
+	});
+
+	it('says how many rows it could not log when only some had a food', async () => {
+		// Regression: `commit` dropped every row with no catalog food and said
+		// only how many it added, so the third item vanished with the sheet.
+		vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		resolvesTo(EGG, BANANA, null);
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs, one banana, xyzzy gruel');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await expect.element(page.getByText('Banana').first()).toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		await vi.waitFor(() =>
+			expect(announced).toContain(
+				'1 item had no catalog food and was not logged — match each item to a catalog food first.'
+			)
+		);
+		expect(announced).toContain('Added 2 items.');
+	});
+
+	it('says nothing about skipped rows when every row was logged', async () => {
+		vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		resolvesTo(EGG, BANANA);
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs, one banana');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await expect.element(page.getByText('Banana').first()).toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		await vi.waitFor(() => expect(announced).toContain('Added 2 items.'));
+		expect(announced.some((line) => line.includes('had no catalog food'))).toBe(false);
 	});
 
 	it('lets the second submission win when the first is still in flight', async () => {

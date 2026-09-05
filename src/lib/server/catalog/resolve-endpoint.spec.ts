@@ -2,13 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFixtureCatalog } from '../../../../tests/catalog-fixture';
 import type { Auth } from '../users/types';
+import { MAX_QUERIES, MAX_QUERY_LENGTH } from '$lib/domain/resolve-limits';
 import { MAX_BODY_BYTES } from '../api';
-import {
-	MAX_QUERIES,
-	MAX_QUERY_LENGTH,
-	resolveFoodNames,
-	type ResolveEvent
-} from './resolve-endpoint';
+import { resolveFoodNames, type ResolveEvent } from './resolve-endpoint';
 
 const SIGNED_IN = {
 	account: { id: 'a1', username: 'jordan', displayName: 'Jordan', createdAt: '2026-01-01' },
@@ -156,6 +152,13 @@ describe('resolveFoodNames', () => {
 		expect((await resolveFoodNames(catalog, asking(tooLong))).status).toBe(400);
 	});
 
+	it('refuses the body when one name of several is too long', async () => {
+		// The cap is on every name, not on any name: a sentence is refused whole
+		// rather than searched for the short half of it.
+		const tooLong = 'm'.repeat(MAX_QUERY_LENGTH + 1);
+		expect((await resolveFoodNames(catalog, asking('milk', tooLong))).status).toBe(400);
+	});
+
 	it('refuses an empty list rather than spending a round trip on nothing', async () => {
 		expect((await resolveFoodNames(catalog, asking())).status).toBe(400);
 	});
@@ -164,6 +167,9 @@ describe('resolveFoodNames', () => {
 		['no `queries` field at all', { names: ['milk'] }],
 		['a `queries` field that is not a list', { queries: 'milk' }],
 		['a list holding something that is not a name', { queries: ['milk', 7] }],
+		// An array answers a number to `.length`, so a caps check alone would pass
+		// it and hand a non-string to the catalog query.
+		['a list holding an array that answers a length', { queries: ['milk', ['ab']] }],
 		['a list holding null', { queries: [null] }],
 		['a body that is not an object', ['milk']],
 		['a body that is JSON null', null]

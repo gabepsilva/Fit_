@@ -7,7 +7,8 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import { toast } from 'svelte-sonner';
-	import { MAX_QUERIES, resolveFoodNames } from '$lib/catalog/food-resolve';
+	import { resolveFoodNames } from '$lib/catalog/food-resolve';
+	import { MAX_QUERIES } from '$lib/domain/resolve-limits';
 	import { foodProposal } from '$lib/domain/food-proposal';
 	import { FOOD_BY_ID } from '$lib/domain/foods';
 	import { logFromCatalogFood, logFromFood } from '$lib/domain/log-entry';
@@ -287,6 +288,18 @@
 		}
 		tend.addLogItems(items);
 		toast(`Added ${items.length} ${items.length === 1 ? 'item' : 'items'}.`);
+		// The sheet closes on the next line, taking the skipped rows with it, so
+		// this is the only moment they can be named. Saying "added 2" and quietly
+		// dropping the third is the sheet deciding something on the person's
+		// behalf and not telling them.
+		const skipped = proposals.length - items.length;
+		if (skipped > 0) {
+			toast(
+				`${skipped} ${skipped === 1 ? 'item' : 'items'} had no catalog food and ${
+					skipped === 1 ? 'was' : 'were'
+				} not logged — match each item to a catalog food first.`
+			);
+		}
 		close();
 	}
 </script>

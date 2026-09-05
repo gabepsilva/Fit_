@@ -1,5 +1,6 @@
 import { resolve } from '$app/paths';
 import { catalogFoodToFood, isCatalogFoodPayload } from '$lib/domain/catalog-food';
+import { MAX_QUERY_LENGTH } from '$lib/domain/resolve-limits';
 import type { Food } from '$lib/domain/types';
 
 /**
@@ -11,14 +12,6 @@ import type { Food } from '$lib/domain/types';
  * not be matched must not look like a sentence nothing was found for -- the
  * first is worth retrying and the second is not.
  */
-
-/**
- * How many names one submission may ask about, which is the cap
- * `src/lib/server/catalog/resolve-endpoint.ts` enforces. Sending more would be
- * refused wholesale, so the caller keeps the rest as unmatched proposals and
- * says so instead.
- */
-export const MAX_QUERIES = 12;
 
 /** What the catalog had for one of the names asked about. */
 type ResolvedName = {
@@ -66,12 +59,18 @@ export async function resolveFoodNames(
 	queries: string[],
 	doFetch: typeof fetch = fetch
 ): Promise<ResolveOutcome> {
+	// Trimmed rather than sent whole. The endpoint refuses a body in which any
+	// one name is too long, and a refusal is indistinguishable from being
+	// offline, so a single long phrase would cost every other row in the
+	// sentence its answer and be blamed on the connection. The tail of an
+	// eighty-character phrase is not what the ranking reads anyway.
+	const asked = queries.map((query) => query.slice(0, MAX_QUERY_LENGTH));
 	let response: Response;
 	try {
 		response = await doFetch(resolve('/api/foods/resolve'), {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ queries })
+			body: JSON.stringify({ queries: asked })
 		});
 	} catch {
 		// A dropped connection is not an answer about this sentence.
