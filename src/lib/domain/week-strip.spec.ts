@@ -1,6 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { addDaysISO, startOfWeek, todayISO, weekdayShort } from './utils';
-import { dayStripLabel, dayStripRange, loggedMarksText, todayAriaLabel } from './week-strip';
+import {
+	dayStripAccessibleLabel,
+	dayStripLabel,
+	dayStripRange,
+	loggedMarksText
+} from './week-strip';
+
+// A month-name fixture independent of week-strip.ts's own (private) lookup,
+// so these expectations don't just restate the implementation.
+const MONTHS_SHORT = [
+	'Jan',
+	'Feb',
+	'Mar',
+	'Apr',
+	'May',
+	'Jun',
+	'Jul',
+	'Aug',
+	'Sep',
+	'Oct',
+	'Nov',
+	'Dec'
+];
+function monthShort(iso: string): string {
+	return MONTHS_SHORT[Number(iso.slice(5, 7)) - 1] ?? '';
+}
 
 describe('loggedMarksText', () => {
 	it('reports nothing logged when all three are false', () => {
@@ -88,18 +113,53 @@ describe('dayStripLabel', () => {
 	});
 });
 
-describe('todayAriaLabel', () => {
+describe('dayStripAccessibleLabel', () => {
 	it('leads with "Today" and includes the date label and logged marks', () => {
 		const today = todayISO();
-		expect(todayAriaLabel(today, 'food logged')).toBe(
-			`Today, ${dayStripLabel(today)}, food logged`
+		expect(dayStripAccessibleLabel(today, 'food logged', true)).toBe(
+			`Today, ${dayStripLabel(today)} ${monthShort(today)}, food logged`
+		);
+	});
+
+	it('omits "Today" for a day that is not today', () => {
+		const yesterday = addDaysISO(todayISO(), -1);
+		expect(dayStripAccessibleLabel(yesterday, 'nothing logged', false)).toBe(
+			`${dayStripLabel(yesterday)} ${monthShort(yesterday)}, nothing logged`
 		);
 	});
 
 	it('reflects "nothing logged" when nothing was logged', () => {
 		const today = todayISO();
-		expect(todayAriaLabel(today, 'nothing logged')).toBe(
-			`Today, ${dayStripLabel(today)}, nothing logged`
+		expect(dayStripAccessibleLabel(today, 'nothing logged', true)).toContain('nothing logged');
+	});
+
+	// April 30 and May 1, 2024 are a Tuesday and a Wednesday: a month
+	// boundary the visible `dayStripLabel` already tells apart on its own
+	// (different day-of-month), unlike the Feb/Mar overlap below.
+	it('labels a month boundary distinctly: "Tue 30" then "Wed 1"', () => {
+		expect(dayStripLabel('2024-04-30')).toBe('Tue 30');
+		expect(dayStripLabel('2024-05-01')).toBe('Wed 1');
+		expect(dayStripAccessibleLabel('2024-04-30', 'nothing logged', false)).toBe(
+			'Tue 30 Apr, nothing logged'
 		);
+		expect(dayStripAccessibleLabel('2024-05-01', 'nothing logged', false)).toBe(
+			'Wed 1 May, nothing logged'
+		);
+	});
+
+	// Feb 5 and Mar 5, 2027 are both Fridays, so `dayStripLabel` alone ("Fri 5")
+	// collides for these two in-range days — exactly the case a strict DOM
+	// query (or a screen reader) cannot tell apart without the month.
+	it('stays unique across the whole 38-day range even when Feb and Mar overlap', () => {
+		const today = '2027-03-05';
+		const range = dayStripRange(today);
+
+		const visibleLabels = range.map((iso) => dayStripLabel(iso));
+		expect(new Set(visibleLabels).size).toBeLessThan(visibleLabels.length);
+
+		const accessibleLabels = range.map((iso) =>
+			dayStripAccessibleLabel(iso, 'nothing logged', iso === today)
+		);
+		expect(new Set(accessibleLabels).size).toBe(accessibleLabels.length);
 	});
 });

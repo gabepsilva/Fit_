@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { addDaysISO, todayISO } from '$lib/domain/utils';
-import { dayStripLabel } from '$lib/domain/week-strip';
+import { dayStripAccessibleLabel } from '$lib/domain/week-strip';
 import WeekStrip from './WeekStrip.svelte';
 
 const empty = () => new Set<string>();
@@ -21,7 +21,12 @@ describe('WeekStrip', () => {
 			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
 		});
 		await expect
-			.element(page.getByText(dayStripLabel(todayISO()), { exact: true }))
+			.element(
+				page.getByRole('button', {
+					name: dayStripAccessibleLabel(todayISO(), 'nothing logged', true),
+					exact: true
+				})
+			)
 			.toBeInTheDocument();
 	});
 
@@ -31,8 +36,23 @@ describe('WeekStrip', () => {
 			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
 		});
 		await expect
-			.element(page.getByText(dayStripLabel(yesterday), { exact: true }))
+			.element(
+				page.getByRole('button', {
+					name: dayStripAccessibleLabel(yesterday, 'nothing logged', false),
+					exact: true
+				})
+			)
 			.toBeInTheDocument();
+	});
+
+	it('gives every pill a unique accessible name, even across a Feb/Mar visible-label overlap', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const names = Array.from(document.querySelectorAll('button')).map((button) =>
+			button.getAttribute('aria-label')
+		);
+		expect(new Set(names).size).toBe(names.length);
 	});
 
 	it("gives today's pill an accessible name starting with Today", async () => {
@@ -59,6 +79,17 @@ describe('WeekStrip', () => {
 		expect(todayButton.className).not.toContain('ring-primary');
 	});
 
+	it('gives a non-today pill no ring regardless of selection', async () => {
+		const yesterday = addDaysISO(todayISO(), -1);
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: yesterday }
+		});
+		const yesterdayButton = page
+			.getByRole('button', { name: dayStripAccessibleLabel(yesterday, 'nothing logged', false) })
+			.element() as HTMLElement;
+		expect(yesterdayButton.className).not.toContain('ring-primary');
+	});
+
 	it('marks the selected day as pressed', async () => {
 		await render(WeekStrip, {
 			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
@@ -78,7 +109,10 @@ describe('WeekStrip', () => {
 		});
 		await render(WeekStrip, { props });
 		await page
-			.getByRole('button', { name: `${dayStripLabel(yesterday)} nothing logged`, exact: true })
+			.getByRole('button', {
+				name: dayStripAccessibleLabel(yesterday, 'nothing logged', false),
+				exact: true
+			})
 			.click();
 		expect(props.selected).toBe(yesterday);
 	});
@@ -125,7 +159,7 @@ describe('WeekStrip', () => {
 				selected: todayISO()
 			}
 		});
-		await expect.element(page.getByText('food logged')).toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: /food logged/ })).toBeInTheDocument();
 	});
 
 	it('names all three when food, exercise and weight were all logged', async () => {
@@ -138,14 +172,18 @@ describe('WeekStrip', () => {
 				selected: todayISO()
 			}
 		});
-		await expect.element(page.getByText('food, exercise, weight logged')).toBeInTheDocument();
+		await expect
+			.element(page.getByRole('button', { name: /food, exercise, weight logged/ }))
+			.toBeInTheDocument();
 	});
 
 	it('says nothing logged for a day with no marks', async () => {
 		await render(WeekStrip, {
 			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
 		});
-		await expect.element(page.getByText('nothing logged').first()).toBeInTheDocument();
+		await expect
+			.element(page.getByRole('button', { name: /nothing logged/ }).first())
+			.toBeInTheDocument();
 	});
 
 	it('keeps exactly one pill tabbable, the selected one', async () => {

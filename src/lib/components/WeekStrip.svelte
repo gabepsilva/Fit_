@@ -3,10 +3,10 @@
 	import Utensils from '@lucide/svelte/icons/utensils';
 	import Weight from '@lucide/svelte/icons/weight';
 	import {
+		dayStripAccessibleLabel,
 		dayStripLabel,
 		dayStripRange,
-		loggedMarksText,
-		todayAriaLabel
+		loggedMarksText
 	} from '$lib/domain/week-strip';
 	import { todayISO } from '$lib/domain/utils';
 	import { cn } from '$lib/ui/cn';
@@ -78,9 +78,11 @@
 			onkeydown={(event: KeyboardEvent) => handlePillKeydown(i, event)}
 			tabindex={isSelected ? 0 : -1}
 			resting="bg-card text-foreground"
-			aria-label={isToday
-				? todayAriaLabel(iso, loggedMarksText(hasFood, hasExercise, hasWeight))
-				: undefined}
+			aria-label={dayStripAccessibleLabel(
+				iso,
+				loggedMarksText(hasFood, hasExercise, hasWeight),
+				isToday
+			)}
 			class={cn(
 				'relative flex h-16 w-20 shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-2 snap-center transition-colors duration-150',
 				isToday && !isSelected && 'ring-1 ring-primary ring-inset'
@@ -113,7 +115,6 @@
 					class={cn('size-4 shrink-0', markClass(isSelected, hasWeight))}
 				/>
 			</span>
-			<span class="sr-only">{loggedMarksText(hasFood, hasExercise, hasWeight)}</span>
 		</ToggleButton>
 	{/each}
 </div>
