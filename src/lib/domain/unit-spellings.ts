@@ -75,7 +75,10 @@ const VOLUME_UNITS: ReadonlySet<CanonicalUnit | null> = new Set<CanonicalUnit | 
  */
 export function canonicalUnit(word: string): CanonicalUnit | null {
 	const spelled = word.trim().toLowerCase();
-	return Object.hasOwn(UNIT_SPELLINGS, spelled) ? (UNIT_SPELLINGS[spelled] ?? null) : null;
+	// `hasOwn` already proved the key present; the cast only tells the compiler
+	// what `hasOwn` cannot — an index signature reads as possibly-`undefined`
+	// (`noUncheckedIndexedAccess`) whether or not the key is known to exist.
+	return Object.hasOwn(UNIT_SPELLINGS, spelled) ? (UNIT_SPELLINGS[spelled] as CanonicalUnit) : null;
 }
 
 /**
