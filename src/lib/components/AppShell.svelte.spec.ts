@@ -329,11 +329,11 @@ describe('AppShell, signed in', () => {
 		expect(logUi.open).toBe(true);
 	});
 
-	it('leaves the plain log action on the typing tab', async () => {
+	it('leaves the plain log action on the search tab', async () => {
 		seedReturningVisit();
 		await render(AppShellHarness, { props: { body: 'Page body' } });
 		await page.getByRole('button', { name: 'Log food' }).click();
-		expect(logUi.tab).toBe('type');
+		expect(logUi.tab).toBe('search');
 	});
 
 	it('closes the app the moment the session expires under it', async () => {

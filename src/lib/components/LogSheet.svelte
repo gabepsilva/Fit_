@@ -29,12 +29,12 @@
 	import { startDictation, type Dictation } from '$lib/ui/dictation';
 
 	const TABS = [
+		{ id: 'search', icon: Search, label: 'Search' },
 		{ id: 'type', icon: Keyboard, label: 'Type' },
 		{ id: 'photo', icon: Camera, label: 'Photo' },
 		{ id: 'upload', icon: ImageUp, label: 'Upload' },
 		{ id: 'voice', icon: Mic, label: 'Voice' },
-		{ id: 'scan', icon: ScanBarcode, label: 'Scan' },
-		{ id: 'search', icon: Search, label: 'Search' }
+		{ id: 'scan', icon: ScanBarcode, label: 'Scan' }
 	] as const satisfies readonly { id: LogTab; icon: unknown; label: string }[];
 
 	let text = $state('');
@@ -67,6 +67,10 @@
 		logUi.open = false;
 		reset();
 	}
+
+	$effect(() => {
+		if (logUi.open) meal = logUi.meal ?? guessMeal();
+	});
 
 	function propose(food: Food, confidence: number) {
 		proposals = [
