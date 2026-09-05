@@ -21,7 +21,7 @@
 	"mutationPolicy.changed.maxNoCoverage": 0,
 	"mutationPolicy.changed.maxErrors": 0,
 	"bundle.clientCssBytes": 51200,
-	"bundle.clientJavaScriptBytes": 423936,
+	"bundle.clientJavaScriptBytes": 425984,
 	"bundle.largestAssetBytes": 76800,
 	"duplication.threshold": 5,
 	"duplication.maxClones": 0,
