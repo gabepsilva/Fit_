@@ -1,20 +1,14 @@
 <script lang="ts">
-	import Camera from '@lucide/svelte/icons/camera';
 	import Menu from '@lucide/svelte/icons/menu';
-	import Plus from '@lucide/svelte/icons/plus';
 	import Button from '$lib/ui/Button.svelte';
 
 	// menuOpen is reported, not owned: the shell holds the drawer; this only feeds aria-expanded.
 	let {
 		menuOpen,
-		onmenu,
-		onphoto,
-		onlog
+		onmenu
 	}: {
 		menuOpen: boolean;
 		onmenu: () => void;
-		onphoto: () => void;
-		onlog: () => void;
 	} = $props();
 </script>
 
@@ -33,11 +27,5 @@
 			<Menu class="size-6" />
 		</Button>
 		<span class="font-display flex-1 text-xl tracking-tight">Fit_</span>
-		<Button variant="ghost" size="icon" onclick={onphoto} aria-label="Log from a photo">
-			<Camera class="size-6" />
-		</Button>
-		<Button size="icon-round" class="shadow-border" onclick={onlog} aria-label="Log food">
-			<Plus class="size-5" />
-		</Button>
 	</div>
 </header>
