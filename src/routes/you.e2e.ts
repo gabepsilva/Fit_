@@ -26,6 +26,7 @@ test.describe('height on the You screen', () => {
 		await openYou(page);
 		const height = page.getByLabel('Height in centimeters');
 		await expect(height).toHaveValue('168');
+		await expect(page.getByText('cm', { exact: true })).toBeVisible();
 
 		await height.fill('180');
 		await page.getByRole('button', { name: 'Save height' }).click();
@@ -42,6 +43,8 @@ test.describe('height on the You screen', () => {
 		await page.getByRole('button', { name: 'Imperial' }).click();
 		await expect(page.getByLabel('Height, feet')).toHaveValue('5');
 		await expect(page.getByLabel('Height, inches')).toHaveValue('6');
+		await expect(page.getByText('ft', { exact: true })).toBeVisible();
+		await expect(page.getByText('in', { exact: true })).toBeVisible();
 
 		await page.getByLabel('Height, feet').fill('5');
 		await page.getByLabel('Height, inches').fill('9');

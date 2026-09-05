@@ -68,6 +68,21 @@ describe('the Height field', () => {
 		await expect.element(page.getByLabelText('Height, inches')).toBeInTheDocument();
 	});
 
+	it('shows a visible cm unit label under the metric preference, not ft or in', async () => {
+		await render(YouPage);
+		await expect.element(page.getByText('cm', { exact: true })).toBeInTheDocument();
+		await expect.element(page.getByText('ft', { exact: true })).not.toBeInTheDocument();
+		await expect.element(page.getByText('in', { exact: true })).not.toBeInTheDocument();
+	});
+
+	it('shows visible ft and in unit labels under the imperial preference, not cm', async () => {
+		tend.state.units = 'imperial';
+		await render(YouPage);
+		await expect.element(page.getByText('ft', { exact: true })).toBeInTheDocument();
+		await expect.element(page.getByText('in', { exact: true })).toBeInTheDocument();
+		await expect.element(page.getByText('cm', { exact: true })).not.toBeInTheDocument();
+	});
+
 	it('saves an edited height onto the active profile', async () => {
 		await render(YouPage);
 		await page.getByLabelText('Height in centimeters').fill('180');
