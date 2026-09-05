@@ -15,11 +15,26 @@ import type { EndpointLatency } from './server-latency-metrics.ts';
  * catalog those endpoints read; `serverLatency` reports `null` with why when
  * this machine does not have one, rather than measuring the
  * `catalog-unavailable` error path and calling that a latency number.
+ *
+ * The first pass and the rest are reported separately, not pooled, because
+ * they answer different questions. `getCatalog()` opens the catalog file on
+ * this server's first request to touch it, and every query's first execution
+ * reads btree and FTS pages this fresh process has never paged in — measured
+ * on this machine at 2.4 s to 8.5 s a query, against 40-450 ms once the same
+ * page is read again. #130's own instrument (`phone-paint.run.ts`, before this
+ * change) took that one cold sample as "the round trip" and reported multiple
+ * seconds; pooling it into 88 pooled samples here is the same mistake spread
+ * thinner; it is why the original p95 (247 ms) sat so far above the p50
+ * (51 ms). A pass on an already-open connection is what a production server
+ * gives every request after its first, so `(warm)` is the number worth
+ * comparing across runs; `(cold)` exists to keep that fact visible rather
+ * than folded away, the same distinction `scripts/eval/search-eval.ts`
+ * already draws between its own cold and warm passes.
  */
 
 const PORT = 4599;
 const READY_TIMEOUT_MS = 60_000;
-const WARM_PASSES = 2;
+const PASSES = 2;
 
 async function waitUntilServing(port: number, server: ChildProcess): Promise<void> {
 	const deadline = Date.now() + READY_TIMEOUT_MS;
@@ -146,27 +161,29 @@ export async function measureServerLatency(
 		const baseURL = `http://127.0.0.1:${PORT}`;
 		const cookie = await signIn(baseURL);
 
-		const searchSamples: number[] = [];
-		for (let pass = 0; pass < WARM_PASSES; pass += 1) {
+		const searchPasses: number[][] = [];
+		for (let pass = 0; pass < PASSES; pass += 1) {
+			const passSamples: number[] = [];
 			for (const query of queries) {
-				searchSamples.push(
-					await timed(baseURL, `/api/foods?q=${encodeURIComponent(query)}`, cookie)
-				);
+				passSamples.push(await timed(baseURL, `/api/foods?q=${encodeURIComponent(query)}`, cookie));
 			}
+			searchPasses.push(passSamples);
 		}
 
 		const barcode = await findKnownBarcode(baseURL, cookie, queries);
-		const barcodeSamples: number[] = [];
-		for (let pass = 0; pass < WARM_PASSES; pass += 1) {
-			barcodeSamples.push(
+		const barcodePasses: number[][] = [];
+		for (let pass = 0; pass < PASSES; pass += 1) {
+			barcodePasses.push([
 				await timed(baseURL, `/api/foods/barcode?code=${encodeURIComponent(barcode)}`, cookie)
-			);
+			]);
 		}
 
 		return {
 			rows: [
-				summarizeLatencies('GET /api/foods', searchSamples),
-				summarizeLatencies('GET /api/foods/barcode', barcodeSamples)
+				summarizeLatencies('GET /api/foods (cold)', searchPasses[0] ?? []),
+				summarizeLatencies('GET /api/foods (warm)', searchPasses.slice(1).flat()),
+				summarizeLatencies('GET /api/foods/barcode (cold)', barcodePasses[0] ?? []),
+				summarizeLatencies('GET /api/foods/barcode (warm)', barcodePasses.slice(1).flat())
 			],
 			skipReason: null
 		};

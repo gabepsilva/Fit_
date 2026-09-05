@@ -1,63 +1,75 @@
 {
-	"when": "2026-09-05T07:12:10.589Z",
+	"when": "2026-09-05T09:17:02.939Z",
 	"bundle": {
-		"javascriptBytes": 428151,
+		"javascriptBytes": 418821,
 		"cssBytes": 50680,
 		"largestAsset": {
-			"bytes": 76879,
-			"file": "nodes/0.B4lmDWhB.js"
+			"bytes": 81658,
+			"file": "nodes/0.CEjzsu3J.js"
 		}
 	},
 	"phonePaint": {
 		"routes": [
 			{
 				"route": "/today",
-				"domContentLoadedMs": 17,
-				"lcpMs": 17.100000008940697,
-				"transferredBytes": 870
+				"domContentLoadedMs": 30.599999994039536,
+				"lcpMs": 31,
+				"transferredBytes": 869
 			},
 			{
 				"route": "/journal",
-				"domContentLoadedMs": 15.399999991059303,
-				"lcpMs": 15.599999994039536,
-				"transferredBytes": 870
+				"domContentLoadedMs": 37.29999998211861,
+				"lcpMs": 37.5,
+				"transferredBytes": 869
 			},
 			{
 				"route": "/progress",
-				"domContentLoadedMs": 24.799999997019768,
-				"lcpMs": 25.5,
-				"transferredBytes": 8166
+				"domContentLoadedMs": 105.7000000178814,
+				"lcpMs": 109,
+				"transferredBytes": 9584
 			},
 			{
 				"route": "/plan",
-				"domContentLoadedMs": 30.5,
-				"lcpMs": 31.299999997019768,
-				"transferredBytes": 7926
+				"domContentLoadedMs": 63.900000005960464,
+				"lcpMs": 64.80000001192093,
+				"transferredBytes": 9344
 			},
 			{
 				"route": "/you",
-				"domContentLoadedMs": 37.79999999701977,
-				"lcpMs": 38.8999999910593,
-				"transferredBytes": 7645
+				"domContentLoadedMs": 132.10000002384186,
+				"lcpMs": 132.90000000596046,
+				"transferredBytes": 9063
 			}
 		],
-		"logSheetOpenMs": 100,
-		"catalogSearchMs": 2030,
+		"logSheetOpenMs": 141,
+		"catalogSearchMs": 426,
 		"catalogSearchSkipReason": null
 	},
 	"serverLatency": {
 		"rows": [
 			{
-				"endpoint": "GET /api/foods",
-				"samples": 88,
-				"p50Ms": 50.95442600000024,
-				"p95Ms": 246.77681099999973
+				"endpoint": "GET /api/foods (cold)",
+				"samples": 44,
+				"p50Ms": 469.1564769999968,
+				"p95Ms": 4377.741901000001
 			},
 			{
-				"endpoint": "GET /api/foods/barcode",
-				"samples": 2,
-				"p50Ms": 2.202452000004996,
-				"p95Ms": 8.45836799999961
+				"endpoint": "GET /api/foods (warm)",
+				"samples": 44,
+				"p50Ms": 65.71004499998526,
+				"p95Ms": 263.67010600000503
+			},
+			{
+				"endpoint": "GET /api/foods/barcode (cold)",
+				"samples": 1,
+				"p50Ms": 49.904679999977816,
+				"p95Ms": 49.904679999977816
+			},
+			{
+				"endpoint": "GET /api/foods/barcode (warm)",
+				"samples": 1,
+				"p50Ms": 12.73500200000126,
+				"p95Ms": 12.73500200000126
 			}
 		],
 		"skipReason": null
