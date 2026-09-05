@@ -240,7 +240,8 @@
 				"Yogurt",
 				"Yogurt, plain, nonfat",
 				"Yogurt, plain, whole milk",
-				"Yogurt, plain, low fat"
+				"Yogurt, plain, low fat",
+				"Yogurt, whole milk, plain"
 			],
 			"forbidden": []
 		},
@@ -407,6 +408,32 @@
 				"Rice, black, unenriched, raw",
 				"Rice, red, unenriched, dry, raw",
 				"Rice, spanish rice mix, unprepared"
+			]
+		},
+		{
+			"query": "pasta",
+			"group": "failing",
+			"means": "plain pasta, dry or cooked, of any grain. Not a pasta dish, sauce or boxed mix.",
+			"acceptable": [
+				"PASTA",
+				"Pasta, dry, enriched",
+				"Pasta, dry, unenriched",
+				"Pasta (spaghetti, macaroni), enriched, dry",
+				"Pasta (spaghetti, macaroni), unenriched, dry",
+				"Pasta (macaroni, spaghetti), enriched, cooked",
+				"Pasta (spaghetti macaroni), unenriched, cooked",
+				"Pasta, corn, dry",
+				"Pasta, corn, cooked",
+				"Pasta, rice noodles, dry",
+				"Pasta, rice noodles, cooked",
+				"Pasta, fresh-refrigerated, plain, cooked",
+				"Pasta, fresh-refrigerated, plain, as purchased"
+			],
+			"forbidden": [
+				"Pasta salad with vegetables, prepared with Italian dressing, homemade",
+				"Pasta with cream sauce, restaurant",
+				"Pasta mix, Italian lasagna, unprepared",
+				"Pasta sauce alla calabrese"
 			]
 		},
 		{
@@ -614,6 +641,19 @@
 				"Beef, liver, pan-fried",
 				"Liver, beef",
 				"Beef Liver"
+			],
+			"forbidden": []
+		},
+		{
+			"query": "chicken gizzards",
+			"group": "adversarial",
+			"means": "chicken gizzards, asked for in the plural. The generic organ rows the catalog writes singular have to be reachable, not only the branded packets that happen to spell it plural.",
+			"acceptable": [
+				"Chicken Gizzards",
+				"Chicken, broiler, gizzard, raw",
+				"Chicken, broiler, gizzard, simmered",
+				"Chicken, gizzard, all classes, raw",
+				"Chicken, gizzard, all classes, cooked, simmered"
 			],
 			"forbidden": []
 		},

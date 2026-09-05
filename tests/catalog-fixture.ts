@@ -215,6 +215,83 @@ const FIXTURE_FOODS: FixtureRow[] = [
 		barcode: null,
 		alias: null
 	},
+	// A part the catalog writes singular, so a query that writes it plural has
+	// something to fail to find: "beef livers" reached FTS as `"livers"*`, which
+	// a prefix search cannot match against "liver", and answered with nothing.
+	{
+		id: 18,
+		name: 'Beef, liver, raw',
+		brand: null,
+		kind: 'generic',
+		quality: 91,
+		sources: 2,
+		barcode: null,
+		alias: null
+	},
+	{
+		id: 19,
+		name: 'Beef, ground, 80% lean meat / 20% fat, raw',
+		brand: null,
+		kind: 'generic',
+		quality: 91,
+		sources: 8,
+		barcode: null,
+		alias: null
+	},
+	// The same in the other direction: the catalog writes "gizzard" and the
+	// packet writes "GIZZARDS", so the plural query has to find both.
+	{
+		id: 20,
+		name: 'Turkey, all classes, gizzard, raw',
+		brand: null,
+		kind: 'generic',
+		quality: 92,
+		sources: 2,
+		barcode: null,
+		alias: null
+	},
+	{
+		id: 21,
+		name: 'TURKEY GIZZARDS',
+		brand: 'BRAND C',
+		kind: 'branded',
+		quality: 94,
+		sources: 1,
+		barcode: null,
+		alias: null
+	},
+	// Three foods behind the crowd below. They outscore nothing it holds, so
+	// they only come back if the duplicate-name collapse runs before the cut.
+	{
+		id: 22,
+		name: 'Pasta, dry, enriched',
+		brand: null,
+		kind: 'generic',
+		quality: 91,
+		sources: 3,
+		barcode: null,
+		alias: null
+	},
+	{
+		id: 23,
+		name: 'Pasta (spaghetti, macaroni), enriched, dry',
+		brand: null,
+		kind: 'generic',
+		quality: 91,
+		sources: 2,
+		barcode: null,
+		alias: null
+	},
+	{
+		id: 24,
+		name: 'Pasta, fresh-refrigerated, plain, cooked',
+		brand: null,
+		kind: 'generic',
+		quality: 90,
+		sources: 1,
+		barcode: null,
+		alias: null
+	},
 	// Found only through its alias, which is a separate FTS column.
 	{
 		id: 12,
@@ -227,6 +304,37 @@ const FIXTURE_FOODS: FixtureRow[] = [
 		alias: 'paneer'
 	}
 ];
+
+/**
+ * One name carried by more rows than the ranking's shortlist holds.
+ *
+ * This is the shape of a defect rather than a food. On the live catalog 724 rows
+ * are named "PEANUT BUTTER" and hundreds "PASTA"; they are branded, so they
+ * outscore the generic rows behind them, and they all score alike. While the
+ * duplicate-name collapse ran after the shortlist was cut, they filled it and
+ * then became a single row — "pasta" answered with one food and "peanut butter"
+ * with two.
+ *
+ * One more than `SHORTLIST` in `ranking.ts` is the smallest crowd that
+ * reproduces it, and the first id is far enough above the hand-written rows that
+ * the two never collide.
+ */
+const CROWD_SIZE = 501;
+const CROWD_FIRST_ID = 1000;
+
+/** The crowd, as rows in the same shape as the ones above. */
+function crowd(): FixtureRow[] {
+	return Array.from({ length: CROWD_SIZE }, (_unused, index) => ({
+		id: CROWD_FIRST_ID + index,
+		name: 'PASTA',
+		brand: `DRIED GOODS ${index}`,
+		kind: 'branded' as const,
+		quality: 94,
+		sources: 9,
+		barcode: null,
+		alias: null
+	}));
+}
 
 const SCHEMA = `
 create table food (
@@ -262,7 +370,7 @@ export function createFixtureCatalog(): DatabaseSync {
 	const indexed = db.prepare(
 		'insert into food_fts (rowid, name, brand, aliases) values (?, ?, ?, ?)'
 	);
-	for (const row of FIXTURE_FOODS) {
+	for (const row of [...FIXTURE_FOODS, ...crowd()]) {
 		food.run(row.id, row.barcode, row.name, row.brand, row.kind, row.quality, row.sources);
 		if (row.alias !== null) alias.run(row.id, row.alias);
 		for (const [label, grams] of row.servings ?? []) serving.run(row.id, label, grams);

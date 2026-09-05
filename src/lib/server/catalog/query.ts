@@ -44,7 +44,35 @@ export function searchTerms(input: string): SearchTerms | null {
 		.filter((token) => token.length >= MIN_TOKEN_LENGTH)
 		.slice(0, MAX_TOKENS);
 	if (tokens.length === 0) return null;
-	return { match: tokens.map((token) => `"${token}"*`).join(' '), text: tokens.join(' ') };
+	// `AND` is explicit rather than left to FTS5's juxtaposition, because a
+	// parenthesised group is not a valid operand of the implicit operator:
+	// `"beef"* ("livers"* OR "liver"*)` is a syntax error where
+	// `"beef"* AND (...)` is not. Juxtaposition means AND, so nothing else
+	// about the expression changes.
+	return { match: tokens.map(prefixTerms).join(' AND '), text: tokens.join(' ') };
+}
+
+/**
+ * One typed token as the FTS terms that find it, singular and plural.
+ *
+ * A prefix carries the plural but not the singular: `"banana"*` finds "Bananas,
+ * raw", and `"livers"*` finds nothing at all in a catalog that writes "Beef,
+ * liver, raw". So "beef livers" and "chicken gizzards" matched no row and the
+ * search answered them with nothing — while "beef liver" and "chicken gizzard"
+ * worked, which is not a distinction a person typing can be expected to make.
+ *
+ * The original token is always one of the terms, never replaced by its stem.
+ * The rule that produces the stem is the one `queryForms` in `byproducts.ts`
+ * applies to the parts it exempts — one trailing "s" — but taken through
+ * `singular` rather than borrowed from there, because `singular` carries the
+ * length floor and `queryForms` deliberately does not: its input is a curated
+ * list, this one is what a person typed, and without the floor "gas" would also
+ * search `"ga"*`, which is the two-letter prefix `MIN_TOKEN_LENGTH` exists to
+ * keep out of the catalog.
+ */
+function prefixTerms(token: string): string {
+	const stem = singular(token);
+	return stem === token ? `"${token}"*` : `("${token}"* OR "${stem}"*)`;
 }
 
 /**
