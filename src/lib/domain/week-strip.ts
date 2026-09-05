@@ -1,4 +1,4 @@
-import { addDaysISO, startOfWeek, todayISO, weekdayShort } from './utils';
+import { addDaysISO, todayISO, weekdayShort } from './utils';
 
 /**
  * The accessible-name suffix for one day button in the week strip: which of
@@ -27,15 +27,20 @@ export function dayStripRange(today = todayISO()): string[] {
 }
 
 /**
- * The visible label for one day strip pill: "Today" for today, the short
- * weekday name for any other day within the current calendar week (Mon...Sun),
- * and "Xxx N" (short weekday plus day-of-month) for a day outside that week.
+ * The visible label for one day strip pill: short weekday plus day-of-month
+ * ("Sat 5"), the same format for every day including today. Today's pill
+ * carries the word "Today" in its aria-label instead, via `todayAriaLabel`.
  */
-export function dayStripLabel(iso: string, today = todayISO()): string {
-	if (iso === today) return 'Today';
-	const weekStart = startOfWeek(today);
-	const weekEnd = addDaysISO(weekStart, 6);
-	if (iso >= weekStart && iso <= weekEnd) return weekdayShort(iso);
+export function dayStripLabel(iso: string): string {
 	const dayOfMonth = Number(iso.slice(8, 10));
 	return `${weekdayShort(iso)} ${dayOfMonth}`;
+}
+
+/**
+ * The accessible-name override for today's pill. Its visible text is the
+ * same "Xxx N" format as every other day, so this is what keeps "Today" in
+ * the name screen readers announce.
+ */
+export function todayAriaLabel(iso: string, marksText: string): string {
+	return `Today, ${dayStripLabel(iso)}, ${marksText}`;
 }

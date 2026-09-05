@@ -16,14 +16,16 @@ describe('WeekStrip', () => {
 		expect(document.querySelectorAll('button')).toHaveLength(38);
 	});
 
-	it('labels the current day "Today" rather than by weekday', async () => {
+	it('labels today by weekday and date, same as any other day', async () => {
 		await render(WeekStrip, {
 			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
 		});
-		await expect.element(page.getByText('Today')).toBeInTheDocument();
+		await expect
+			.element(page.getByText(dayStripLabel(todayISO()), { exact: true }))
+			.toBeInTheDocument();
 	});
 
-	it('labels the other days by weekday', async () => {
+	it('labels the other days by weekday and date', async () => {
 		const yesterday = addDaysISO(todayISO(), -1);
 		await render(WeekStrip, {
 			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
@@ -31,6 +33,30 @@ describe('WeekStrip', () => {
 		await expect
 			.element(page.getByText(dayStripLabel(yesterday), { exact: true }))
 			.toBeInTheDocument();
+	});
+
+	it("gives today's pill an accessible name starting with Today", async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		await expect.element(page.getByRole('button', { name: /^Today/ })).toBeInTheDocument();
+	});
+
+	it('rings today when it is not the selected day', async () => {
+		const yesterday = addDaysISO(todayISO(), -1);
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: yesterday }
+		});
+		const todayButton = page.getByRole('button', { name: /^Today/ }).element() as HTMLElement;
+		expect(todayButton.className).toContain('ring-primary');
+	});
+
+	it('drops the ring from today once it is the selected day', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const todayButton = page.getByRole('button', { name: /^Today/ }).element() as HTMLElement;
+		expect(todayButton.className).not.toContain('ring-primary');
 	});
 
 	it('marks the selected day as pressed', async () => {
