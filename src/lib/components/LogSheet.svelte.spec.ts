@@ -33,6 +33,126 @@ const CEREAL = {
 	}
 };
 
+/**
+ * The rows `/api/foods/resolve` answers typed names with. They are catalog
+ * rows, not bundled ones: since #116 nothing typed is matched on the device.
+ */
+const EGG = {
+	id: 101,
+	name: 'Egg, large',
+	brand: null,
+	kind: 'generic',
+	category: 'Dairy and Egg Products',
+	barcode: null,
+	license: 'PDDL-1.0',
+	serving: { label: '1 large', grams: 50 },
+	per100g: {
+		kcal: 144,
+		protein: 12.6,
+		fat: 9.6,
+		carbs: 0.8,
+		sugar: 0.4,
+		fiber: 0,
+		sodium: 142,
+		saturatedFat: 3
+	}
+};
+
+const BANANA = {
+	...EGG,
+	id: 102,
+	name: 'Banana',
+	category: 'Fruits',
+	serving: { label: '1 medium', grams: 118 },
+	per100g: { ...EGG.per100g, kcal: 89 }
+};
+
+/** 14 g and 119 kcal a tablespoon, so "2 tbsp" is two servings and 238 kcal. */
+const OLIVE_OIL = {
+	...EGG,
+	id: 103,
+	name: 'Olive oil',
+	category: 'Fats and Oils',
+	serving: { label: '1 tbsp', grams: 14 },
+	per100g: { ...EGG.per100g, kcal: 850 }
+};
+
+const CHICKEN = {
+	...EGG,
+	id: 104,
+	name: 'Chicken breast, grilled',
+	category: 'Poultry',
+	serving: { label: '100 g', grams: 100 },
+	per100g: { ...EGG.per100g, kcal: 165 }
+};
+
+function jsonResponse(body: unknown) {
+	return Promise.resolve(
+		new Response(JSON.stringify(body), {
+			status: 200,
+			headers: { 'content-type': 'application/json' }
+		})
+	);
+}
+
+function urlOf(input: RequestInfo | URL): string {
+	if (typeof input === 'string') return input;
+	return input instanceof URL ? input.href : input.url;
+}
+
+/** The names one intercepted request asked about, or none when it asked about nothing. */
+function queriesIn(init: RequestInit | undefined): string[] {
+	const raw = typeof init?.body === 'string' ? init.body : '{}';
+	return (JSON.parse(raw) as { queries?: string[] }).queries ?? [];
+}
+
+/**
+ * The server as the sheet sees it.
+ *
+ * `/api/foods/resolve` answers with `rows`, one per name in the order they were
+ * asked, and `null` for anything past the end of the list. Every other call —
+ * the search box that a proposal row opens — answers with no catalog rows, so
+ * the bundled foods are what it lists.
+ */
+function resolvesTo(...rows: (object | null)[]) {
+	return vi
+		.spyOn(globalThis, 'fetch')
+		.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+			if (!urlOf(input).includes('/api/foods/resolve')) return jsonResponse({ foods: [] });
+			const queries = queriesIn(init);
+			return jsonResponse({
+				items: queries.map((query, index) => ({
+					query,
+					food: rows[index] ?? null,
+					alternatives: []
+				}))
+			});
+		});
+}
+
+/** The resolve endpoint refusing, with everything else answering as usual. */
+function resolveRefuses(status: number) {
+	return vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+		if (!urlOf(input).includes('/api/foods/resolve')) return jsonResponse({ foods: [] });
+		return Promise.resolve(new Response(null, { status }));
+	});
+}
+
+/** One resolve request held open, so a later one can be answered before it. */
+type Pending = { queries: string[]; settle: (response: Response) => void };
+
+function answerWith(call: Pending | undefined, row: object) {
+	if (!call) throw new Error('no resolve request was waiting');
+	call.settle(
+		new Response(
+			JSON.stringify({
+				items: call.queries.map((query) => ({ query, food: row, alternatives: [] }))
+			}),
+			{ status: 200, headers: { 'content-type': 'application/json' } }
+		)
+	);
+}
+
 /** A stream with real frames: a canvas can produce one without a camera. */
 function fakeStream() {
 	const canvas = document.createElement('canvas');
@@ -127,11 +247,92 @@ describe('LogSheet', () => {
 		await expect.element(page.getByRole('button', { name: 'Parse' })).toBeDisabled();
 	});
 
-	it('proposes items parsed from a sentence', async () => {
+	it('proposes items parsed from a sentence, named by the server', async () => {
+		resolvesTo(EGG);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('two eggs');
 		await page.getByRole('button', { name: 'Parse' }).click();
-		await expect.element(page.getByText(/Parsed on-device/)).toBeInTheDocument();
+		await expect.element(page.getByText(/Proposed/)).toBeInTheDocument();
+		await expect.element(page.getByText('Egg, large').first()).toBeInTheDocument();
+	});
+
+	it('asks the server once for every food the sentence held', async () => {
+		const fetching = resolvesTo(EGG, BANANA);
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs, one banana');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await expect.element(page.getByText('Banana').first()).toBeInTheDocument();
+		const asks = fetching.mock.calls.filter(([input]) =>
+			urlOf(input).includes('/api/foods/resolve')
+		);
+		expect(asks).toHaveLength(1);
+		expect(queriesIn(asks[0]?.[1])).toEqual(['eggs', 'banana']);
+	});
+
+	it('leaves a name the catalog had nothing for to be matched by hand', async () => {
+		resolvesTo(null);
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('xyzzy nonexistent gruel');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await expect
+			.element(page.getByRole('button', { name: 'Match to catalog' }))
+			.toBeInTheDocument();
+		await expect.element(page.getByText('xyzzy nonexistent gruel').first()).toBeInTheDocument();
+	});
+
+	it('keeps what was typed, and logs nothing, when the server cannot be reached', async () => {
+		vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.reject(new Error('offline')));
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		// The row is still there, with the words that were typed, so nothing the
+		// person wrote is lost to a dropped connection.
+		await expect
+			.element(page.getByRole('button', { name: 'Match to catalog' }))
+			.toBeInTheDocument();
+		await expect.element(page.getByText('eggs').first()).toBeInTheDocument();
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add).not.toHaveBeenCalled();
+	});
+
+	it('leaves the rows unmatched when the catalog refuses the session', async () => {
+		resolveRefuses(401);
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await expect
+			.element(page.getByRole('button', { name: 'Match to catalog' }))
+			.toBeInTheDocument();
+	});
+
+	it('lets the second submission win when the first is still in flight', async () => {
+		// A first answer landing after a second sentence was submitted would put
+		// one sentence's foods against the other sentence's words.
+		const waiting: Pending[] = [];
+		vi.spyOn(globalThis, 'fetch').mockImplementation(
+			(input: RequestInfo | URL, init?: RequestInit) => {
+				if (!urlOf(input).includes('/api/foods/resolve')) return jsonResponse({ foods: [] });
+				const queries = queriesIn(init);
+				return new Promise<Response>((settle) => {
+					waiting.push({ queries, settle });
+				});
+			}
+		);
+
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await vi.waitFor(() => expect(waiting).toHaveLength(1));
+		await page.getByLabelText('What you ate').fill('one banana');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await vi.waitFor(() => expect(waiting).toHaveLength(2));
+
+		// The newer request answers first, the older one afterwards.
+		answerWith(waiting[1], BANANA);
+		answerWith(waiting[0], EGG);
+		await expect.element(page.getByText('Banana').first()).toBeInTheDocument();
+		expect(document.body.textContent).not.toContain('Egg, large');
 	});
 
 	it('always offers typing as the way out of the photo tab', async () => {
@@ -227,7 +428,7 @@ describe('LogSheet', () => {
 	it('logs a food search found only in the server catalog', async () => {
 		// Regression: search handed a catalog food straight to `propose`, which
 		// stores its id and nothing else. `commit` then found no bundled food
-		// behind that id and dropped the item, so nothing past the bundled 96
+		// behind that id and dropped the item, so nothing past the bundled foods
 		// could be logged at all, and the sheet said only "match it first".
 		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
 		vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
@@ -258,7 +459,7 @@ describe('LogSheet', () => {
 		await page.getByRole('button', { name: 'Search' }).click();
 		await page.getByLabelText('Search foods, brands, barcodes').fill('chicken breast');
 		await page.getByRole('button').filter({ hasText: 'kcal' }).first().click();
-		await expect.element(page.getByText(/Parsed on-device/)).toBeInTheDocument();
+		await expect.element(page.getByText(/Proposed/)).toBeInTheDocument();
 	});
 
 	it('lets the meal be changed', async () => {
@@ -297,6 +498,7 @@ describe('LogSheet', () => {
 	});
 
 	it('commits proposals to the log', async () => {
+		resolvesTo(EGG);
 		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('two eggs');
@@ -308,6 +510,7 @@ describe('LogSheet', () => {
 	it('logs the calories in the volume that was typed, not in one serving', async () => {
 		// Olive oil is served by the tablespoon: 14 g, 119 kcal. Two tablespoons is
 		// two servings, and logging one of them would be half the calories eaten.
+		resolvesTo(OLIVE_OIL);
 		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('2 tbsp olive oil');
@@ -318,6 +521,7 @@ describe('LogSheet', () => {
 	});
 
 	it('says how many millilitres the food’s serving is', async () => {
+		resolvesTo(OLIVE_OIL);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('2 tbsp olive oil');
 		await page.getByRole('button', { name: 'Parse' }).click();
@@ -325,6 +529,7 @@ describe('LogSheet', () => {
 	});
 
 	it('closes after committing', async () => {
+		resolvesTo(EGG);
 		vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('two eggs');
@@ -334,6 +539,7 @@ describe('LogSheet', () => {
 	});
 
 	it('refuses to log a proposal with no catalog food behind it', async () => {
+		resolvesTo(null);
 		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('xyzzy nonexistent gruel');
@@ -343,6 +549,7 @@ describe('LogSheet', () => {
 	});
 
 	it('drops a proposal when it is removed', async () => {
+		resolvesTo(EGG);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('two eggs');
 		await page.getByRole('button', { name: 'Parse' }).click();
@@ -350,7 +557,7 @@ describe('LogSheet', () => {
 			.getByRole('button', { name: /^Remove/ })
 			.first()
 			.click();
-		expect(document.body.textContent).not.toContain('Parsed on-device');
+		expect(document.body.textContent).not.toContain('Proposed');
 	});
 
 	it('closes from the close control', async () => {
@@ -360,6 +567,7 @@ describe('LogSheet', () => {
 	});
 
 	it('matches a proposal to a catalog food', async () => {
+		resolvesTo(null);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('xyzzy nonexistent gruel');
 		await page.getByRole('button', { name: 'Parse' }).click();
@@ -370,6 +578,7 @@ describe('LogSheet', () => {
 	});
 
 	it('adjusts a proposal’s servings before committing', async () => {
+		resolvesTo(EGG);
 		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('two eggs');
@@ -380,6 +589,7 @@ describe('LogSheet', () => {
 	});
 
 	it('commits every matched item in one go', async () => {
+		resolvesTo(EGG, BANANA);
 		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('two eggs, one banana');
@@ -392,10 +602,11 @@ describe('LogSheet', () => {
 		// Regression: keying the list by object identity would remount the very
 		// row whose stepper was tapped, since `onchange` emits a fresh object for
 		// that proposal. Keying by a stable id must leave the DOM node in place.
+		resolvesTo(EGG);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('two eggs');
 		await page.getByRole('button', { name: 'Parse' }).click();
-		await expect.element(page.getByText(/Parsed on-device/)).toBeInTheDocument();
+		await expect.element(page.getByText(/Proposed/)).toBeInTheDocument();
 		const row = document.querySelector('li');
 		await page.getByRole('button', { name: 'Increase' }).click();
 		expect(document.querySelector('li')).toBe(row);
@@ -406,6 +617,7 @@ describe('LogSheet', () => {
 		// proposal shifted every later index, moving the open panel onto
 		// whatever proposal now sits at that position instead of following the
 		// proposal it was actually opened for.
+		resolvesTo(EGG, BANANA, null, CHICKEN);
 		await openSheet();
 		await page
 			.getByLabelText('What you ate')
@@ -427,6 +639,7 @@ describe('LogSheet', () => {
 	});
 
 	it('closes the match panel when the proposal it belongs to is removed', async () => {
+		resolvesTo(EGG, null);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('two eggs, xyzzy nonexistent gruel');
 		await page.getByRole('button', { name: 'Parse' }).click();
@@ -442,6 +655,7 @@ describe('LogSheet', () => {
 	});
 
 	it('puts the catalog search away when the match panel is closed again', async () => {
+		resolvesTo(null);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('xyzzy nonexistent gruel');
 		await page.getByRole('button', { name: 'Parse' }).click();
@@ -497,6 +711,7 @@ describe('LogSheet', () => {
 	});
 
 	it('parses what was heard', async () => {
+		resolvesTo(EGG);
 		const globals = globalThis as unknown as { SpeechRecognition?: unknown };
 		let instance: { onresult?: ((ev: unknown) => void) | null } = {};
 		globals.SpeechRecognition = function Recognition() {
@@ -516,7 +731,7 @@ describe('LogSheet', () => {
 			await page.getByRole('button', { name: 'Voice' }).click();
 			await page.getByRole('button', { name: 'Start listening' }).click();
 			instance.onresult?.({ results: { 0: { 0: { transcript: 'two eggs' } } } });
-			await expect.element(page.getByText(/Parsed on-device/)).toBeInTheDocument();
+			await expect.element(page.getByText(/Proposed/)).toBeInTheDocument();
 		} finally {
 			delete globals.SpeechRecognition;
 		}
@@ -553,6 +768,7 @@ describe('LogSheet', () => {
 
 describe('LogSheet on GLP-1', () => {
 	it('steps servings in quarters', async () => {
+		resolvesTo(EGG);
 		tend.resetAll();
 		tend.completeOnboarding({
 			profile: { ...emptyProfile({ name: 'Alex' }), glp1: true, goal: 'glp1' },
@@ -665,6 +881,7 @@ describe('LogSheet reading a plate from a photo', () => {
 	it('adds to what was already parsed rather than replacing it', async () => {
 		// Regression: reading a plate assigned over `proposals`, so anything already
 		// typed on the Type tab disappeared without a word.
+		resolvesTo(EGG);
 		await openSheet();
 		await page.getByLabelText('What you ate').fill('two eggs');
 		await page.getByRole('button', { name: 'Parse' }).click();

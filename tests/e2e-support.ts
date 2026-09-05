@@ -109,6 +109,84 @@ export async function signOutThroughDrawer(page: Page): Promise<void> {
 }
 
 /**
+ * One catalog row in the shape `/api/foods/resolve` sends it.
+ *
+ * The real food catalog is a 365 MB file built by a separate ETL step and is
+ * not present in this environment, so the endpoint answers 503
+ * "catalog-unavailable" here. These rows and `stubFoodResolve` are the same
+ * interception `barcode-scan.e2e.ts` already uses for `/api/foods/barcode`.
+ * What is real: the client's handling of its own endpoint contract. What is
+ * not proven: that the live catalog ranks these names to these rows.
+ */
+export type ResolvedRow = {
+	id: number;
+	name: string;
+	brand: string | null;
+	kind: string;
+	category: string | null;
+	barcode: string | null;
+	license: string;
+	serving: { label: string; grams: number };
+	per100g: Record<string, number>;
+};
+
+function catalogRow(
+	id: number,
+	name: string,
+	serving: { label: string; grams: number },
+	kcalPer100g: number
+): ResolvedRow {
+	return {
+		id,
+		name,
+		brand: null,
+		kind: 'generic',
+		category: null,
+		barcode: null,
+		license: 'PDDL-1.0',
+		serving,
+		per100g: {
+			kcal: kcalPer100g,
+			protein: 0,
+			fat: 0,
+			carbs: 0,
+			sugar: 0,
+			fiber: 0,
+			sodium: 0,
+			saturatedFat: 0
+		}
+	};
+}
+
+/** 50 g and 72 kcal a large egg, which is what "two eggs" comes to two of. */
+export const EGG_ROW = catalogRow(101, 'Egg, large', { label: '1 large', grams: 50 }, 144);
+
+/** 14 g and 119 kcal a tablespoon, so "2 tablespoons" is two servings and 238 kcal. */
+export const OLIVE_OIL_ROW = catalogRow(103, 'Olive oil', { label: '1 tbsp', grams: 14 }, 850);
+
+/**
+ * Answer `POST /api/foods/resolve` with these rows, one per name asked about
+ * and in that order, so a typed sentence resolves without a catalog file.
+ */
+export async function stubFoodResolve(page: Page, rows: (ResolvedRow | null)[]): Promise<void> {
+	await page.route('**/api/foods/resolve', async (route) => {
+		const body = route.request().postDataJSON() as { queries?: string[] };
+		const queries = body.queries ?? [];
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				items: queries.map((query, index) => ({
+					query,
+					food: rows[index] ?? null,
+					alternatives: []
+				}))
+			})
+		});
+	});
+}
+
+/**
  * Open the log sheet and type into its box.
  *
  * The wait is the point. `Sheet` moves focus into itself a tick after the

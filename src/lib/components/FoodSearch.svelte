@@ -2,8 +2,8 @@
 	import Search from '@lucide/svelte/icons/search';
 	import { onDestroy } from 'svelte';
 	import { createFoodSearch, MIN_QUERY_LENGTH } from '$lib/catalog/food-search.svelte';
+	import { findFoods } from '$lib/domain/food-match';
 	import { FOODS } from '$lib/domain/foods';
-	import { findFoods } from '$lib/domain/parse-text';
 	import type { Food } from '$lib/domain/types';
 	import Input from '$lib/ui/Input.svelte';
 	import ProvenanceBadge from './ProvenanceBadge.svelte';
@@ -22,13 +22,13 @@
 	/**
 	 * The bundled foods first, then the catalog's ranked rows.
 	 *
-	 * The 96 bundled foods stay. They are hand-written, they carry stable ids
-	 * that log against `foodId`, and they are the only thing that answers with
-	 * no connection — the flow issue #34 asks for by name. They also cost no
-	 * bytes of their own: the on-device text parser already ships them, so
-	 * dropping them from search would save nothing and lose the offline case.
-	 * Five of them rather than twenty, so a fuzzy local match cannot push the
-	 * catalog's ranking off the screen.
+	 * The bundled foods stay. They are hand-written, they carry stable ids that
+	 * log against `foodId`, and they are the only thing that answers with no
+	 * connection — the flow issue #34 asks for by name. Since #116 they are the
+	 * foods the sample journal and the recipe book are built from and nothing
+	 * else, because the typed parser that used to need the other forty-seven now
+	 * asks the server. Five of them rather than twenty, so a fuzzy local match
+	 * cannot push the catalog's ranking off the screen.
 	 *
 	 * The catalog's rows are appended rather than substituted, which is what
 	 * keeps the list from flashing: whatever was on screen when the request went

@@ -3,7 +3,7 @@ import type { CatalogFoodPayload } from '$lib/domain/catalog-food';
 import { FOOD_BY_BARCODE } from '$lib/domain/foods';
 import { lookupBarcode } from './barcode-lookup';
 
-/** A barcode the bundled 96 foods carry, and one they do not. */
+/** A barcode the bundled foods carry, and one they do not. */
 const BUNDLED = '602652171032';
 const OFF_SHELF = '00016000275287';
 

@@ -1,6 +1,6 @@
 <script lang="ts">
+	import { findFoods } from '$lib/domain/food-match';
 	import { CATEGORY_LABEL, FOODS, PROVENANCE_LABEL, scaleFood } from '$lib/domain/foods';
-	import { findFoods } from '$lib/domain/parse-text';
 	import type { Provenance } from '$lib/domain/types';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ProvenanceBadge from '$lib/components/ProvenanceBadge.svelte';

@@ -7,11 +7,13 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 	import { toast } from 'svelte-sonner';
+	import { MAX_QUERIES, resolveFoodNames } from '$lib/catalog/food-resolve';
+	import { foodProposal } from '$lib/domain/food-proposal';
 	import { FOOD_BY_ID } from '$lib/domain/foods';
 	import { logFromCatalogFood, logFromFood } from '$lib/domain/log-entry';
-	import { guessMeal, hydrateProposal, parseLocalText } from '$lib/domain/parse-text';
+	import { guessMeal, parseLocalText, type ParsedChunk } from '$lib/domain/parse-text';
 	import { defaultServings, servingStep } from '$lib/domain/profile';
-	import { matchToFood, resolveQuantity, type QuantifiedItem } from '$lib/domain/quantity';
+	import { matchToFood, type QuantifiedItem } from '$lib/domain/quantity';
 	import { nextProposalId, type Proposal } from '$lib/domain/proposal-id';
 	import type { PhotoFood } from '$lib/photo/photo-log';
 	import type { Food, Meal } from '$lib/domain/types';
@@ -43,12 +45,25 @@
 	let listening = $state(false);
 	let proposals = $state<Proposal[]>([]);
 	let matchId = $state<string | null>(null);
+	/**
+	 * Whether the server is still naming the foods of the sentence just
+	 * submitted. It says so on the Type tab rather than disabling `Parse`: a
+	 * second submission is allowed to overtake the first, and `textRun` is what
+	 * makes the newer one win.
+	 */
+	let resolving = $state(false);
+	/**
+	 * Which submission the list belongs to. A second `Parse` while the first is
+	 * still in flight wins outright: the answer to a sentence nobody is looking
+	 * at any more must never land on the list.
+	 */
+	let textRun = 0;
 	let dictation: Dictation | null = null;
 	/**
 	 * Foods the server catalog answered with, by the id `propose` put on the
 	 * proposal. They are not in `FOOD_BY_ID` and never will be, so `commit` has
 	 * to resolve them from here or it would drop what the person just chose --
-	 * which is every result search now returns beyond the bundled 96.
+	 * which is every result search returns beyond the bundled foods.
 	 */
 	let fromCatalog = $state<Record<string, Food>>({});
 	/**
@@ -67,6 +82,10 @@
 		text = '';
 		matchId = null;
 		listening = false;
+		resolving = false;
+		// Retires anything in flight, so its answer cannot arrive into a sheet
+		// that has been closed and reopened for something else.
+		textRun += 1;
 		fromCatalog = {};
 		fromPhoto = new Set();
 		logUi.tab = 'type';
@@ -97,14 +116,77 @@
 		logUi.tab = 'type';
 	}
 
-	function runText(raw: string) {
+	/**
+	 * How sure a proposal built from typed words is.
+	 *
+	 * Above a photo, which is a guess about a picture, and below a search or a
+	 * scan, where the person picked the row themselves. Here the words are
+	 * theirs and the row is the catalog's ranking of them, so the number is what
+	 * tells them to read the name before they tap.
+	 */
+	const TEXT_CONFIDENCE = 0.8;
+
+	/** What a row says when there was no answer to be had about it. */
+	const NOTES = {
+		signedOut: 'Sign in to match this',
+		offline: 'Matching needs the server',
+		overflow: 'Too many items to match at once'
+	} as const;
+
+	/** A row for text nothing was matched to, saying why rather than just failing. */
+	function unmatched(chunk: ParsedChunk, note: string): Proposal {
+		return foodProposal({ ...chunk, food: null, confidence: 0, note });
+	}
+
+	/**
+	 * Take a typed sentence: quantities here, food names from the server.
+	 *
+	 * The device splits the sentence and reads the quantities, which is
+	 * arithmetic on the words. Naming the food is the catalog's job and needs
+	 * one round trip for the whole sentence. Nothing is matched without it, so
+	 * every outcome that is not an answer leaves the rows on screen with their
+	 * own words and their own quantity, for the person to match by hand or to
+	 * retry once they are back.
+	 */
+	async function runText(raw: string) {
 		const trimmed = raw.trim();
 		if (!trimmed) return;
-		// Only the on-device parser runs for now; assisted parsing needs a server that is not built yet.
-		const local = parseLocalText(trimmed, meal);
-		proposals = local.items.map((item) => ({ ...hydrateProposal(item), id: nextProposalId() }));
+		const chunks = parseLocalText(trimmed, meal);
+		if (chunks.length === 0) return;
+		const run = ++textRun;
+		// Past the cap the server refuses the whole body, so the rest are kept as
+		// rows to match by hand rather than costing everything else its answer.
+		const asked = chunks.slice(0, MAX_QUERIES);
+		const overflow = chunks.slice(MAX_QUERIES);
+		resolving = true;
+		const outcome = await resolveFoodNames(asked.map((chunk) => chunk.query));
+		if (run !== textRun) return;
+		resolving = false;
 		matchId = null;
-		if (!local.allMatched) {
+
+		if (outcome.kind !== 'resolved') {
+			const signedOut = outcome.kind === 'signed-out';
+			proposals = chunks.map((chunk) =>
+				unmatched(chunk, signedOut ? NOTES.signedOut : NOTES.offline)
+			);
+			toast(
+				signedOut
+					? 'Sign in to match what you typed. You can still pick from Search.'
+					: 'Matching needs the server. You can pick from Search when you’re back online.'
+			);
+			return;
+		}
+
+		const named = outcome.items;
+		const matched = asked.map((chunk, index) => {
+			const food = named[index]?.food ?? null;
+			if (food) remember(food);
+			return foodProposal({ ...chunk, food, confidence: food ? TEXT_CONFIDENCE : 0 });
+		});
+		proposals = [...matched, ...overflow.map((chunk) => unmatched(chunk, NOTES.overflow))];
+		if (overflow.length > 0) {
+			toast(`Only the first ${MAX_QUERIES} items were matched — match the rest by hand.`);
+		} else if (matched.some((proposal) => proposal.foodId === null)) {
 			toast('Some items need a catalog match — tap "Match to catalog".');
 		}
 	}
@@ -119,7 +201,7 @@
 			onresult: (said) => {
 				text = said;
 				listening = false;
-				runText(said);
+				void runText(said);
 			},
 			onerror: () => {
 				listening = false;
@@ -153,46 +235,22 @@
 	const PHOTO_CONFIDENCE = 0.6;
 
 	/**
-	 * One proposal per food the photo held.
-	 *
-	 * The weight the model estimated is carried as the proposal's `quantity`
-	 * rather than converted here, so the servings come out of the same
-	 * `resolveQuantity` a typed "150 g chicken" goes through -- and are computed
-	 * again against the new food if the person matches the row to something
-	 * else. A food the catalog could not match keeps its label and its estimate
-	 * and arrives unmatched, so the person sees what was skipped rather than a
-	 * shorter list than the photo held.
+	 * One proposal per food the photo held, built the same way a typed one is:
+	 * `food-proposal.ts` carries the weight the model estimated as the row's own
+	 * quantity rather than converting it here, so a photo and a sentence resolve
+	 * their servings through one function. A food the catalog could not match
+	 * keeps its label and its estimate and arrives unmatched, so the person sees
+	 * what was skipped rather than a shorter list than the photo held.
 	 */
 	function photoProposal(found: PhotoFood): Proposal {
-		const quantity = { amount: found.grams, unit: 'g', kind: 'mass' as const };
-		const base = {
-			id: nextProposalId(),
+		if (found.food) remember(found.food);
+		return foodProposal({
 			query: found.label,
+			food: found.food,
+			quantity: { amount: found.grams, unit: 'g', kind: 'mass' },
 			meal,
-			confidence: PHOTO_CONFIDENCE,
-			quantity
-		};
-		if (!found.food) {
-			return {
-				...base,
-				foodId: null,
-				name: found.label,
-				note: 'Not found in the catalog',
-				servings: 1
-			};
-		}
-		remember(found.food);
-		const resolved = resolveQuantity(quantity, found.food);
-		return {
-			...base,
-			foodId: found.food.id,
-			name: found.food.name,
-			servings: resolved.servings,
-			// A catalog row whose serving weighs nothing gives the estimate nothing
-			// to divide by, so `resolveQuantity` declines it and records one serving.
-			// Saying so is the difference between a guess and a silent one.
-			...(resolved.declined ? { note: 'Portion unknown, set the servings' } : {})
-		};
+			confidence: PHOTO_CONFIDENCE
+		});
 	}
 
 	/** Take what the photo was read as, and leave the person on the list to correct. */
@@ -283,7 +341,10 @@
 					rows={3}
 					aria-label="What you ate"
 				/>
-				<Button onclick={() => runText(text)} disabled={!text.trim()}>Parse</Button>
+				<Button onclick={() => void runText(text)} disabled={!text.trim()}>Parse</Button>
+				{#if resolving}
+					<p class="text-muted-foreground px-1 text-xs">Matching against the full catalog…</p>
+				{/if}
 			</div>
 		{:else if logUi.tab === 'photo'}
 			<PhotoCapture
@@ -303,7 +364,7 @@
 			<div class="bg-background flex flex-col items-center gap-3 rounded-3xl px-4 py-8 text-center">
 				<Mic class="size-8 {listening ? 'text-primary' : 'text-muted-foreground'}" />
 				<p class="text-muted-foreground max-w-xs text-sm">
-					Say what you ate. It goes through the same on-device parser as typing.
+					Say what you ate. It goes through the same parser as typing.
 				</p>
 				<Button onclick={toggleVoice} variant={listening ? 'secondary' : 'default'}>
 					{listening ? 'Listening — tap to stop' : 'Start listening'}
@@ -319,7 +380,7 @@
 			<div class="mt-5">
 				<div class="text-muted-foreground mb-2 flex items-center gap-2 text-xs font-medium">
 					<Sparkles class="size-3.5" />
-					Parsed on-device — tap to correct
+					Proposed — tap to correct
 				</div>
 				<ul class="flex flex-col gap-2">
 					{#each proposals as p (p.id)}
