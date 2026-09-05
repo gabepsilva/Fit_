@@ -2,7 +2,12 @@
 	import Dumbbell from '@lucide/svelte/icons/dumbbell';
 	import Utensils from '@lucide/svelte/icons/utensils';
 	import Weight from '@lucide/svelte/icons/weight';
-	import { dayStripLabel, dayStripRange, loggedMarksText } from '$lib/domain/week-strip';
+	import {
+		dayStripLabel,
+		dayStripRange,
+		loggedMarksText,
+		todayAriaLabel
+	} from '$lib/domain/week-strip';
 	import { todayISO } from '$lib/domain/utils';
 	import { cn } from '$lib/ui/cn';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
@@ -63,6 +68,7 @@
 <div class="scrollbar-none flex snap-x snap-mandatory gap-2 overflow-x-auto px-[calc(50%-2.5rem)]">
 	{#each days as iso, i (iso)}
 		{@const isSelected = iso === selected}
+		{@const isToday = iso === today}
 		{@const hasFood = food.has(iso)}
 		{@const hasExercise = exercise.has(iso)}
 		{@const hasWeight = weight.has(iso)}
@@ -72,14 +78,20 @@
 			onkeydown={(event: KeyboardEvent) => handlePillKeydown(i, event)}
 			tabindex={isSelected ? 0 : -1}
 			resting="bg-card text-foreground"
-			class="relative flex h-16 w-20 shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-2 snap-center transition-colors duration-150"
+			aria-label={isToday
+				? todayAriaLabel(iso, loggedMarksText(hasFood, hasExercise, hasWeight))
+				: undefined}
+			class={cn(
+				'relative flex h-16 w-20 shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-2 snap-center transition-colors duration-150',
+				isToday && !isSelected && 'ring-1 ring-primary ring-inset'
+			)}
 			{@attach (el: HTMLButtonElement) => {
 				pillEls[i] = el;
 				if (iso === today) todayEl = el;
 			}}
 		>
 			<span class={cn('text-xs', isSelected ? 'opacity-80' : 'text-muted-foreground')}>
-				{dayStripLabel(iso, today)}
+				{dayStripLabel(iso)}
 			</span>
 			<span class="flex items-center gap-1.5">
 				<Utensils
