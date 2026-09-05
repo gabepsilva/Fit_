@@ -78,7 +78,10 @@ Every unit of work is an issue. Nothing is built that no issue describes.
   after a reset.
 - **Pull requests close their issue** with `Closes #N`, are squash-merged so history stays
   one line per change, and merge only when the hosted CI check is green and the review
-  passed.
+  passed. A single flaky shard — the Safari lane is the known repeat offender, tracked on
+  #125 — is rerun with `bun run ci:rerun-failed <pr-number>` rather than waited on by hand,
+  and logged as a comment on #125 when it was that shard; several failed jobs at once is a
+  real break and that command refuses it without `--all-failed`.
 - **Never wait on Gabriel.** Label the issue, assign him, and move to the next item that is
   not blocked. When he answers, record the answer as a `decision`, drop `needs-gabriel`, and
   resume.
@@ -329,7 +332,10 @@ the control plane believes.
 
 ## Deploy, as of 2026-09-03
 
-The app is live at <https://fit.psilva.org>. One command from a clean checkout deploys it:
+The app is live at <https://fit.psilva.org>. It deploys from a fully clean checkout, so a
+deploy runs from its own throwaway worktree — `bun run worktree:new deploy-<slug>` makes one
+already carrying `node_modules`, and `bun run worktree:done deploy-<slug>` removes it once
+the deploy is done. One command from a clean checkout deploys it:
 
 ```bash
 FIT_DEPLOY_HOST=user@host bun run deploy

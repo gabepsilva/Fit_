@@ -40,7 +40,11 @@
 	{@const targets = computeTargets(profile)}
 	{@const dayTotals = nutritionForDay(profile.log, day)}
 	{@const week = rollingAverages(profile.log, 7)}
-	{@const logged = loggedDatesSet(profile.log)}
+	{@const food = loggedDatesSet(profile.log)}
+	{@const weightDays = new Set(profile.weights.map((w) => w.date))}
+	{@const exerciseDays = new Set(
+		tend.state.workouts.filter((w) => w.finishedAt !== null).map((w) => w.date)
+	)}
 	{@const items = profile.log.filter((i) => i.date === day)}
 	<!-- GLP-1 users are steered by protein, so the layout changes, not just the order. -->
 	{@const primaryProtein = isGlp1(profile)}
@@ -67,7 +71,7 @@
 			{greetingFor(week.loggedDays)}
 		</PageHeader>
 
-		<WeekStrip {logged} bind:selected={day} />
+		<WeekStrip {food} exercise={exerciseDays} weight={weightDays} bind:selected={day} />
 
 		<section class="bg-card rounded-3xl px-3 py-5 shadow-border">
 			<div class="flex items-start justify-center gap-3">
