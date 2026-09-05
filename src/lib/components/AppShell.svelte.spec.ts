@@ -329,20 +329,6 @@ describe('AppShell, signed in', () => {
 		expect(logUi.open).toBe(true);
 	});
 
-	it('opens the log sheet from the camera too', async () => {
-		seedReturningVisit();
-		await render(AppShellHarness, { props: { body: 'Page body' } });
-		await page.getByRole('button', { name: 'Log from a photo' }).click();
-		expect(logUi.open).toBe(true);
-	});
-
-	it('takes the camera straight to the photo tab', async () => {
-		seedReturningVisit();
-		await render(AppShellHarness, { props: { body: 'Page body' } });
-		await page.getByRole('button', { name: 'Log from a photo' }).click();
-		expect(logUi.tab).toBe('photo');
-	});
-
 	it('leaves the plain log action on the typing tab', async () => {
 		seedReturningVisit();
 		await render(AppShellHarness, { props: { body: 'Page body' } });

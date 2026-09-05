@@ -10,6 +10,7 @@
 	import { tend } from '$lib/state/tend.svelte';
 	import { AUTH_ROUTES, signInPath } from './auth/auth-routes';
 	import InitialSync from './InitialSync.svelte';
+	import LogFab from './LogFab.svelte';
 	import LogSheet from './LogSheet.svelte';
 	import Onboarding from './Onboarding.svelte';
 	import SideNav from './SideNav.svelte';
@@ -190,18 +191,14 @@
 				/>
 			{:else if tend.state.onboarded}
 				<div class="bg-background flex min-h-dvh w-full max-w-lg flex-col">
-					<TopBar
-						{menuOpen}
-						onmenu={() => (menuOpen = true)}
-						onphoto={() => logUi.show('photo')}
-						onlog={() => logUi.show()}
-					/>
+					<TopBar {menuOpen} onmenu={() => (menuOpen = true)} />
 					<SyncStatusBadge />
-					<div class="flex-1 px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+					<div class="flex-1 px-5 pt-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
 						{@render children()}
 					</div>
 					<SideNav bind:open={menuOpen} {pathname} />
 					<LogSheet />
+					<LogFab onlog={() => logUi.show()} />
 				</div>
 			{:else}
 				<Onboarding />
@@ -218,9 +215,9 @@
 			Top rather than svelte-sonner's default corner, because the bottom of
 			the screen is where this application puts things to press. `Sheet` is
 			`fixed bottom-0` and `LogSheet` raises six of these from inside it;
-			`Onboarding` pins its actions there with `sticky bottom-0`. On a phone
-			the toaster is full width, so the corner it nominally sits in means
-			nothing.
+			`Onboarding` pins its actions there with `sticky bottom-0`; `LogFab`
+			floats the log button there too. On a phone the toaster is full width,
+			so the corner it nominally sits in means nothing.
 		-->
 		<Toaster position="top-center" offset={TOAST_OFFSET} mobileOffset={TOAST_OFFSET} />
 	</div>

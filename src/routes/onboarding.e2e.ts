@@ -140,10 +140,10 @@ test.describe('once onboarded', () => {
 		await expect(page.getByRole('heading', { name: 'You', level: 1 })).toBeVisible();
 	});
 
-	test('opens the log sheet on the photo tab from the camera', async ({ page }) => {
-		await page.getByRole('button', { name: 'Log from a photo' }).click();
+	test('reaches the photo tab from the log sheet', async ({ page }) => {
+		await page.getByRole('button', { name: 'Log food' }).click();
 		await expect(page.getByRole('dialog')).toBeVisible();
-		// Exact: the top bar has a camera button with the same name.
+		await page.getByRole('button', { name: 'Photo', exact: true }).click();
 		await expect(page.getByRole('button', { name: 'Photo', exact: true })).toHaveAttribute(
 			'aria-pressed',
 			'true'
@@ -157,7 +157,8 @@ test.describe('once onboarded', () => {
 	});
 
 	test('says on the photo tab that a still cannot be read yet', async ({ page }) => {
-		await page.getByRole('button', { name: 'Log from a photo' }).click();
+		await page.getByRole('button', { name: 'Log food' }).click();
+		await page.getByRole('button', { name: 'Photo', exact: true }).click();
 		await expect(page.getByText(/needs the server, which isn’t built yet/)).toBeVisible();
 	});
 
