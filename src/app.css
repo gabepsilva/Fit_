@@ -105,3 +105,11 @@
 .font-display {
 	font-family: var(--font-display);
 }
+
+.scrollbar-none {
+	scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+	display: none;
+}

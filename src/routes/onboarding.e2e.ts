@@ -100,6 +100,11 @@ test.describe('once onboarded', () => {
 	});
 
 	test('has no detectable accessibility violations with the menu open', async ({ page }) => {
+		// The sample journal seeded in beforeEach triggers a sync save, and
+		// SyncStatusBadge fades its "Saving..." status in and out over 150ms.
+		// A scan mid-fade can catch its text at a partially transparent, low
+		// contrast opacity rather than its resting color, so settle it first.
+		await expect(page.getByRole('status')).toHaveText('');
 		await page.getByRole('button', { name: 'Open menu' }).click();
 		await expect(page.getByRole('dialog')).toBeVisible();
 		const results = await new AxeBuilder({ page })
@@ -188,5 +193,29 @@ test.describe('once onboarded', () => {
 	test('keeps the journal across a reload', async ({ page }) => {
 		await page.reload();
 		await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+	});
+
+	test('day strip scrolls on its own, centers Today, and reveals dated pills further back', async ({
+		page
+	}) => {
+		const strip = page.getByRole('button', { name: /^Today/ }).locator('xpath=..');
+		const stripMetrics = await strip.evaluate((el) => ({
+			scrollWidth: el.scrollWidth,
+			clientWidth: el.clientWidth
+		}));
+		expect(stripMetrics.scrollWidth).toBeGreaterThan(stripMetrics.clientWidth);
+
+		const viewportWidth = page.viewportSize()?.width ?? 0;
+		const docScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+		expect(docScrollWidth).toBeLessThanOrEqual(viewportWidth);
+
+		const todayBox = await page.getByRole('button', { name: /^Today/ }).boundingBox();
+		expect(todayBox).not.toBeNull();
+		const todayCenterX =
+			(todayBox as { x: number; width: number }).x + (todayBox as { width: number }).width / 2;
+		expect(Math.abs(todayCenterX - viewportWidth / 2)).toBeLessThanOrEqual(8);
+
+		await strip.evaluate((el) => el.scrollTo({ left: 0, behavior: 'instant' }));
+		await expect(strip.getByText(/^\w{3} \d{1,2}$/).first()).toBeVisible();
 	});
 });

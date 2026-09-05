@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
+import '../../app.css';
 import { logFromFood } from '$lib/domain/log-entry';
 import { emptyProfile } from '$lib/domain/profile';
 import type { LogSource, Meal, Workout } from '$lib/domain/types';
-import { addDaysISO, todayISO, weekdayLong, weekdayShort } from '$lib/domain/utils';
+import { addDaysISO, todayISO, weekdayLong } from '$lib/domain/utils';
+import { dayStripLabel } from '$lib/domain/week-strip';
 import { logUi } from '$lib/state/log-ui.svelte';
 import { tend } from '$lib/state/tend.svelte';
 import TodayView from './TodayView.svelte';
@@ -192,7 +194,9 @@ describe('TodayView', () => {
 	it('switches to another day from the week strip', async () => {
 		const yesterday = addDaysISO(todayISO(), -1);
 		await render(TodayView);
-		await page.getByRole('button', { name: new RegExp(weekdayShort(yesterday)) }).click();
+		await page
+			.getByRole('button', { name: `${dayStripLabel(yesterday)} nothing logged`, exact: true })
+			.click();
 		await expect
 			.element(page.getByText(weekdayLong(yesterday).toUpperCase(), { exact: false }))
 			.toBeInTheDocument();
