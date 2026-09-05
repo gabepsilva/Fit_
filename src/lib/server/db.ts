@@ -125,6 +125,27 @@ const MIGRATIONS = [
 		updated_at   text not null,
 		updated_by   text not null references account (id)
 	) strict;
+	`,
+	`
+	-- Vision calls spent per UTC day, so the OpenAI bill has a ceiling that
+	-- survives a restart. The 'global' scope holds one row for the whole
+	-- deployment and the 'account' scope one per account; both are counted when
+	-- a request is sent, whatever the model answers.
+	--
+	-- No foreign key to account: a deleted account's spend still happened, and
+	-- the row is dropped by the sweep rather than by a cascade.
+	create table photo_quota (
+		scope  text not null check (scope in ('account', 'global')),
+		-- The account id, or the empty string for the deployment-wide row.
+		holder text not null,
+		-- The UTC day as YYYY-MM-DD: the window is the calendar day, not a
+		-- rolling one, so a person can read the reset off a clock.
+		day    text not null,
+		calls  integer not null,
+		primary key (scope, holder, day)
+	) strict;
+
+	create index photo_quota_day on photo_quota (day);
 	`
 ];
 

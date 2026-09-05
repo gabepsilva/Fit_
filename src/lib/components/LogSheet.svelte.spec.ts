@@ -110,8 +110,8 @@ describe('LogSheet', () => {
 		await render(LogSheet);
 		logUi.show('photo');
 		await expect
-			.element(page.getByText(/needs the server, which isn’t built yet/))
-			.toBeInTheDocument();
+			.element(page.getByRole('button', { name: 'Photo', exact: true }))
+			.toHaveAttribute('aria-pressed', 'true');
 	});
 
 	it('returns to typing once it has been closed', async () => {
@@ -134,12 +134,10 @@ describe('LogSheet', () => {
 		await expect.element(page.getByText(/Parsed on-device/)).toBeInTheDocument();
 	});
 
-	it('says plainly that photo parsing needs a server that does not exist yet', async () => {
+	it('always offers typing as the way out of the photo tab', async () => {
 		await openSheet();
 		await page.getByRole('button', { name: 'Photo' }).click();
-		await expect
-			.element(page.getByText(/needs the server, which isn’t built yet/))
-			.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: 'Type it instead' })).toBeInTheDocument();
 	});
 
 	it('opens the camera straight away on the photo tab', async () => {
@@ -568,5 +566,148 @@ describe('LogSheet on GLP-1', () => {
 		await page.getByRole('button', { name: 'Increase' }).click();
 		await page.getByRole('button', { name: 'Add to today' }).click();
 		expect(add).toHaveBeenCalledWith([expect.objectContaining({ servings: 2.25 })]);
+	});
+});
+
+describe('LogSheet reading a plate from a photo', () => {
+	/** What `/api/meals/photo` answers with: one food the catalog matched, one it did not. */
+	function plateAnswers(items: unknown) {
+		return vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+			Promise.resolve(
+				new Response(JSON.stringify({ items }), {
+					status: 200,
+					headers: { 'content-type': 'application/json' }
+				})
+			)
+		);
+	}
+
+	/** Hand the already-open picker a real picture, and wait for the still. */
+	async function givePicture() {
+		const canvas = document.createElement('canvas');
+		canvas.width = 64;
+		canvas.height = 64;
+		const context = canvas.getContext('2d');
+		if (context) {
+			context.fillStyle = '#c98a3a';
+			context.fillRect(0, 0, 64, 64);
+		}
+		const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+		if (!blob) throw new Error('the canvas produced no blob');
+		const input = document.querySelector('input[type="file"]');
+		if (!(input instanceof HTMLInputElement)) throw new Error('no file input was rendered');
+		const data = new DataTransfer();
+		data.items.add(new File([blob], 'plate.png', { type: 'image/png' }));
+		input.files = data.files;
+		input.dispatchEvent(new Event('change', { bubbles: true }));
+		await expect.element(page.getByRole('button', { name: 'Read this plate' })).toBeInTheDocument();
+	}
+
+	/** Reach the still without a camera: the upload tab decodes a real picture. */
+	async function chooseAPicture() {
+		await openSheet();
+		await page.getByRole('button', { name: 'Upload' }).click();
+		await givePicture();
+	}
+
+	async function readThePlate(items: unknown) {
+		await chooseAPicture();
+		plateAnswers(items);
+		await page.getByRole('button', { name: 'Read this plate' }).click();
+	}
+
+	it('turns what the photo held into proposals, and shows them on the type tab', async () => {
+		await readThePlate([
+			{ label: 'a bowl of cereal', grams: 74, food: CEREAL, alternatives: [] },
+			{ label: 'something green', grams: 40, food: null, alternatives: [] }
+		]);
+		await expect.element(page.getByText('HONEY NUT CHEERIOS').first()).toBeInTheDocument();
+		await expect.element(page.getByText('something green').first()).toBeInTheDocument();
+		await expect
+			.element(page.getByRole('button', { name: 'Type', exact: true }))
+			.toHaveAttribute('aria-pressed', 'true');
+	});
+
+	it('reads the estimated weight through the same quantity pipeline as typing', async () => {
+		// 74 g against a 37 g serving is two servings, and the row says so in grams.
+		await readThePlate([{ label: 'a bowl of cereal', grams: 74, food: CEREAL, alternatives: [] }]);
+		await expect.element(page.getByText('2 servings · 74 g')).toBeInTheDocument();
+	});
+
+	it('leaves a food the catalog could not match for the person to match', async () => {
+		await readThePlate([{ label: 'something green', grams: 40, food: null, alternatives: [] }]);
+		await expect
+			.element(page.getByRole('button', { name: 'Match to catalog' }))
+			.toBeInTheDocument();
+	});
+
+	it('logs what the photo found under the photo source', async () => {
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		await readThePlate([{ label: 'a bowl of cereal', grams: 74, food: CEREAL, alternatives: [] }]);
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add.mock.calls[0]?.[0]?.[0]).toMatchObject({
+			source: 'photo',
+			name: 'HONEY NUT CHEERIOS',
+			servings: 2
+		});
+	});
+
+	it('drops the food it could not match, the way an unmatched typed item is dropped', async () => {
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		await readThePlate([
+			{ label: 'a bowl of cereal', grams: 74, food: CEREAL, alternatives: [] },
+			{ label: 'something green', grams: 40, food: null, alternatives: [] }
+		]);
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add.mock.calls[0]?.[0]).toHaveLength(1);
+	});
+
+	it('adds to what was already parsed rather than replacing it', async () => {
+		// Regression: reading a plate assigned over `proposals`, so anything already
+		// typed on the Type tab disappeared without a word.
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await expect.element(page.getByText('Egg, large').first()).toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Upload' }).click();
+		await givePicture();
+		plateAnswers([{ label: 'a bowl of cereal', grams: 74, food: CEREAL, alternatives: [] }]);
+		await page.getByRole('button', { name: 'Read this plate' }).click();
+
+		await expect.element(page.getByText('HONEY NUT CHEERIOS').first()).toBeInTheDocument();
+		await expect.element(page.getByText('Egg, large').first()).toBeInTheDocument();
+	});
+
+	it('says so rather than guessing when the catalog serving weighs nothing', async () => {
+		// A serving of no weight gives the estimate nothing to divide by, so
+		// `resolveQuantity` declines it and records one serving. The row has to say
+		// that happened rather than present the one as a reading of the photo.
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		const weightless = { ...CEREAL, serving: { label: 'serving', grams: 0 } };
+		await readThePlate([
+			{ label: 'a bowl of cereal', grams: 74, food: weightless, alternatives: [] }
+		]);
+		await expect.element(page.getByText(/Couldn’t use “74 g”/)).toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add.mock.calls[0]?.[0]?.[0]).toMatchObject({
+			servings: 1,
+			note: 'Portion unknown, set the servings'
+		});
+	});
+
+	it('carries no such note when the estimate was read against a real serving', async () => {
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		await readThePlate([{ label: 'a bowl of cereal', grams: 74, food: CEREAL, alternatives: [] }]);
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add.mock.calls[0]?.[0]?.[0]?.note).toBeUndefined();
+	});
+
+	it('stays on the photo tab when the photo held no food', async () => {
+		await readThePlate([]);
+		await expect
+			.element(page.getByText(/Couldn’t recognise any food in that photo/))
+			.toBeInTheDocument();
 	});
 });

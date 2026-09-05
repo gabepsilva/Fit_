@@ -30,7 +30,14 @@ const STATUS = {
 	 * shipped outside the release, so a deployment without it still serves
 	 * every other route and the client falls back to its bundled foods.
 	 */
-	'catalog-unavailable': 503
+	'catalog-unavailable': 503,
+	/**
+	 * Reading a photo is not possible right now: no vision key is configured,
+	 * or the model refused, timed out or failed. One code for all of them
+	 * deliberately — the caller can do nothing differently about any of them,
+	 * and the upstream's own status is a fact about our account, not theirs.
+	 */
+	'photo-unavailable': 503
 } as const;
 
 export type ApiErrorCode = keyof typeof STATUS;
