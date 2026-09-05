@@ -33,10 +33,10 @@ describe('LogRow', () => {
 	});
 
 	it('says how many millilitres a volume serving is', async () => {
-		// A serving of whole milk is one cup; the millilitres are the unit's own
+		// A serving of 2% milk is one cup; the millilitres are the unit's own
 		// definition, so they can be shown without knowing the food.
 		const entry = logFromFood({
-			foodId: 'whole-milk',
+			foodId: 'milk-2',
 			servings: 2,
 			meal: 'breakfast',
 			date: '2026-06-01',

@@ -1,12 +1,14 @@
 import { expect, type Browser, type Page } from '@playwright/test';
 import { test } from '../../tests/preview-server';
 import {
+	EGG_ROW,
 	freshUsername,
 	openEmptyJournal,
 	openLogSheetAndType,
 	returnThroughApi,
 	signInThroughApi,
-	signOutThroughDrawer
+	signOutThroughDrawer,
+	stubFoodResolve
 } from '../../tests/e2e-support';
 
 /**
@@ -20,6 +22,9 @@ import {
 const PASSWORD = 'salt-and-pepper-mill';
 
 async function logTwoEggs(page: Page) {
+	// Naming the food is the server's job since #116, and this preview server
+	// has no catalog file; the sync behavior under test is unaffected by it.
+	await stubFoodResolve(page, [EGG_ROW]);
 	await openLogSheetAndType(page, 'two eggs');
 	await page.getByRole('button', { name: 'Parse' }).click();
 	await page.getByRole('button', { name: 'Add to today' }).click();

@@ -1,6 +1,12 @@
 import { expect } from '@playwright/test';
 import { test } from '../../tests/preview-server';
-import { openEmptyJournal, openLogSheetAndType, signInThroughApi } from '../../tests/e2e-support';
+import {
+	OLIVE_OIL_ROW,
+	openEmptyJournal,
+	openLogSheetAndType,
+	signInThroughApi,
+	stubFoodResolve
+} from '../../tests/e2e-support';
 
 /**
  * Issue #111: "2 tablespoons olive oil" was logged as 2 servings — the whole
@@ -13,6 +19,7 @@ import { openEmptyJournal, openLogSheetAndType, signInThroughApi } from '../../t
 test.describe('a typed unit spelling matches its abbreviation', () => {
 	test.beforeEach(async ({ page, baseURL }) => {
 		await signInThroughApi(page, baseURL ?? '');
+		await stubFoodResolve(page, [OLIVE_OIL_ROW]);
 		await openEmptyJournal(page);
 	});
 

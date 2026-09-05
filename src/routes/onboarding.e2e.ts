@@ -1,6 +1,12 @@
 import { expect } from '@playwright/test';
 import { test } from '../../tests/preview-server';
-import { openLogSheetAndType, openSampleJournal, signInThroughApi } from '../../tests/e2e-support';
+import {
+	EGG_ROW,
+	openLogSheetAndType,
+	openSampleJournal,
+	signInThroughApi,
+	stubFoodResolve
+} from '../../tests/e2e-support';
 import AxeBuilder from '@axe-core/playwright';
 
 test.describe('arriving without an account', () => {
@@ -172,6 +178,7 @@ test.describe('once onboarded', () => {
 	});
 
 	test('logs a food through the sheet', async ({ page }) => {
+		await stubFoodResolve(page, [EGG_ROW]);
 		await openLogSheetAndType(page, 'two eggs');
 		await page.getByRole('button', { name: 'Parse' }).click();
 		await page.getByRole('button', { name: 'Add to today' }).click();

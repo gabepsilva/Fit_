@@ -2,7 +2,7 @@ import { FOODS } from './food-catalog';
 import type { Food, Micros } from './types';
 import { round1 } from './utils';
 
-// Seed rows live in `./food-catalog`; re-exported here so mutation testing targets behavior, not data.
+// Sample rows live in `./food-catalog`; re-exported here so mutation testing targets behavior, not data.
 export { CATEGORY_LABEL, FOODS, PROVENANCE_LABEL } from './food-catalog';
 
 export const FOOD_BY_ID: Record<string, Food> = Object.fromEntries(

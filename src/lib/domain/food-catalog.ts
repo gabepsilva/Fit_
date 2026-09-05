@@ -7,8 +7,19 @@ function f(partial: Omit<Food, 'micros'> & { micros?: Partial<Micros> }): Food {
 }
 
 /**
- * Seed catalog. Each row carries a single provenance so the USDA and Open Food
- * Facts licenses never mix inside one entry.
+ * The foods this build ships.
+ *
+ * Each row carries a single provenance so the USDA and Open Food Facts licenses
+ * never mix inside one entry.
+ *
+ * There are forty-nine of them, and they are exactly the foods `demo-seed.ts`
+ * and `recipe-book.ts` need: the sample journal's entries and every recipe
+ * ingredient. Until #116 there were ninety-six, because the typed-text parser
+ * matched a food name against this table on the device; that now happens on the
+ * server against 2.5 million rows (`POST /api/foods/resolve`), and the
+ * forty-seven rows nothing else referenced went with it — 10.6 KB of the client
+ * bundle. What is left still answers the search box and the catalog page with no
+ * connection, which is the only thing that does.
  */
 export const FOODS: Food[] = [
 	f({
@@ -38,20 +49,6 @@ export const FOODS: Food[] = [
 		}
 	}),
 	f({
-		id: 'egg-white',
-		name: 'Egg white, large',
-		aliases: ['egg whites', 'whites'],
-		category: 'protein',
-		provenance: 'usda',
-		servingLabel: '1 large',
-		grams: 33,
-		kcal: 17,
-		protein: 3.6,
-		carbs: 0.2,
-		fat: 0.1,
-		micros: { sodium: 55, potassium: 54, vitaminB12: 0.03 }
-	}),
-	f({
 		id: 'chicken-breast',
 		name: 'Chicken breast, grilled',
 		aliases: ['chicken', 'grilled chicken', 'chicken breast'],
@@ -72,34 +69,6 @@ export const FOODS: Food[] = [
 			magnesium: 29,
 			vitaminA: 6
 		}
-	}),
-	f({
-		id: 'chicken-thigh',
-		name: 'Chicken thigh, roasted',
-		aliases: ['thigh', 'chicken thighs'],
-		category: 'protein',
-		provenance: 'usda',
-		servingLabel: '100 g',
-		grams: 100,
-		kcal: 209,
-		protein: 26,
-		carbs: 0,
-		fat: 11,
-		micros: { sodium: 84, potassium: 240, iron: 1.1, zinc: 2.4, vitaminB12: 0.4 }
-	}),
-	f({
-		id: 'rotisserie-chicken',
-		name: 'Rotisserie chicken, skinless',
-		aliases: ['rotisserie', 'store chicken'],
-		category: 'protein',
-		provenance: 'usda',
-		servingLabel: '100 g',
-		grams: 100,
-		kcal: 184,
-		protein: 28,
-		carbs: 0,
-		fat: 8,
-		micros: { sodium: 320, potassium: 250, iron: 0.9, vitaminB12: 0.3 }
 	}),
 	f({
 		id: 'turkey-breast',
@@ -128,34 +97,6 @@ export const FOODS: Food[] = [
 		carbs: 0,
 		fat: 8,
 		micros: { sodium: 80, potassium: 270, iron: 1.5, zinc: 3 }
-	}),
-	f({
-		id: 'ground-beef',
-		name: 'Ground beef, 93% lean',
-		aliases: ['beef', 'hamburger meat', 'mince'],
-		category: 'protein',
-		provenance: 'usda',
-		servingLabel: '100 g cooked',
-		grams: 100,
-		kcal: 182,
-		protein: 25.6,
-		carbs: 0,
-		fat: 8,
-		micros: { sodium: 72, potassium: 318, iron: 2.6, zinc: 6.3, vitaminB12: 2.5 }
-	}),
-	f({
-		id: 'sirloin',
-		name: 'Sirloin steak, grilled',
-		aliases: ['steak', 'sirloin'],
-		category: 'protein',
-		provenance: 'usda',
-		servingLabel: '100 g',
-		grams: 100,
-		kcal: 183,
-		protein: 30,
-		carbs: 0,
-		fat: 6.5,
-		micros: { sodium: 54, potassium: 350, iron: 2.4, zinc: 5.5, vitaminB12: 2.1 }
 	}),
 	f({
 		id: 'salmon',
@@ -204,48 +145,6 @@ export const FOODS: Food[] = [
 		carbs: 0.2,
 		fat: 0.3,
 		micros: { sodium: 111, potassium: 259, iron: 0.5, vitaminB12: 1.1, zinc: 1.6 }
-	}),
-	f({
-		id: 'cod',
-		name: 'Cod, baked',
-		aliases: ['white fish', 'cod'],
-		category: 'protein',
-		provenance: 'usda',
-		servingLabel: '100 g',
-		grams: 100,
-		kcal: 82,
-		protein: 18,
-		carbs: 0,
-		fat: 0.7,
-		micros: { sodium: 78, potassium: 244, vitaminB12: 0.9, vitaminD: 0.8 }
-	}),
-	f({
-		id: 'pork-tenderloin',
-		name: 'Pork tenderloin, roasted',
-		aliases: ['pork', 'pork loin'],
-		category: 'protein',
-		provenance: 'usda',
-		servingLabel: '100 g',
-		grams: 100,
-		kcal: 143,
-		protein: 26,
-		carbs: 0,
-		fat: 3.5,
-		micros: { sodium: 47, potassium: 421, iron: 1, zinc: 2.4, vitaminB12: 0.6 }
-	}),
-	f({
-		id: 'bacon',
-		name: 'Bacon, pan-fried',
-		aliases: ['bacon'],
-		category: 'protein',
-		provenance: 'usda',
-		servingLabel: '1 slice',
-		grams: 8,
-		kcal: 43,
-		protein: 3,
-		carbs: 0.1,
-		fat: 3.3,
-		micros: { sodium: 185 }
 	}),
 	f({
 		id: 'tofu-firm',
@@ -325,20 +224,6 @@ export const FOODS: Food[] = [
 		micros: { fiber: 15, iron: 3.6, potassium: 611, folate: 256, magnesium: 120 }
 	}),
 	f({
-		id: 'edamame',
-		name: 'Edamame, shelled',
-		aliases: ['edamame'],
-		category: 'protein',
-		provenance: 'usda',
-		servingLabel: '1 cup',
-		grams: 155,
-		kcal: 188,
-		protein: 18,
-		carbs: 14,
-		fat: 8,
-		micros: { fiber: 8, iron: 3.5, folate: 482, potassium: 676, vitaminC: 9.5 }
-	}),
-	f({
 		id: 'greek-yogurt',
 		name: 'Greek yogurt, plain nonfat',
 		aliases: ['yogurt', 'greek yogurt', 'nonfat yogurt'],
@@ -357,20 +242,6 @@ export const FOODS: Food[] = [
 			vitaminB12: 1.3,
 			sugar: 6
 		}
-	}),
-	f({
-		id: 'greek-yogurt-whole',
-		name: 'Greek yogurt, whole milk',
-		aliases: ['full fat yogurt', 'whole milk yogurt'],
-		category: 'dairy',
-		provenance: 'usda',
-		servingLabel: '170 g cup',
-		grams: 170,
-		kcal: 179,
-		protein: 15,
-		carbs: 6,
-		fat: 9,
-		micros: { calcium: 170, potassium: 220, vitaminB12: 1.1, sugar: 6 }
 	}),
 	f({
 		id: 'cottage-cheese',
@@ -399,64 +270,6 @@ export const FOODS: Food[] = [
 		carbs: 2,
 		fat: 0.5,
 		micros: { sodium: 50, calcium: 120, potassium: 160 }
-	}),
-	f({
-		id: 'core-power',
-		name: 'Fairlife Core Power 26g',
-		brand: 'Fairlife',
-		aliases: ['core power', 'fairlife', 'protein shake'],
-		barcode: '811620021015',
-		category: 'protein',
-		provenance: 'off',
-		servingLabel: '1 bottle (414 ml)',
-		grams: 414,
-		kcal: 170,
-		protein: 26,
-		carbs: 8,
-		fat: 4.5,
-		micros: { calcium: 650, sodium: 260, potassium: 490, vitaminD: 5, sugar: 6 }
-	}),
-	f({
-		id: 'peanut-butter',
-		name: 'Peanut butter, smooth',
-		aliases: ['pb', 'peanut butter'],
-		category: 'fat',
-		provenance: 'usda',
-		servingLabel: '2 tbsp',
-		grams: 32,
-		kcal: 188,
-		protein: 8,
-		carbs: 6,
-		fat: 16,
-		micros: { fiber: 2, sodium: 136, magnesium: 57, potassium: 208, zinc: 0.9 }
-	}),
-	f({
-		id: 'almonds',
-		name: 'Almonds, raw',
-		aliases: ['almond', 'almonds'],
-		category: 'fat',
-		provenance: 'usda',
-		servingLabel: '1 oz (23 nuts)',
-		grams: 28,
-		kcal: 164,
-		protein: 6,
-		carbs: 6,
-		fat: 14,
-		micros: { fiber: 3.5, magnesium: 76, calcium: 76, potassium: 208 }
-	}),
-	f({
-		id: 'walnuts',
-		name: 'Walnuts',
-		aliases: ['walnut', 'walnuts'],
-		category: 'fat',
-		provenance: 'usda',
-		servingLabel: '1 oz',
-		grams: 28,
-		kcal: 185,
-		protein: 4.3,
-		carbs: 4,
-		fat: 18.5,
-		micros: { fiber: 1.9, magnesium: 45, potassium: 125 }
 	}),
 	f({
 		id: 'chia',
@@ -499,20 +312,6 @@ export const FOODS: Food[] = [
 		carbs: 45,
 		fat: 1.8,
 		micros: { fiber: 3.5, magnesium: 84, potassium: 154 }
-	}),
-	f({
-		id: 'white-rice',
-		name: 'White rice, cooked',
-		aliases: ['white rice', 'steamed rice'],
-		category: 'grain',
-		provenance: 'usda',
-		servingLabel: '1 cup',
-		grams: 158,
-		kcal: 205,
-		protein: 4.3,
-		carbs: 45,
-		fat: 0.4,
-		micros: { fiber: 0.6, sodium: 2 }
 	}),
 	f({
 		id: 'quinoa',
@@ -569,78 +368,6 @@ export const FOODS: Food[] = [
 		carbs: 14,
 		fat: 1.1,
 		micros: { fiber: 1.9, sodium: 146, iron: 0.8, magnesium: 24 }
-	}),
-	f({
-		id: 'daves-bread',
-		name: '21 Whole Grains and Seeds',
-		brand: "Dave's Killer Bread",
-		aliases: ["dave's", 'dkb', 'killer bread'],
-		barcode: '013764027954',
-		category: 'grain',
-		provenance: 'off',
-		servingLabel: '1 slice',
-		grams: 45,
-		kcal: 110,
-		protein: 5,
-		carbs: 22,
-		fat: 1.5,
-		micros: { fiber: 5, sodium: 170, iron: 1.1, sugar: 5 }
-	}),
-	f({
-		id: 'tortilla',
-		name: 'Flour tortilla, 8 inch',
-		aliases: ['wrap', 'tortilla'],
-		category: 'grain',
-		provenance: 'usda',
-		servingLabel: '1 tortilla',
-		grams: 49,
-		kcal: 146,
-		protein: 4,
-		carbs: 25,
-		fat: 3.7,
-		micros: { fiber: 1.5, sodium: 331 }
-	}),
-	f({
-		id: 'bagel',
-		name: 'Bagel, plain',
-		aliases: ['bagel'],
-		category: 'grain',
-		provenance: 'usda',
-		servingLabel: '1 bagel (100 g)',
-		grams: 100,
-		kcal: 250,
-		protein: 10,
-		carbs: 49,
-		fat: 1.5,
-		micros: { fiber: 2.1, sodium: 430, iron: 3.6 }
-	}),
-	f({
-		id: 'english-muffin',
-		name: 'English muffin, whole wheat',
-		aliases: ['english muffin'],
-		category: 'grain',
-		provenance: 'usda',
-		servingLabel: '1 muffin',
-		grams: 66,
-		kcal: 134,
-		protein: 6,
-		carbs: 27,
-		fat: 1.3,
-		micros: { fiber: 4.4, sodium: 220, iron: 1.6 }
-	}),
-	f({
-		id: 'potato',
-		name: 'Potato, baked with skin',
-		aliases: ['potato', 'baked potato'],
-		category: 'produce',
-		provenance: 'usda',
-		servingLabel: '1 medium',
-		grams: 173,
-		kcal: 161,
-		protein: 4.3,
-		carbs: 37,
-		fat: 0.2,
-		micros: { fiber: 3.8, potassium: 926, vitaminC: 16.6, magnesium: 48 }
 	}),
 	f({
 		id: 'sweet-potato',
@@ -790,20 +517,6 @@ export const FOODS: Food[] = [
 		micros: { fiber: 1.2, vitaminA: 200, vitaminC: 12, folate: 50, potassium: 180 }
 	}),
 	f({
-		id: 'kale',
-		name: 'Kale, raw',
-		aliases: ['kale'],
-		category: 'produce',
-		provenance: 'usda',
-		servingLabel: '1 cup chopped',
-		grams: 21,
-		kcal: 7,
-		protein: 0.6,
-		carbs: 0.9,
-		fat: 0.3,
-		micros: { vitaminA: 98, vitaminC: 19, calcium: 53, potassium: 79 }
-	}),
-	f({
 		id: 'tomato',
 		name: 'Tomato',
 		aliases: ['tomato', 'tomatoes'],
@@ -888,55 +601,6 @@ export const FOODS: Food[] = [
 		micros: { folate: 134, vitaminA: 90, fiber: 3.6 }
 	}),
 	f({
-		id: 'mushrooms',
-		name: 'Mushrooms, cooked',
-		aliases: ['mushroom', 'mushrooms'],
-		category: 'produce',
-		provenance: 'usda',
-		servingLabel: '1 cup',
-		grams: 156,
-		kcal: 44,
-		protein: 3.4,
-		carbs: 8,
-		fat: 0.7,
-		micros: { potassium: 555, vitaminD: 0.3, sodium: 2 }
-	}),
-	f({
-		id: 'green-beans',
-		name: 'Green beans, cooked',
-		aliases: ['green beans'],
-		category: 'produce',
-		provenance: 'usda',
-		servingLabel: '1 cup',
-		grams: 125,
-		kcal: 44,
-		protein: 2.4,
-		carbs: 10,
-		fat: 0.3,
-		micros: { fiber: 4, vitaminC: 12, vitaminA: 35, potassium: 146 }
-	}),
-	f({
-		id: 'whole-milk',
-		name: 'Whole milk',
-		aliases: ['milk', 'whole milk'],
-		category: 'dairy',
-		provenance: 'usda',
-		servingLabel: '1 cup',
-		grams: 244,
-		kcal: 149,
-		protein: 8,
-		carbs: 12,
-		fat: 8,
-		micros: {
-			calcium: 276,
-			vitaminD: 3.2,
-			vitaminB12: 1.1,
-			potassium: 322,
-			sodium: 105,
-			sugar: 12
-		}
-	}),
-	f({
 		id: 'milk-2',
 		name: '2% milk',
 		aliases: ['2% milk', 'reduced fat milk'],
@@ -967,34 +631,6 @@ export const FOODS: Food[] = [
 		micros: { calcium: 350, vitaminD: 3.6, sodium: 100, fiber: 2, sugar: 7 }
 	}),
 	f({
-		id: 'cheddar',
-		name: 'Cheddar cheese',
-		aliases: ['cheddar', 'cheese'],
-		category: 'dairy',
-		provenance: 'usda',
-		servingLabel: '1 oz',
-		grams: 28,
-		kcal: 114,
-		protein: 7,
-		carbs: 0.4,
-		fat: 9.4,
-		micros: { calcium: 199, sodium: 174, vitaminA: 75, vitaminB12: 0.3 }
-	}),
-	f({
-		id: 'mozzarella',
-		name: 'Mozzarella, part-skim',
-		aliases: ['mozzarella', 'mozz'],
-		category: 'dairy',
-		provenance: 'usda',
-		servingLabel: '1 oz',
-		grams: 28,
-		kcal: 72,
-		protein: 7,
-		carbs: 0.8,
-		fat: 4.5,
-		micros: { calcium: 222, sodium: 175 }
-	}),
-	f({
 		id: 'feta',
 		name: 'Feta cheese',
 		aliases: ['feta'],
@@ -1023,20 +659,6 @@ export const FOODS: Food[] = [
 		micros: { calcium: 55, sodium: 76 }
 	}),
 	f({
-		id: 'butter',
-		name: 'Butter',
-		aliases: ['butter'],
-		category: 'fat',
-		provenance: 'usda',
-		servingLabel: '1 tbsp',
-		grams: 14,
-		kcal: 102,
-		protein: 0.1,
-		carbs: 0,
-		fat: 11.5,
-		micros: { vitaminA: 97, sodium: 91 }
-	}),
-	f({
 		id: 'olive-oil',
 		name: 'Olive oil',
 		aliases: ['olive oil', 'oil'],
@@ -1051,20 +673,6 @@ export const FOODS: Food[] = [
 		micros: {}
 	}),
 	f({
-		id: 'hummus',
-		name: 'Hummus',
-		aliases: ['hummus'],
-		category: 'fat',
-		provenance: 'usda',
-		servingLabel: '2 tbsp',
-		grams: 30,
-		kcal: 70,
-		protein: 2,
-		carbs: 6,
-		fat: 5,
-		micros: { fiber: 2, sodium: 120, iron: 0.7 }
-	}),
-	f({
 		id: 'coffee',
 		name: 'Black coffee',
 		aliases: ['coffee', 'black coffee', 'americano'],
@@ -1077,120 +685,6 @@ export const FOODS: Food[] = [
 		carbs: 0,
 		fat: 0,
 		micros: { potassium: 116, magnesium: 7 }
-	}),
-	f({
-		id: 'espresso',
-		name: 'Espresso',
-		aliases: ['espresso', 'shot'],
-		category: 'drink',
-		provenance: 'usda',
-		servingLabel: '1 shot',
-		grams: 30,
-		kcal: 3,
-		protein: 0.1,
-		carbs: 0,
-		fat: 0.1,
-		micros: { potassium: 34, magnesium: 24 }
-	}),
-	f({
-		id: 'latte',
-		name: 'Caffè latte, 12 oz whole milk',
-		aliases: ['latte', 'cafe latte', 'starbucks latte'],
-		category: 'drink',
-		provenance: 'brand',
-		servingLabel: '12 oz',
-		grams: 355,
-		kcal: 190,
-		protein: 10,
-		carbs: 15,
-		fat: 10,
-		micros: { calcium: 350, vitaminD: 3, sugar: 14, sodium: 150 }
-	}),
-	f({
-		id: 'green-tea',
-		name: 'Green tea',
-		aliases: ['tea', 'green tea'],
-		category: 'drink',
-		provenance: 'usda',
-		servingLabel: '1 cup',
-		grams: 245,
-		kcal: 2,
-		protein: 0,
-		carbs: 0.5,
-		fat: 0,
-		micros: {}
-	}),
-	f({
-		id: 'orange-juice',
-		name: 'Orange juice',
-		aliases: ['oj', 'orange juice'],
-		category: 'drink',
-		provenance: 'usda',
-		servingLabel: '1 cup',
-		grams: 248,
-		kcal: 112,
-		protein: 1.7,
-		carbs: 26,
-		fat: 0.5,
-		micros: { vitaminC: 124, potassium: 496, folate: 74, sugar: 21 }
-	}),
-	f({
-		id: 'coke',
-		name: 'Coca-Cola',
-		brand: 'Coca-Cola',
-		aliases: ['coke', 'cola', 'soda'],
-		barcode: '049000006162',
-		category: 'drink',
-		provenance: 'off',
-		servingLabel: '12 oz can',
-		grams: 355,
-		kcal: 140,
-		protein: 0,
-		carbs: 39,
-		fat: 0,
-		micros: { sodium: 45, sugar: 39 }
-	}),
-	f({
-		id: 'sparkling-water',
-		name: 'Sparkling water',
-		aliases: ['la croix', 'seltzer', 'sparkling water', 'fizzy water'],
-		category: 'drink',
-		provenance: 'usda',
-		servingLabel: '1 can',
-		grams: 355,
-		kcal: 0,
-		protein: 0,
-		carbs: 0,
-		fat: 0,
-		micros: {}
-	}),
-	f({
-		id: 'red-wine',
-		name: 'Red wine',
-		aliases: ['wine', 'red wine'],
-		category: 'drink',
-		provenance: 'usda',
-		servingLabel: '5 oz',
-		grams: 147,
-		kcal: 125,
-		protein: 0.1,
-		carbs: 4,
-		fat: 0,
-		micros: { potassium: 187, iron: 0.5 }
-	}),
-	f({
-		id: 'beer',
-		name: 'Beer, lager',
-		aliases: ['beer'],
-		category: 'drink',
-		provenance: 'usda',
-		servingLabel: '12 oz',
-		grams: 356,
-		kcal: 153,
-		protein: 1.6,
-		carbs: 13,
-		fat: 0,
-		micros: { potassium: 96 }
 	}),
 	f({
 		id: 'kind-bar',
@@ -1225,78 +719,6 @@ export const FOODS: Food[] = [
 		micros: { fiber: 14, sodium: 220, calcium: 130, sugar: 1 }
 	}),
 	f({
-		id: 'cheerios',
-		name: 'Cheerios',
-		brand: 'General Mills',
-		aliases: ['cheerios', 'cereal'],
-		barcode: '016000275273',
-		category: 'packaged',
-		provenance: 'off',
-		servingLabel: '1.5 cups (39 g)',
-		grams: 39,
-		kcal: 140,
-		protein: 5,
-		carbs: 29,
-		fat: 2.5,
-		micros: { fiber: 4, iron: 5.4, sodium: 190, folate: 200 }
-	}),
-	f({
-		id: 'dark-chocolate',
-		name: 'Dark chocolate, 70%',
-		aliases: ['chocolate', 'dark chocolate'],
-		category: 'packaged',
-		provenance: 'usda',
-		servingLabel: '1 oz',
-		grams: 28,
-		kcal: 170,
-		protein: 2.2,
-		carbs: 13,
-		fat: 12,
-		micros: { iron: 3.3, magnesium: 64, fiber: 3, sugar: 7 }
-	}),
-	f({
-		id: 'honey',
-		name: 'Honey',
-		aliases: ['honey'],
-		category: 'condiment',
-		provenance: 'usda',
-		servingLabel: '1 tbsp',
-		grams: 21,
-		kcal: 64,
-		protein: 0.1,
-		carbs: 17,
-		fat: 0,
-		micros: { sugar: 17 }
-	}),
-	f({
-		id: 'maple',
-		name: 'Maple syrup',
-		aliases: ['maple', 'syrup'],
-		category: 'condiment',
-		provenance: 'usda',
-		servingLabel: '1 tbsp',
-		grams: 20,
-		kcal: 52,
-		protein: 0,
-		carbs: 13,
-		fat: 0,
-		micros: { sugar: 12 }
-	}),
-	f({
-		id: 'ketchup',
-		name: 'Ketchup',
-		aliases: ['ketchup'],
-		category: 'condiment',
-		provenance: 'usda',
-		servingLabel: '1 tbsp',
-		grams: 17,
-		kcal: 19,
-		protein: 0.2,
-		carbs: 4.5,
-		fat: 0,
-		micros: { sodium: 160, sugar: 3.7 }
-	}),
-	f({
 		id: 'mayo',
 		name: 'Mayonnaise',
 		aliases: ['mayo', 'mayonnaise'],
@@ -1325,48 +747,6 @@ export const FOODS: Food[] = [
 		micros: { sodium: 150, vitaminC: 4 }
 	}),
 	f({
-		id: 'popcorn',
-		name: 'Popcorn, air-popped',
-		aliases: ['popcorn'],
-		category: 'packaged',
-		provenance: 'usda',
-		servingLabel: '3 cups',
-		grams: 24,
-		kcal: 93,
-		protein: 3,
-		carbs: 19,
-		fat: 1.1,
-		micros: { fiber: 3.6, magnesium: 36 }
-	}),
-	f({
-		id: 'rice-cake',
-		name: 'Brown rice cake',
-		aliases: ['rice cake'],
-		category: 'packaged',
-		provenance: 'usda',
-		servingLabel: '1 cake',
-		grams: 9,
-		kcal: 35,
-		protein: 0.7,
-		carbs: 7.3,
-		fat: 0.3,
-		micros: { sodium: 29 }
-	}),
-	f({
-		id: 'pizza-slice',
-		name: 'Cheese pizza, 1 slice',
-		aliases: ['pizza', 'pizza slice'],
-		category: 'prepared',
-		provenance: 'community',
-		servingLabel: '1 slice (1/8 of 14")',
-		grams: 107,
-		kcal: 285,
-		protein: 12,
-		carbs: 36,
-		fat: 10,
-		micros: { sodium: 640, calcium: 180, fiber: 2.5 }
-	}),
-	f({
 		id: 'egg-mcmuffin',
 		name: 'Egg McMuffin',
 		brand: "McDonald's",
@@ -1382,21 +762,6 @@ export const FOODS: Food[] = [
 		micros: { sodium: 770, calcium: 230, iron: 2.7, fiber: 2 }
 	}),
 	f({
-		id: 'big-mac',
-		name: 'Big Mac',
-		brand: "McDonald's",
-		aliases: ['big mac'],
-		category: 'prepared',
-		provenance: 'brand',
-		servingLabel: '1 sandwich',
-		grams: 215,
-		kcal: 590,
-		protein: 25,
-		carbs: 46,
-		fat: 34,
-		micros: { sodium: 1050, fiber: 3, calcium: 140, iron: 4.5 }
-	}),
-	f({
 		id: 'chipotle-bowl',
 		name: 'Chicken burrito bowl',
 		brand: 'Chipotle',
@@ -1410,34 +775,6 @@ export const FOODS: Food[] = [
 		carbs: 71,
 		fat: 16,
 		micros: { fiber: 14, sodium: 1540, potassium: 980, iron: 4.2 }
-	}),
-	f({
-		id: 'california-roll',
-		name: 'California roll',
-		aliases: ['sushi', 'california roll'],
-		category: 'prepared',
-		provenance: 'community',
-		servingLabel: '6 pieces',
-		grams: 175,
-		kcal: 255,
-		protein: 7,
-		carbs: 38,
-		fat: 7,
-		micros: { sodium: 520, fiber: 2 }
-	}),
-	f({
-		id: 'dates',
-		name: 'Medjool dates',
-		aliases: ['date', 'dates'],
-		category: 'produce',
-		provenance: 'usda',
-		servingLabel: '2 dates',
-		grams: 48,
-		kcal: 133,
-		protein: 0.9,
-		carbs: 36,
-		fat: 0.1,
-		micros: { fiber: 3.2, potassium: 334, magnesium: 26, sugar: 32 }
 	})
 ];
 

@@ -1,7 +1,17 @@
-import { FOODS, FOOD_BY_ID } from './foods';
-import { classifyUnit, resolveQuantity, type QuantifiedItem, type QuantitySpec } from './quantity';
+import { classifyUnit, type QuantitySpec } from './quantity';
+import { tokenize } from './text-tokens';
 import { UNIT_SPELLING_WORDS } from './unit-spellings';
-import type { Food, Meal, ProposedItem } from './types';
+import type { Meal } from './types';
+
+/**
+ * What a typed sentence says, as far as the device can tell on its own.
+ *
+ * Splitting "two eggs, 150g rice" into chunks and reading the quantity off each
+ * one is arithmetic on the words, so it happens here. Naming the food is not:
+ * that needs the catalog, and the catalog is 2.5 million rows on the server
+ * (`POST /api/foods/resolve`). This module hands out the leftover text as a
+ * `query` and takes no view on what food it names.
+ */
 
 const NUMBER_WORDS: Record<string, number> = {
 	a: 1,
@@ -21,8 +31,8 @@ const NUMBER_WORDS: Record<string, number> = {
 };
 
 /**
- * Words that sit between a quantity and the food. Dropped before the catalog is
- * searched — leaving the filler in drags a real match below the threshold.
+ * Words that sit between a quantity and the food. Dropped before the query is
+ * sent — leaving the filler in drags a real match down the ranking.
  * Every accepted unit spelling comes from `unit-spellings.ts`, the same table
  * `classifyUnit` reads, so a unit word is filler here exactly when it is a
  * unit there.
@@ -46,42 +56,6 @@ const UNIT_HINTS = [
 	'pieces',
 	...UNIT_SPELLING_WORDS
 ];
-
-function tokenize(s: string) {
-	return s
-		.toLowerCase()
-		.replace(/[^a-z0-9%./\s-]/g, ' ')
-		.split(/\s+/)
-		.filter(Boolean);
-}
-
-function scoreFood(query: string, food: Food) {
-	const q = query.toLowerCase().trim();
-	if (!q) return 0;
-	const names = [food.name, food.brand ?? '', ...food.aliases].join(' ').toLowerCase();
-	if (food.name.toLowerCase() === q) return 1;
-	if (food.aliases.some((a) => a.toLowerCase() === q)) return 0.96;
-	if (names.includes(q) && q.length > 2) return 0.86;
-	const qt = tokenize(q);
-	const nt = new Set(tokenize(names));
-	if (!qt.length) return 0;
-	const overlap = qt.filter((t) => nt.has(t) || [...nt].some((n) => n.includes(t) && t.length > 3));
-	return overlap.length / qt.length;
-}
-
-export function findFoods(query: string, limit = 12): { food: Food; score: number }[] {
-	const q = query.trim().toLowerCase();
-	if (!q) return FOODS.slice(0, limit).map((food) => ({ food, score: 0 }));
-	return FOODS.map((food) => ({ food, score: scoreFood(q, food) }))
-		.filter((x) => x.score > 0.25)
-		.sort((a, b) => b.score - a.score)
-		.slice(0, limit);
-}
-
-export function bestFood(query: string) {
-	const hits = findFoods(query, 3);
-	return hits[0] ?? null;
-}
 
 /**
  * Units that can be written against the number with no space: "150g rice".
@@ -191,47 +165,21 @@ export function guessMeal(date = new Date()): Meal {
 	return 'snack';
 }
 
-/** The catalog score a match has to clear before its food is proposed. */
-const MATCH_THRESHOLD = 0.55;
+/**
+ * One food a sentence mentioned: the words left once the quantity was taken off
+ * the front, and the quantity itself. No `foodId` and no name — nothing here
+ * knows what food `query` names, and the servings cannot be worked out until
+ * something does, because a mass has to be divided by that food's own serving
+ * weight.
+ */
+export type ParsedChunk = {
+	query: string;
+	quantity: QuantitySpec;
+	meal: Meal;
+};
 
-/** The catalog food a phrase names, and how sure the search was either way. */
-function matchChunk(query: string): { food: Food | null; confidence: number } {
-	const hit = bestFood(query);
-	if (!hit || hit.score < MATCH_THRESHOLD) return { food: null, confidence: hit?.score ?? 0 };
-	return { food: hit.food, confidence: hit.score };
-}
-
-function proposeChunk(chunk: string, meal: Meal): { item: QuantifiedItem; matched: boolean } {
-	const { amount, unit, rest } = parseQuantity(chunk);
-	const query = stripUnits(rest) || rest;
-	const { food, confidence } = matchChunk(query);
-	const quantity: QuantitySpec = { amount, unit, kind: classifyUnit(unit) };
-	// The food carries the serving weight a mass has to be divided by, so the
-	// reading only exists once the catalog match does. The spec travels with the
-	// proposal so a later match can take the reading again.
-	const { servings } = resolveQuantity(quantity, food);
-	return {
-		matched: food !== null,
-		item: {
-			foodId: food?.id ?? null,
-			query,
-			name: food?.name ?? query,
-			servings,
-			meal,
-			confidence,
-			quantity
-		}
-	};
-}
-
-export function parseLocalText(
-	text: string,
-	meal: Meal = guessMeal()
-): {
-	items: QuantifiedItem[];
-	unmatched: string[];
-	allMatched: boolean;
-} {
+/** Split a sentence into the foods it mentions, each with its quantity. */
+export function parseLocalText(text: string, meal: Meal = guessMeal()): ParsedChunk[] {
 	const chunks = text
 		// A slash separates items ("eggs / toast") unless between digits, where it
 		// is a fraction ("1/2 avocado") that must survive to parseQuantity.
@@ -239,25 +187,12 @@ export function parseLocalText(
 		.map((c) => c.trim())
 		.filter((c) => c.length > 1);
 
-	const items: QuantifiedItem[] = [];
-	const unmatched: string[] = [];
-
-	for (const chunk of chunks) {
-		const { item, matched } = proposeChunk(chunk, meal);
-		if (!matched) unmatched.push(chunk);
-		items.push(item);
-	}
-
-	return {
-		items,
-		unmatched,
-		allMatched: unmatched.length === 0 && items.length > 0
-	};
-}
-
-export function hydrateProposal<T extends ProposedItem>(p: T): T {
-	if (!p.foodId) return p;
-	const food = FOOD_BY_ID[p.foodId];
-	if (!food) return p;
-	return { ...p, name: food.name };
+	return chunks.map((chunk) => {
+		const { amount, unit, rest } = parseQuantity(chunk);
+		return {
+			query: stripUnits(rest) || rest,
+			quantity: { amount, unit, kind: classifyUnit(unit) },
+			meal
+		};
+	});
 }

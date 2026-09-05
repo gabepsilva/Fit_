@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Meal } from '$lib/domain/types';
 import { apiError } from '../api';
-import { searchFoods, type CatalogFood } from '../catalog/foods';
+import { resolveFood, type ResolvedFood } from '../catalog/resolve';
 import { readPhotoBody } from './request';
 import { reservePhotoCall } from './quota';
 import { readPlate, visionApiKey, visionModel, type PlateItem, type PlateReading } from './vision';
@@ -12,7 +12,7 @@ import { readPlate, visionApiKey, visionModel, type PlateItem, type PlateReading
  * catalog.
  *
  * The model names foods and estimates weights; every calorie comes from
- * `searchFoods`. That split is the whole design — a model that hallucinates a
+ * `resolveFood`. That split is the whole design — a model that hallucinates a
  * number cannot put it in anybody's day, only a wrong food the person can see
  * and correct.
  */
@@ -29,15 +29,10 @@ export type PhotoEvent = {
  * guess is one tap from being right. `label` and `grams` are the model's own
  * and are all the person sees when the catalog matched nothing.
  */
-export type PhotoItem = {
+export type PhotoItem = ResolvedFood & {
 	label: string;
 	grams: number;
-	food: CatalogFood | null;
-	alternatives: CatalogFood[];
 };
-
-/** The first hit, plus the two `alternatives` behind it. Three is what one search fetches. */
-const CANDIDATES = 3;
 
 export type PhotoDependencies = {
 	/** Whether this deployment has a key at all. Asked before anything is reserved. */
@@ -58,13 +53,7 @@ export const photoDependencies: PhotoDependencies = {
 
 /** The catalog's answer for one thing the model saw. */
 function resolveItem(catalog: DatabaseSync, item: PlateItem): PhotoItem {
-	const found = searchFoods(catalog, item.searchQuery, CANDIDATES);
-	return {
-		label: item.label,
-		grams: item.grams,
-		food: found[0] ?? null,
-		alternatives: found.slice(1, CANDIDATES)
-	};
+	return { label: item.label, grams: item.grams, ...resolveFood(catalog, item.searchQuery) };
 }
 
 /**

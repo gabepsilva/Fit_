@@ -98,7 +98,7 @@ test.describe('scanning a barcode', () => {
 		await page.getByRole('button', { name: 'Look it up' }).click();
 
 		// Resolves straight to a proposal — no "which one" question for a single match.
-		await expect(page.getByText('Parsed on-device — tap to correct')).toBeVisible();
+		await expect(page.getByText('Proposed — tap to correct')).toBeVisible();
 		await expect(page.getByText(BUNDLED_NAME)).toBeVisible();
 
 		await page.getByRole('button', { name: 'Add to today' }).click();
@@ -135,7 +135,7 @@ test.describe('scanning a barcode', () => {
 		await expect(page.getByText(first.name, { exact: true })).toBeVisible();
 		await expect(page.getByText(second.name, { exact: true })).toBeVisible();
 		// Neither is auto-picked: no proposal exists yet, and the sheet is still open on the choice.
-		await expect(page.getByText('Parsed on-device — tap to correct')).toHaveCount(0);
+		await expect(page.getByText('Proposed — tap to correct')).toHaveCount(0);
 		await expect(page.getByRole('dialog')).toBeVisible();
 	});
 
@@ -149,7 +149,7 @@ test.describe('scanning a barcode', () => {
 		// picks the second one and not the first.
 		await page.getByText(second.name, { exact: true }).click();
 
-		await expect(page.getByText('Parsed on-device — tap to correct')).toBeVisible();
+		await expect(page.getByText('Proposed — tap to correct')).toBeVisible();
 		await expect(page.getByText(second.name, { exact: true })).toBeVisible();
 
 		await page.getByRole('button', { name: 'Add to today' }).click();
