@@ -12,6 +12,8 @@
  * invents.
  */
 
+import { canonicalUnit, isVolumeUnit } from './unit-spellings';
+
 /** The volume units the app converts. */
 export type VolumeUnit = 'tsp' | 'tbsp' | 'cup' | 'ml' | 'l';
 
@@ -32,28 +34,6 @@ type PortionSource = {
 	grams: number;
 	servingLabel?: string | undefined;
 	portions?: readonly Portion[] | undefined;
-};
-
-/**
- * How each unit is written in a serving label or typed by a person, in the
- * singular; a trailing "s" is taken off before the lookup, so every plural is
- * spelled once. Written out rather than matched loosely: "c" for cup and "T"
- * for tablespoon are real abbreviations and also the start of half the words in
- * the catalog, and a wrong unit here silently logs the wrong weight.
- */
-const SPELLINGS: Record<string, VolumeUnit> = {
-	tsp: 'tsp',
-	teaspoon: 'tsp',
-	tbsp: 'tbsp',
-	tbs: 'tbsp',
-	tablespoon: 'tbsp',
-	cup: 'cup',
-	ml: 'ml',
-	milliliter: 'ml',
-	millilitre: 'ml',
-	l: 'l',
-	liter: 'l',
-	litre: 'l'
 };
 
 /**
@@ -89,14 +69,13 @@ function isWeight(grams: number): boolean {
 /**
  * The unit a word names, or `null` when it names no volume.
  *
- * `Object.hasOwn`, not a lookup, for the reason `classifyUnit` gives:
- * "constructor" and "toString" answer on every object.
+ * Reads `unit-spellings.ts`, the table `quantity.ts`'s `classifyUnit` also
+ * reads, so a spelling accepted here on a catalog label is accepted there on
+ * a typed quantity, and vice versa (issue #111).
  */
 export function volumeUnit(word: string): VolumeUnit | null {
-	const spelled = word.trim().toLowerCase();
-	const singular = spelled.replace(/s$/, '');
-	if (Object.hasOwn(SPELLINGS, spelled)) return SPELLINGS[spelled] ?? null;
-	return Object.hasOwn(SPELLINGS, singular) ? (SPELLINGS[singular] ?? null) : null;
+	const unit = canonicalUnit(word);
+	return isVolumeUnit(unit) ? unit : null;
 }
 
 /**

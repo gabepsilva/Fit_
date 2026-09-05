@@ -146,6 +146,38 @@ describe('resolveQuantity', () => {
 		});
 	});
 
+	// Issue #111: "2 tablespoons" was counted as 2 servings while "2 tbsp" was
+	// read as 2 tablespoons, because `classifyUnit` did not accept the long
+	// spelling even though `portions.ts` already did.
+	it.each(['tbsp', 'tablespoon', 'tablespoons', 'Tablespoons', 'TBSP'])(
+		'reads "2 %s" the same as "2 tbsp" against a food with a tbsp portion',
+		(unit) => {
+			const oil = {
+				grams: 14,
+				servingLabel: '1 tbsp',
+				portions: [{ unit: 'tbsp' as const, grams: 13.5 }]
+			};
+			expect(resolveQuantity(spec(2, unit), oil)).toEqual(resolveQuantity(spec(2, 'tbsp'), oil));
+			expect(resolveQuantity(spec(2, unit), oil)).toEqual({ servings: 1.93, declined: null });
+		}
+	);
+
+	it('reads "1 teaspoon" the same as "1 tsp"', () => {
+		// Honey, at 1.4 g/ml, is the densest thing eaten by the spoonful (portions.ts).
+		const honey = { grams: 7, servingLabel: '1 tsp' };
+		expect(resolveQuantity(spec(1, 'teaspoon'), honey)).toEqual(
+			resolveQuantity(spec(1, 'tsp'), honey)
+		);
+		expect(resolveQuantity(spec(1, 'teaspoon'), honey)).toEqual({ servings: 1, declined: null });
+	});
+
+	it('reads "250 millilitres" the same as "250 ml"', () => {
+		const milk = { grams: 244, servingLabel: '240 ml' };
+		expect(resolveQuantity(spec(250, 'millilitres'), milk)).toEqual(
+			resolveQuantity(spec(250, 'ml'), milk)
+		);
+	});
+
 	it.each([
 		// A label that does not state a volume outright is not read for one.
 		['1/2 cup dry', 40, 'cups'],
@@ -183,6 +215,18 @@ describe('resolveQuantity', () => {
 		const broken = spec(Number.NaN, 'g');
 		expect(resolveQuantity(broken, serving(100))).toEqual({ servings: 1, declined: broken });
 	});
+
+	// `classifyUnit` never produces a `mass` spec whose unit it cannot itself
+	// canonicalize, so this only exercises a `QuantitySpec` a caller built by
+	// hand with a mismatched unit — treated as one gram per unit rather than
+	// producing `NaN`.
+	it.each(['bogus', 'cups'])(
+		'treats a mass spec’s unrecognized unit "%s" as one gram per unit',
+		(unit) => {
+			const mismatched: QuantitySpec = { amount: 5, unit, kind: 'mass' };
+			expect(resolveQuantity(mismatched, serving(10))).toEqual({ servings: 0.5, declined: null });
+		}
+	);
 
 	it('rounds to the two decimals the stepper works in', () => {
 		expect(resolveQuantity(spec(150, 'g'), serving(195)).servings).toBe(0.77);

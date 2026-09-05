@@ -1,11 +1,6 @@
 import { FOODS, FOOD_BY_ID } from './foods';
-import {
-	classifyUnit,
-	MEASURE_UNITS,
-	resolveQuantity,
-	type QuantifiedItem,
-	type QuantitySpec
-} from './quantity';
+import { classifyUnit, resolveQuantity, type QuantifiedItem, type QuantitySpec } from './quantity';
+import { UNIT_SPELLING_WORDS } from './unit-spellings';
 import type { Food, Meal, ProposedItem } from './types';
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -28,6 +23,9 @@ const NUMBER_WORDS: Record<string, number> = {
 /**
  * Words that sit between a quantity and the food. Dropped before the catalog is
  * searched — leaving the filler in drags a real match below the threshold.
+ * Every accepted unit spelling comes from `unit-spellings.ts`, the same table
+ * `classifyUnit` reads, so a unit word is filler here exactly when it is a
+ * unit there.
  */
 const UNIT_HINTS = [
 	'a',
@@ -38,10 +36,6 @@ const UNIT_HINTS = [
 	'small',
 	'slice',
 	'slices',
-	'cup',
-	'cups',
-	'tbsp',
-	'tsp',
 	'scoop',
 	'scoops',
 	'can',
@@ -50,10 +44,7 @@ const UNIT_HINTS = [
 	'bowl',
 	'piece',
 	'pieces',
-	'oz',
-	'g',
-	'grams',
-	'gram'
+	...UNIT_SPELLING_WORDS
 ];
 
 function tokenize(s: string) {
@@ -94,13 +85,20 @@ export function bestFood(query: string) {
 
 /**
  * Units that can be written against the number with no space: "150g rice".
- * `slice` predates the measurement units and stays for "2slices toast"; the rest
- * come from `quantity.ts`, so the glued spelling and the spaced one read the
- * same vocabulary.
+ * `slice` predates the measurement units and stays for "2slices toast"; the
+ * rest come from `unit-spellings.ts`, so the glued spelling and the spaced one
+ * read the same vocabulary.
  */
-const GLUED_UNITS = [...MEASURE_UNITS, 'slices', 'slice'];
+const GLUED_UNITS = [...UNIT_SPELLING_WORDS, 'slices', 'slice'];
+/** A literal character escaped for use inside a regex alternation — "tbsp." names a dot, not "any character". */
+function escapeForRegex(word: string): string {
+	return word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 // Built from a fixed list of identifiers, so no input reaches the pattern.
-const GLUED_UNIT_RE = new RegExp(`^(\\d+\\.?\\d*)(${GLUED_UNITS.join('|')})\\s+(.*)$`, 'i');
+const GLUED_UNIT_RE = new RegExp(
+	`^(\\d+\\.?\\d*)(${GLUED_UNITS.map(escapeForRegex).join('|')})\\s+(.*)$`,
+	'i'
+);
 
 /**
  * A capture the pattern guarantees. `String` states that without a fallback that

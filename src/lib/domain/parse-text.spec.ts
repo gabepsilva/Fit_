@@ -66,7 +66,15 @@ const GLUED_UNIT_CASES: ParseCase[] = [
 	['8oz salmon', 2.27, 'salmon', 0.96],
 	['1cup oats', 1, 'oats', 0.96],
 	['1slice toast', 1, 'sourdough', 0.96],
-	['2slices toast', 2, 'sourdough', 0.96]
+	['2slices toast', 2, 'sourdough', 0.96],
+	// Issue #111: a long spelling glued to the number reads the same unit as
+	// its short form.
+	['2tablespoons peanut butter', 1, 'peanut-butter', 0.96],
+	// The period in "tbsp." has to be escaped before it joins the alternation
+	// regex, or a mutant that drops it instead of escaping it would fail to
+	// glue "tbsp." at all, falling back to one bare serving instead of the 1.5
+	// servings three tablespoons of a 2-tbsp serving actually comes to.
+	['3tbsp. peanut butter', 1.5, 'peanut-butter', 0.96]
 ];
 
 /** One phrase per unit word the parser drops before it searches the catalog. */
@@ -80,7 +88,15 @@ const UNIT_WORD_CASES: ParseCase[] = [
 	// A serving of brown rice is one cup, so two cups is two servings (#94).
 	['2 cups brown rice', 2, 'brown-rice', 0.96],
 	['2 tbsp peanut butter', 1, 'peanut-butter', 0.96],
+	// Issue #111: the long spelling, its plural, and any case must read the
+	// same volume unit as the short form above.
+	['2 tablespoons peanut butter', 1, 'peanut-butter', 0.96],
+	['2 Tablespoons peanut butter', 1, 'peanut-butter', 0.96],
+	['2 tbsp. peanut butter', 1, 'peanut-butter', 0.96],
 	['1 tsp honey', 1, 'honey', 1],
+	['1 teaspoon honey', 1, 'honey', 1],
+	['250 ml milk', 1, 'whole-milk', 0.96],
+	['250 millilitres milk', 1, 'whole-milk', 0.96],
 	['1 scoop whey', 1, 'whey', 0.96],
 	['2 scoops whey', 2, 'whey', 0.96],
 	['1 can tuna', 1, 'tuna-canned', 0.96],
