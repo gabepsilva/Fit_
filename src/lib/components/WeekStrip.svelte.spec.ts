@@ -69,7 +69,7 @@ describe('WeekStrip', () => {
 		await render(WeekStrip, {
 			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
 		});
-		expect(document.querySelectorAll('.text-border').length).toBeGreaterThan(0);
+		expect(document.querySelectorAll('.text-muted-foreground\\/50').length).toBeGreaterThan(0);
 	});
 
 	it('marks the selected day that was logged in the primary-foreground color', async () => {

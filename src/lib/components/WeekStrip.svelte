@@ -30,12 +30,12 @@
 					: 'text-primary'
 				: isSelected
 					? 'text-primary-foreground/30'
-					: 'text-border'
+					: 'text-muted-foreground/50'
 		);
 	}
 </script>
 
-<div class="flex gap-1.5">
+<div class="flex gap-1">
 	{#each days as iso (iso)}
 		{@const isSelected = iso === selected}
 		{@const hasFood = food.has(iso)}
@@ -45,26 +45,29 @@
 			pressed={isSelected}
 			onclick={() => (selected = iso)}
 			resting="bg-card text-foreground"
-			class="flex h-16 flex-1 flex-col items-center justify-center gap-1 rounded-2xl transition-colors duration-150"
+			class="flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-0 transition-colors duration-150"
 		>
 			<span class={cn('text-xs', isSelected ? 'opacity-80' : 'text-muted-foreground')}>
 				{iso === today ? 'Today' : weekdayShort(iso)}
 			</span>
-			<span class="flex gap-1">
+			<span class="flex items-center gap-0.5">
 				<Utensils
 					aria-hidden="true"
-					size={12}
-					class={cn('size-3', markClass(isSelected, hasFood))}
+					size={14}
+					stroke-width={2.25}
+					class={cn('size-3.5 shrink-0', markClass(isSelected, hasFood))}
 				/>
 				<Dumbbell
 					aria-hidden="true"
-					size={12}
-					class={cn('size-3', markClass(isSelected, hasExercise))}
+					size={14}
+					stroke-width={2.25}
+					class={cn('size-3.5 shrink-0', markClass(isSelected, hasExercise))}
 				/>
 				<Weight
 					aria-hidden="true"
-					size={12}
-					class={cn('size-3', markClass(isSelected, hasWeight))}
+					size={14}
+					stroke-width={2.25}
+					class={cn('size-3.5 shrink-0', markClass(isSelected, hasWeight))}
 				/>
 			</span>
 			<span class="sr-only">{loggedMarksText(hasFood, hasExercise, hasWeight)}</span>
