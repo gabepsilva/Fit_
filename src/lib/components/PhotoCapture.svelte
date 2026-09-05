@@ -196,18 +196,24 @@
 	{/if}
 
 	{#if phase === 'live'}
-		<video
-			{@attach viewfinder(stream)}
-			bind:videoWidth
-			autoplay
-			playsinline
-			muted
-			aria-label="Camera viewfinder"
-			class="bg-secondary aspect-[3/4] w-full max-w-xs rounded-2xl object-cover"
-		></video>
-		<Button onclick={shoot} disabled={videoWidth === 0}>
-			{videoWidth === 0 ? 'Waking the camera…' : 'Take the picture'}
-		</Button>
+		<div class="relative w-full max-w-xs">
+			<video
+				{@attach viewfinder(stream)}
+				bind:videoWidth
+				autoplay
+				playsinline
+				muted
+				aria-label="Camera viewfinder"
+				class="bg-secondary aspect-[3/4] w-full rounded-2xl object-cover"
+			></video>
+			<button
+				type="button"
+				onclick={shoot}
+				disabled={videoWidth === 0}
+				aria-label="Take photo"
+				class="absolute bottom-4 left-1/2 size-16 -translate-x-1/2 rounded-full bg-white shadow-lg active:scale-[0.96] disabled:opacity-50"
+			></button>
+		</div>
 	{:else if phase === 'shot' && shot}
 		<img
 			src={shot}

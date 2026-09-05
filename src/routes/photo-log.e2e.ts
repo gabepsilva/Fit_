@@ -14,9 +14,12 @@ import { openEmptyJournal, openLogSheet, signInThroughApi } from '../../tests/e2
  * is that the live model returns this shape; `vision.spec.ts` asserts the
  * request and the parse against the recorded upstream shape instead.
  *
- * The camera route is not driven: Chromium here has no camera, so the Upload
- * tab and its file picker are the way in — the same `readImageFile` path, and
- * the same JPEG data URL at the end of it.
+ * The camera route (`readPhoto`/`readImageFile` aside) is driven separately,
+ * in `photo-camera.e2e.ts`, on the Chromium-based projects only: Playwright's
+ * fake video device flags give `getUserMedia` a real, if synthetic, stream
+ * there. WebKit and Firefox have no equivalent flag, so the Upload tab and its
+ * file picker stay the way every project proves the read/parse path here, and
+ * only the shutter's shape and placement are proven through the live camera.
  */
 
 const CEREAL = {

@@ -23,10 +23,17 @@ const selected =
 			? Object.keys(e2eProjects)
 			: [DEFAULT_E2E_PROJECT]
 		: [requested];
-const projects = selected.map((name) => ({
-	name,
-	use: { ...devices[e2eProjects[name as keyof typeof e2eProjects].device] }
-}));
+/** Playwright has no fake-camera flag outside Chromium, so this file stays out of those projects. */
+const CHROMIUM_ONLY_SPECS = '**/photo-camera.e2e.ts';
+
+const projects = selected.map((name) => {
+	const project = e2eProjects[name as keyof typeof e2eProjects];
+	return {
+		name,
+		use: { ...devices[project.device] },
+		...(project.browser === 'chromium' ? {} : { testIgnore: CHROMIUM_ONLY_SPECS })
+	};
+});
 
 /**
  * Half the cores. A worker is a browser and a preview server rather than a
