@@ -79,6 +79,25 @@ function selfTestMatrixFlags(job: string, group: string): { docker: boolean; bro
 	};
 }
 
+/**
+ * A self-test group need not live in the `self-test` matrix: `mutation` runs
+ * conditionally (2026-09-05), which a job-level `if:` cannot express while
+ * reading `matrix.group` -- GitHub restricts that context to `github`,
+ * `needs`, `vars` and `inputs` -- so it is its own job, `self-test-mutation`,
+ * gated by `needs.self-test-scope` instead. Any job whose body runs the gate
+ * self-test with a `SELF_TEST_GROUP` naming a known group counts toward
+ * coverage the same as a matrix leg would.
+ */
+function standaloneSelfTestGroups(sections: ReadonlyMap<string, string>): Set<string> {
+	const groups = new Set<string>();
+	for (const [name, body] of sections) {
+		if (name === 'self-test' || !/gate\.ts ci --job self-test\b/.test(body)) continue;
+		const group = /^ {6}SELF_TEST_GROUP: ([a-z][a-z0-9-]*)\s*$/m.exec(body)?.[1];
+		if (group !== undefined && selfTestGroupNames.includes(group)) groups.add(group);
+	}
+	return groups;
+}
+
 const expected = Object.keys(ciJobs).sort();
 const workflowJobs = referencedJobs(workflow);
 const makeJobs = referencedJobs(makefile);
@@ -96,7 +115,9 @@ const runProjects = matrixValues(e2eJob, 'project');
 const missingProjects = Object.keys(e2eProjects).filter((project) => !runProjects.has(project));
 const selfTestJob = workflowSections.get('self-test') ?? '';
 const runGroups = matrixValues(selfTestJob, 'group');
-const missingGroups = selfTestGroupNames.filter((group) => !runGroups.has(group));
+const standaloneGroups = standaloneSelfTestGroups(workflowSections);
+const allRunGroups = new Set([...runGroups, ...standaloneGroups]);
+const missingGroups = selfTestGroupNames.filter((group) => !allRunGroups.has(group));
 const wronglySetUpGroups = selfTestGroupNames
 	.filter((group) => runGroups.has(group))
 	.filter((group) => {
@@ -129,7 +150,7 @@ const failures = [
 
 if (failures.length === 0) {
 	console.log(
-		`CI contract: ${expected.length} declared jobs are wired locally, ${hostedGateJobs.length} hosted jobs are protected by all-green, and the matrices run ${runProjects.size} end-to-end projects and ${runGroups.size} self-test groups.`
+		`CI contract: ${expected.length} declared jobs are wired locally, ${hostedGateJobs.length} hosted jobs are protected by all-green, and the matrices run ${runProjects.size} end-to-end projects and ${allRunGroups.size} self-test groups.`
 	);
 } else {
 	for (const failure of failures) console.error(failure);

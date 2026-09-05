@@ -262,7 +262,10 @@ export const fixtures: GateFixture[] = [
 		description: 'A scheduled tier that can no longer open an issue when it goes red.',
 		apply: (root) =>
 			edit(root, '.github/workflows/mutation-audit.yml', (content) =>
-				content.replace('      issues: write\n', '')
+				// Every job in the file, not just one: `surfacesFailure` reads the
+				// whole workflow source, so as long as any job still declares
+				// `issues: write` the file as a whole can still surface a failure.
+				content.replaceAll('      issues: write\n', '')
 			)
 	},
 	{
@@ -272,10 +275,7 @@ export const fixtures: GateFixture[] = [
 		description: 'A hosted mutation job omitted from the protected merge-gate aggregator.',
 		apply: (root) =>
 			edit(root, '.github/workflows/ci.yml', (content) =>
-				content.replace(
-					'needs: [static, unit, mutation, build, e2e, e2e-report, security, self-test]',
-					'needs: [static, unit, build, e2e, e2e-report, security, self-test]'
-				)
+				content.replace('        mutation,\n', '')
 			)
 	},
 	{
@@ -298,13 +298,10 @@ export const fixtures: GateFixture[] = [
 		name: 'unrun-self-test-group',
 		gate: 'check:ci-contract',
 		failureIncludes: 'CI workflow does not run every gate self-test group: mutation',
-		description: 'A gate self-test group dropped from the hosted matrix.',
+		description: 'A gate self-test group dropped from the hosted workflow.',
 		apply: (root) =>
 			edit(root, '.github/workflows/ci.yml', (content) =>
-				content.replace(
-					'          - group: mutation\n            docker: false\n            browser: false\n',
-					''
-				)
+				content.replace('      SELF_TEST_GROUP: mutation\n', '')
 			)
 	},
 	{
