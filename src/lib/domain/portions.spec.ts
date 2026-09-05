@@ -19,34 +19,11 @@ describe('UNIT_ML', () => {
 	});
 });
 
+// Every accepted spelling is read back through `volumeUnit` in
+// `unit-spellings.spec.ts`, which loops `UNIT_SPELLING_WORDS` itself and so
+// cannot fall behind the table. What is left here is the behavior that table
+// does not state: casing, surrounding space, and what is refused.
 describe('volumeUnit', () => {
-	it.each([
-		['tsp', 'tsp'],
-		['tsps', 'tsp'],
-		['teaspoon', 'tsp'],
-		['teaspoons', 'tsp'],
-		['tbsp', 'tbsp'],
-		['tbsp.', 'tbsp'],
-		['tbsps', 'tbsp'],
-		['tbs', 'tbsp'],
-		['tablespoon', 'tbsp'],
-		['tablespoons', 'tbsp'],
-		['cup', 'cup'],
-		['cups', 'cup'],
-		['ml', 'ml'],
-		['milliliter', 'ml'],
-		['milliliters', 'ml'],
-		['millilitre', 'ml'],
-		['millilitres', 'ml'],
-		['l', 'l'],
-		['liter', 'l'],
-		['liters', 'l'],
-		['litre', 'l'],
-		['litres', 'l']
-	])('reads "%s" as %s', (word, unit) => {
-		expect(volumeUnit(word)).toBe(unit);
-	});
-
 	it('reads a unit whatever its case, and around the spaces a label leaves', () => {
 		expect(volumeUnit('Tbsp')).toBe('tbsp');
 		expect(volumeUnit('CUP')).toBe('cup');
@@ -136,6 +113,15 @@ describe('parsePortionLabel', () => {
 	it('refuses a count of zero rather than answering with an endless weight', () => {
 		expect(parsePortionLabel('0 cup', 244)).toBeNull();
 		expect(parsePortionLabel('1/0 cup', 244)).toBeNull();
+	});
+
+	it('refuses a count that is not a number rather than answering with NaN grams', () => {
+		// The pattern admits any run of digits, dots and slashes, so a malformed
+		// count reaches the arithmetic as `NaN`. Every density-bound comparison
+		// answers `false` to `NaN`, so without an outright check this came back as
+		// `{ unit: 'cup', grams: NaN }` and logged a meal weighing nothing knowable.
+		expect(parsePortionLabel('1.2.3 cup', 100)).toBeNull();
+		expect(parsePortionLabel('1..5 tbsp', 30)).toBeNull();
 	});
 
 	it('refuses a weight no food could have in that volume', () => {

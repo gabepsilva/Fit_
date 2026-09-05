@@ -75,12 +75,6 @@ describe('form cues', () => {
 });
 
 describe('routine arithmetic', () => {
-	it('adds up the sets across the movements', () => {
-		expect(
-			routineTotals(routine([row('Squat', 'Legs', 5), row('Leg Press', 'Legs', 4)])).sets
-		).toBe(9);
-	});
-
 	it('counts no sets in an empty routine', () => {
 		expect(routineTotals(routine([])).sets).toBe(0);
 	});

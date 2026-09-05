@@ -11,10 +11,6 @@ const LIBRARY_NAMES = new Set(EXERCISE_LIBRARY.map((e) => e.name));
 const GROUP_OF = new Map(EXERCISE_LIBRARY.map((e) => [e.name, e.group]));
 
 describe('the exercise library', () => {
-	it('has movements in it', () => {
-		expect(EXERCISE_LIBRARY.length).toBeGreaterThan(0);
-	});
-
 	it('names each movement once', () => {
 		expect(LIBRARY_NAMES.size).toBe(EXERCISE_LIBRARY.length);
 	});

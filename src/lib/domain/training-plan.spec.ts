@@ -179,7 +179,7 @@ describe('seeding a plan for the rest of the year', () => {
 		for (const week of plan) expect(week.year).toBe(2026);
 	});
 
-	it('gives each routine two weeks before moving on', () => {
+	it('runs the routines through twice before resting', () => {
 		const plan = seedTrainingPlan(ids, 2026, '2026-01-05');
 		expect(plan.slice(0, 7).map((p) => p.routineId)).toEqual([
 			'push',

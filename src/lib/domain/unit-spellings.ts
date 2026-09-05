@@ -11,7 +11,7 @@
 /** The unit a spelling maps to. */
 export type CanonicalUnit = 'tsp' | 'tbsp' | 'cup' | 'ml' | 'l' | 'g' | 'kg' | 'oz' | 'lb';
 
-/** The canonical units that name a volume — `portions.ts`'s own `VolumeUnit`. */
+/** The canonical units that name a volume. `portions.ts` names this `VolumeUnit`. */
 export type VolumeCanonicalUnit = 'tsp' | 'tbsp' | 'cup' | 'ml' | 'l';
 
 /** Every spelling this app accepts, mapped to its canonical unit, case rules aside. */

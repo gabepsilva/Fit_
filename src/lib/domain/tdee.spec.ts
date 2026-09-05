@@ -170,12 +170,6 @@ describe('goalDelta', () => {
 });
 
 describe('nutritionForDay', () => {
-	it('sums every entry on the day', () => {
-		const log = [entry('2026-06-01', 'egg-large', 2), entry('2026-06-01', 'egg-large', 1)];
-		const one = nutritionForDay([entry('2026-06-01', 'egg-large', 1)], '2026-06-01');
-		expect(nutritionForDay(log, '2026-06-01').kcal).toBe(one.kcal * 3);
-	});
-
 	it('adds up every tracked field, not only the calories', () => {
 		// One portion plus two makes three portions' worth of each field. The
 		// micronutrients are accumulated one line apiece, so each one is
@@ -196,11 +190,6 @@ describe('nutritionForDay', () => {
 			magnesium: 90,
 			count: 2
 		});
-	});
-
-	it('counts the entries', () => {
-		const log = [entry('2026-06-01', 'egg-large', 2), entry('2026-06-01', 'coffee', 1)];
-		expect(nutritionForDay(log, '2026-06-01').count).toBe(2);
 	});
 
 	it('returns zeros for an unlogged day rather than throwing', () => {
