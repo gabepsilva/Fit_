@@ -1,16 +1,12 @@
-import { readdir, readFile, stat, writeFile, mkdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { collectAssets, measure } from './bundle-assets';
 
 interface BundleBudgets {
 	clientCssBytes: number;
 	clientJavaScriptBytes: number;
 	largestAssetBytes: number;
-}
-
-interface Asset {
-	bytes: number;
-	file: string;
 }
 
 const projectRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -20,32 +16,8 @@ const budgets = JSON.parse(
 	await readFile(path.join(projectRoot, 'quality', 'bundle-budgets.json'), 'utf8')
 ) as BundleBudgets;
 
-async function collectAssets(directory: string): Promise<Asset[]> {
-	const assets: Asset[] = [];
-	for (const entry of await readdir(directory, { withFileTypes: true })) {
-		const entryPath = path.join(directory, entry.name);
-		if (entry.isDirectory()) {
-			assets.push(...(await collectAssets(entryPath)));
-		} else if (entry.isFile() && /\.(?:css|js)$/.test(entry.name)) {
-			assets.push({
-				bytes: (await stat(entryPath)).size,
-				file: path.relative(projectRoot, entryPath)
-			});
-		}
-	}
-	return assets;
-}
-
-const assets = await collectAssets(assetRoot);
-const javascriptBytes = assets
-	.filter(({ file }) => file.endsWith('.js'))
-	.reduce((total, { bytes }) => total + bytes, 0);
-const cssBytes = assets
-	.filter(({ file }) => file.endsWith('.css'))
-	.reduce((total, { bytes }) => total + bytes, 0);
-const largestAsset = assets.reduce<Asset>(
-	(largest, asset) => (asset.bytes > largest.bytes ? asset : largest),
-	{ bytes: 0, file: '' }
+const { assets, javascriptBytes, cssBytes, largestAsset } = measure(
+	await collectAssets(assetRoot, projectRoot)
 );
 const violations = [
 	javascriptBytes > budgets.clientJavaScriptBytes
