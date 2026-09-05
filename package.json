@@ -81,6 +81,7 @@
 		"verify:fast": "bun scripts/quality/gate.ts verify:fast",
 		"verify": "bun scripts/quality/gate.ts verify",
 		"verify:deep": "bun scripts/quality/gate.ts verify:deep",
+		"verify:changed": "bun scripts/quality/verify-changed.ts",
 		"ci": "bun scripts/quality/gate.ts ci",
 		"audit:mutation": "bun scripts/quality/gate.ts audit",
 		"nightly": "bun scripts/quality/gate.ts nightly"

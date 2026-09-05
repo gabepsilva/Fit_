@@ -19,6 +19,9 @@ it for good (AGENTS.md, "Worktree isolation"). If Read, Edit, or Write are denie
 bypass mode is active, do the reading and editing through Bash instead — `cat`, `sed`,
 heredocs — rather than stopping to ask.
 
+When the brief names no tier, run `verify:changed`; run a wider tier only when the brief
+asks.
+
 Make the named tests pass, add regression coverage for every behavior you changed, run the
 named tier in the foreground — block until it exits, then report its result line, never
 leave it running for someone else to check (AGENTS.md, "Never end your turn waiting on a
