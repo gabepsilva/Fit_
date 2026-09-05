@@ -59,6 +59,7 @@ function onboard(glp1 = false) {
 beforeEach(() => {
 	localStorage.clear();
 	logUi.open = false;
+	logUi.meal = null;
 	onboard();
 });
 
@@ -153,16 +154,32 @@ describe('TodayView', () => {
 		);
 	});
 
-	it('opens the log sheet from the primary action', async () => {
+	it('drops the single Log something button in favor of per-meal buttons', async () => {
 		await render(TodayView);
-		await page.getByRole('button', { name: 'Log something' }).click();
-		expect(logUi.open).toBe(true);
+		await expect
+			.element(page.getByRole('button', { name: 'Log something' }))
+			.not.toBeInTheDocument();
 	});
 
-	it('opens the log sheet from an empty meal slot', async () => {
+	it('offers a log button after each meal heading', async () => {
+		await render(TodayView);
+		for (const meal of ['breakfast', 'lunch', 'dinner', 'snack']) {
+			await expect.element(page.getByRole('button', { name: `Log ${meal}` })).toBeInTheDocument();
+		}
+	});
+
+	it('opens the log sheet on the named meal from its heading button', async () => {
+		await render(TodayView);
+		await page.getByRole('button', { name: 'Log dinner' }).click();
+		expect(logUi.open).toBe(true);
+		expect(logUi.meal).toBe('dinner');
+	});
+
+	it('opens the log sheet from an empty meal slot, naming its meal', async () => {
 		await render(TodayView);
 		await page.getByRole('button', { name: 'Nothing here. That’s fine.' }).first().click();
 		expect(logUi.open).toBe(true);
+		expect(logUi.meal).toBe('breakfast');
 	});
 
 	it('expands an entry when it is tapped', async () => {

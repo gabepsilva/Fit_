@@ -162,6 +162,15 @@ test.describe('once onboarded', () => {
 		await expect(page.getByText(/needs the server, which isn’t built yet/)).toBeVisible();
 	});
 
+	test('opens the sheet on the meal named by its own heading button', async ({ page }) => {
+		await page.getByRole('button', { name: 'Log lunch' }).click();
+		await expect(page.getByRole('dialog')).toBeVisible();
+		await expect(page.getByRole('button', { name: 'lunch', exact: true })).toHaveAttribute(
+			'aria-pressed',
+			'true'
+		);
+	});
+
 	test('logs a food through the sheet', async ({ page }) => {
 		await openLogSheetAndType(page, 'two eggs');
 		await page.getByRole('button', { name: 'Parse' }).click();

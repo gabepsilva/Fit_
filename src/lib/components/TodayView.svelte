@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Plus from '@lucide/svelte/icons/plus';
 	import {
 		computeTargets,
 		latestWeight,
@@ -10,11 +11,10 @@
 	import { calendarWeeks, weekOf } from '$lib/domain/training-plan';
 	import { weeklyAdherence } from '$lib/domain/training-progress';
 	import { trainingWeekText, weightStatusText } from '$lib/domain/today-status';
-	import { MEALS } from '$lib/domain/types';
+	import { MEALS, type Meal } from '$lib/domain/types';
 	import { todayISO, weekdayLong } from '$lib/domain/utils';
 	import { logUi } from '$lib/state/log-ui.svelte';
 	import { tend } from '$lib/state/tend.svelte';
-	import Button from '$lib/ui/Button.svelte';
 	import LogRow from './LogRow.svelte';
 	import PageHeader from './PageHeader.svelte';
 	import MacroRing from './MacroRing.svelte';
@@ -29,6 +29,10 @@
 	function greetingFor(loggedDays: number) {
 		if (loggedDays === 0) return 'Whenever you log is a good time.';
 		return `${loggedDays} day${loggedDays === 1 ? '' : 's'} logged this week.`;
+	}
+
+	function logMeal(meal: Meal) {
+		logUi.show(undefined, meal);
 	}
 </script>
 
@@ -127,7 +131,17 @@
 			{@const group = items.filter((i) => i.meal === meal)}
 			<section>
 				<div class="mb-2 flex items-baseline justify-between px-1">
-					<h2 class="font-display text-xl tracking-tight capitalize">{meal}</h2>
+					<div class="flex items-center gap-1">
+						<h2 class="font-display text-xl tracking-tight capitalize">{meal}</h2>
+						<button
+							type="button"
+							aria-label="Log {meal}"
+							onclick={() => logMeal(meal)}
+							class="text-foreground hover:bg-secondary flex size-8 items-center justify-center rounded-xl"
+						>
+							<Plus class="size-4" />
+						</button>
+					</div>
 					<span class="tabular text-muted-foreground text-xs">
 						{group.reduce((s, i) => s + i.kcal, 0)} kcal
 					</span>
@@ -135,7 +149,7 @@
 				{#if group.length === 0}
 					<button
 						type="button"
-						onclick={() => logUi.show()}
+						onclick={() => logMeal(meal)}
 						class="border-border text-muted-foreground flex h-16 w-full items-center justify-center rounded-2xl border border-dashed text-sm"
 					>
 						Nothing here. That’s fine.
@@ -154,7 +168,5 @@
 				{/if}
 			</section>
 		{/each}
-
-		<Button size="lg" class="w-full" onclick={() => logUi.show()}>Log something</Button>
 	</div>
 {/if}

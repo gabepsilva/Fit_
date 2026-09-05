@@ -126,6 +126,8 @@ export async function signOutThroughDrawer(page: Page): Promise<void> {
  */
 export async function openLogSheetAndType(page: Page, what: string): Promise<void> {
 	await openLogSheet(page);
+	// The sheet opens on Search now; the typed box lives on the Type tab.
+	await page.getByRole('button', { name: 'Type', exact: true }).click();
 	const box = page.getByLabel('What you ate');
 	await box.fill(what);
 	await expect(box).toHaveValue(what);
