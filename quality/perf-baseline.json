@@ -1,0 +1,70 @@
+{
+	"when": "2026-09-05T07:12:10.589Z",
+	"bundle": {
+		"javascriptBytes": 428151,
+		"cssBytes": 50680,
+		"largestAsset": {
+			"bytes": 76879,
+			"file": "nodes/0.B4lmDWhB.js"
+		}
+	},
+	"phonePaint": {
+		"routes": [
+			{
+				"route": "/today",
+				"domContentLoadedMs": 17,
+				"lcpMs": 17.100000008940697,
+				"transferredBytes": 870
+			},
+			{
+				"route": "/journal",
+				"domContentLoadedMs": 15.399999991059303,
+				"lcpMs": 15.599999994039536,
+				"transferredBytes": 870
+			},
+			{
+				"route": "/progress",
+				"domContentLoadedMs": 24.799999997019768,
+				"lcpMs": 25.5,
+				"transferredBytes": 8166
+			},
+			{
+				"route": "/plan",
+				"domContentLoadedMs": 30.5,
+				"lcpMs": 31.299999997019768,
+				"transferredBytes": 7926
+			},
+			{
+				"route": "/you",
+				"domContentLoadedMs": 37.79999999701977,
+				"lcpMs": 38.8999999910593,
+				"transferredBytes": 7645
+			}
+		],
+		"logSheetOpenMs": 100,
+		"catalogSearchMs": 2030,
+		"catalogSearchSkipReason": null
+	},
+	"serverLatency": {
+		"rows": [
+			{
+				"endpoint": "GET /api/foods",
+				"samples": 88,
+				"p50Ms": 50.95442600000024,
+				"p95Ms": 246.77681099999973
+			},
+			{
+				"endpoint": "GET /api/foods/barcode",
+				"samples": 2,
+				"p50Ms": 2.202452000004996,
+				"p95Ms": 8.45836799999961
+			}
+		],
+		"skipReason": null
+	},
+	"sqlPlans": {
+		"catalogSource": "live",
+		"statementCount": 21,
+		"unresolvedCount": 2
+	}
+}

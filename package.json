@@ -61,6 +61,8 @@
 		"debt:pay": "bun scripts/quality/debt-pay.ts",
 		"test:gates": "bun scripts/quality/self-test.ts",
 		"search:eval": "node scripts/eval/search-eval.ts",
+		"perf:measure": "node scripts/perf/measure.ts",
+		"check:perf-plans": "node scripts/perf/check-plans.ts",
 		"test:e2e": "playwright test",
 		"test:e2e:all": "E2E_ALL_BROWSERS=1 playwright test",
 		"test:e2e:security": "bun scripts/security/zap.ts",
