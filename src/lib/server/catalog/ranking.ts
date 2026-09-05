@@ -84,13 +84,30 @@ const QUALITY_SPAN = 13;
 const REFERENCE_QUALITY = 91;
 
 /**
- * How many of the best-scoring rows reach the second pass. Every match is
- * scored; only the sort is bounded, which turns a full sort of tens of
- * thousands of rows into a bounded heap. It is an order of magnitude deeper
- * than the largest page a caller may ask for, so the duplicate-name pass never
- * runs out of rows to promote.
+ * How many distinct-named rows reach the second pass. Every match is scored;
+ * only the sort is bounded, which turns a full sort of tens of thousands of
+ * rows into a bounded heap. It is an order of magnitude deeper than the largest
+ * page a caller may ask for, so the byproduct and processed-form demotions have
+ * room to move a row down without pushing it off the page.
  */
 const SHORTLIST = 500;
+
+/**
+ * How deep into the score-ordered match set the duplicate-name collapse looks.
+ *
+ * The collapse used to run after the shortlist was cut, which made it a bug
+ * rather than a tidy-up: hundreds of branded rows all named "PASTA" filled the
+ * 500 and then became one row, so the query answered with a single food. On the
+ * live catalog "pasta" returned 1 and "peanut butter" 2.
+ *
+ * Measured rather than guessed. Over 26 broad one-word queries at the largest
+ * page a caller may ask for, the deepest a query had to look to find 50
+ * distinct names was between 800 and 1,000 rows — "peanut butter", whose top
+ * name is carried by 724 rows. This is twice that, and every one of the 26 fills
+ * its page well inside it. It is not larger still because the cost is linear in
+ * it: 500 to 1,000 costs 3% of the query, 1,000 to 5,000 costs a further 13%.
+ */
+const DEDUP_DEPTH = 2000;
 
 /**
  * Words naming a preserved or substitute form. Matched anywhere in the name.
@@ -158,12 +175,19 @@ function nameTermsSql(): string {
  * have contributed, that a hit in the name beats a hit in the brand, the name
  * terms already say directly.
  *
- * Two passes. The first scores every matched row on terms that cost a
- * comparison each. The second splits each name into its comma-separated parts,
- * applies the processed-form and byproduct penalty and collapses duplicate
- * names, over 500 rows rather than all of them: without that pass
- * "milk" answers with five dairies' rows all named "MILK" and a person sees one
- * food five times.
+ * Three passes, and the order of the last two is the whole of issue #106. The
+ * first scores every matched row on terms that cost a comparison each. The
+ * second collapses rows sharing a name, over the best `DEDUP_DEPTH` of them:
+ * without it "milk" answers with five dairies' rows all named "MILK" and a
+ * person sees one food five times. The third splits each surviving name into
+ * its comma-separated parts and applies the processed-form and byproduct
+ * penalty, over `SHORTLIST` rows rather than all of them.
+ *
+ * The collapse has to come before the cut, not after it. Cutting first is what
+ * made "pasta" answer with one row: the hundreds of branded rows all named
+ * "PASTA" filled the shortlist and then became one. Nothing is lost by
+ * collapsing first, because the penalty the third pass applies is a function of
+ * the name, so it is the same for every row the collapse is choosing between.
  */
 export function searchSql(columns: string): string {
 	const w = RANK_WEIGHTS;
@@ -193,9 +217,27 @@ named as (
 	from matched m
 	join food f on f.food_id = m.food_id
 ),
-shortlist as (
+scored as (
 	select food_id, name, row_quality, row_score + ${nameTermsSql()} as score
 	from named
+	order by score desc, row_quality desc
+	limit ${DEDUP_DEPTH}
+),
+-- The collapse, before anything is cut to a page. The key is the name with one
+-- trailing "s" dropped, so "Milk" and "Milks" are one food; the ordering inside
+-- a name is what makes the survivor the best-scoring row of that name and, on a
+-- tie, the highest-quality one.
+deduplicated as (
+	select
+		food_id, name, row_quality, score,
+		row_number() over (partition by ${singularSql('lower(trim(name))')}
+			order by score desc, row_quality desc) as position
+	from scored
+),
+shortlist as (
+	select food_id, name, row_quality, score
+	from deduplicated
+	where position = 1
 	order by score desc, row_quality desc
 	limit ${SHORTLIST}
 ),
@@ -211,21 +253,12 @@ ranked as (
 	select
 		food_id,
 		score - ${w.processedForm} * ${processedFormSql('name', 'name_parts')} as score,
-		${singularSql('lower(trim(name))')} as dedup_key,
 		row_quality
 	from segmented
-),
-deduplicated as (
-	select
-		food_id,
-		score,
-		row_number() over (partition by dedup_key order by score desc, row_quality desc) as position
-	from ranked
 )
 select ${columns}
-from deduplicated d
+from ranked d
 join food f on f.food_id = d.food_id
-where d.position = 1
 order by d.score desc, f.quality desc
 limit :limit
 `;

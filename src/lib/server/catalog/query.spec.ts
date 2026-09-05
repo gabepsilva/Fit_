@@ -4,7 +4,7 @@ import { barcodeOf, searchTerms, singular } from './query';
 describe('searchTerms', () => {
 	it('prefix-matches every token, so "banana" reaches "Bananas, raw"', () => {
 		expect(searchTerms('greek yogurt')).toEqual({
-			match: '"greek"* "yogurt"*',
+			match: '"greek"* AND "yogurt"*',
 			text: 'greek yogurt'
 		});
 	});
@@ -13,9 +13,28 @@ describe('searchTerms', () => {
 		// A quote would close the phrase, `NEAR` and `*` are operators, and `-`
 		// negates. None of them survive tokenizing, so none reach FTS5.
 		expect(searchTerms('milk" NEAR/2 -chocolate*')).toEqual({
-			match: '"milk"* "near"* "chocolate"*',
+			match: '"milk"* AND "near"* AND "chocolate"*',
 			text: 'milk near chocolate'
 		});
+	});
+
+	it('searches a plural token as itself and as its singular, so "livers" finds "liver"', () => {
+		// The tokenizer does not stem and a prefix carries the plural, not the
+		// singular, so `"livers"*` alone matched no row in a catalog that writes
+		// "Beef, liver, raw".
+		expect(searchTerms('beef livers')).toEqual({
+			match: '"beef"* AND ("livers"* OR "liver"*)',
+			text: 'beef livers'
+		});
+	});
+
+	it('never drops the token a person typed in favour of its stem', () => {
+		expect(searchTerms('gizzards')?.match).toContain('"gizzards"*');
+	});
+
+	it('leaves a token the singular rule does not shorten as one term', () => {
+		// "gas" is at the length floor, so it must not also search `"ga"*`.
+		expect(searchTerms('gas')?.match).toBe('"gas"*');
 	});
 
 	it('keeps LIKE wildcards out of the text the ranking compares against', () => {

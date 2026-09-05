@@ -85,6 +85,45 @@ describe('searchFoods', () => {
 		expect(names('chicken feet')).toEqual(['Chicken, feet, boiled']);
 	});
 
+	it('answers with a full page when one name is carried by more rows than the shortlist holds', () => {
+		// The fixture holds 501 rows named "PASTA" and three other pasta foods
+		// behind them. While the duplicate-name collapse ran after the shortlist
+		// was cut, the crowd filled the cut and then became one row, so this
+		// answered with a single food — which is what the live catalog did.
+		expect(names('pasta', 4)).toEqual([
+			'PASTA',
+			'Pasta, dry, enriched',
+			'Pasta, fresh-refrigerated, plain, cooked',
+			'Pasta (spaghetti, macaroni), enriched, dry'
+		]);
+	});
+
+	it('still shows a crowded name once, which is what the collapse is for', () => {
+		expect(names('pasta', 4).filter((name) => name === 'PASTA')).toHaveLength(1);
+	});
+
+	it('matches a singular catalog name from a plural query', () => {
+		// "beef livers" reached FTS as `"livers"*`, and a prefix cannot match
+		// "liver" backwards, so the catalog's own liver row was unreachable.
+		expect(names('beef livers')).toEqual(['Beef, liver, raw']);
+	});
+
+	it('keeps the token a person typed as well as its singular', () => {
+		// "TURKEY GIZZARDS" is only found by the plural, "Turkey, all classes,
+		// gizzard, raw" only by the singular. Both have to come back.
+		expect(names('turkey gizzards')).toEqual([
+			'TURKEY GIZZARDS',
+			'Turkey, all classes, gizzard, raw'
+		]);
+	});
+
+	it('still exempts a part the person named, when they named it in the plural', () => {
+		// The demotion reads the typed text, not the match expression, so
+		// widening the match must not turn the exemption off.
+		expect(names('beef livers')).toContain('Beef, liver, raw');
+		expect(names('beef')[0]).toBe('Beef, ground, 80% lean meat / 20% fat, raw');
+	});
+
 	it('matches a plural catalog name from a singular query', () => {
 		expect(names('banana')).toEqual(['Bananas, raw', 'Banana, baked', 'BANANA BREAD MIX']);
 	});
