@@ -28,7 +28,7 @@ export function dayStripRange(today = todayISO()): string[] {
 
 /**
  * The visible label for one day strip pill: "Today" for today, the short
- * weekday name for any other day within the current calendar week (Sun...Sat),
+ * weekday name for any other day within the current calendar week (Mon...Sun),
  * and "Xxx N" (short weekday plus day-of-month) for a day outside that week.
  */
 export function dayStripLabel(iso: string, today = todayISO()): string {

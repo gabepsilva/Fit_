@@ -193,7 +193,7 @@ test.describe('once onboarded', () => {
 	test('day strip scrolls on its own, centers Today, and reveals dated pills further back', async ({
 		page
 	}) => {
-		const strip = page.locator('[aria-pressed]').first().locator('xpath=..');
+		const strip = page.getByRole('button', { name: /^Today/ }).locator('xpath=..');
 		const stripMetrics = await strip.evaluate((el) => ({
 			scrollWidth: el.scrollWidth,
 			clientWidth: el.clientWidth

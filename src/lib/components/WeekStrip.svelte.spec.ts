@@ -121,4 +121,33 @@ describe('WeekStrip', () => {
 		});
 		await expect.element(page.getByText('nothing logged').first()).toBeInTheDocument();
 	});
+
+	it('keeps exactly one pill tabbable, the selected one', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const buttons = Array.from(document.querySelectorAll('button'));
+		const tabbable = buttons.filter((button) => button.tabIndex === 0);
+		expect(tabbable).toHaveLength(1);
+		expect(tabbable[0]).toBe(
+			page.getByRole('button', { name: /^Today/ }).element() as HTMLButtonElement
+		);
+	});
+
+	it('moves focus to the next pill on ArrowRight', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const buttons = Array.from(document.querySelectorAll('button'));
+		const todayIndex = buttons.indexOf(
+			page.getByRole('button', { name: /^Today/ }).element() as HTMLButtonElement
+		);
+		const todayButton = buttons[todayIndex];
+		expect(todayButton).toBeDefined();
+		todayButton?.focus();
+		todayButton?.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })
+		);
+		expect(document.activeElement).toBe(buttons[todayIndex + 1]);
+	});
 });
