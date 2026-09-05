@@ -275,12 +275,6 @@ describe('volume by muscle group', () => {
 		]);
 	});
 
-	it('draws every bar against the busiest group', () => {
-		const bars = volumeByGroup(workouts, WEEK_1);
-		expect(bars[0]?.pct).toBe(100);
-		expect(bars[1]?.pct).toBe(Math.round((1 / 4) * 100));
-	});
-
 	it('ignores anything trained before the window opens', () => {
 		expect(volumeByGroup(workouts, WEEK_2)).toEqual([{ group: 'Legs', sets: 1, pct: 100 }]);
 	});
@@ -418,10 +412,6 @@ describe('personal records', () => {
 			{ name: 'Squat', load: 100, reps: 3, date: WEEK_1 },
 			{ name: 'Bench Press', load: 60, reps: 6, date: WEEK_1 }
 		]);
-	});
-
-	it('orders the records by load, heaviest first', () => {
-		expect(personalRecords(workouts).map((r) => r.load)).toEqual([100, 60]);
 	});
 
 	it('has no record to set for a bodyweight movement', () => {

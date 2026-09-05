@@ -12,10 +12,15 @@
  * invents.
  */
 
-import { canonicalUnit, isVolumeUnit } from './unit-spellings';
+import { canonicalUnit, isVolumeUnit, type VolumeCanonicalUnit } from './unit-spellings';
 
-/** The volume units the app converts. */
-export type VolumeUnit = 'tsp' | 'tbsp' | 'cup' | 'ml' | 'l';
+/**
+ * The volume units the app converts: the volume half of `unit-spellings.ts`'s
+ * table, named rather than re-listed. Spelling the union out a second time here
+ * is what issue #111 was — two lists of units that had to be kept in step by
+ * hand, and were not.
+ */
+export type VolumeUnit = VolumeCanonicalUnit;
 
 /** Millilitres in one of each, by the US nutrition-labelling definitions. */
 export const UNIT_ML: Record<VolumeUnit, number> = {
@@ -113,9 +118,12 @@ function readLabel(label: string): { count: number; unit: VolumeUnit } | null {
 export function parsePortionLabel(label: string, grams: number): Portion | null {
 	const read = readLabel(label);
 	if (read === null || !isWeight(grams)) return null;
-	// A count of zero, or one the pattern let through as `NaN`, makes this
-	// infinite or `NaN`, and no comparison against a bound accepts either.
+	// A count of zero, or one the pattern let through as `NaN` ("1.2.3 cup"),
+	// makes this infinite or `NaN`. The density bounds below cannot refuse it:
+	// every comparison against `NaN` answers `false`, so an unbounded weight
+	// would fall through both of them and be returned. It is refused here.
 	const perUnit = grams / read.count;
+	if (!isWeight(perUnit)) return null;
 	const density = perUnit / UNIT_ML[read.unit];
 	if (density < MIN_DENSITY || density > MAX_DENSITY) return null;
 	return { unit: read.unit, grams: perUnit };

@@ -132,8 +132,10 @@ export function plannedWeekCount(plan: PlannedWeek[], year: number): number {
 }
 
 /**
- * A plan for the rest of the year. Routines cycle in order with a rest week
- * every seventh week. Days between New Year and the first Monday belong to the
+ * A plan for the rest of the year. The routines run through in order twice,
+ * then a rest week — so the cycle is `2n + 1` weeks long, which is every
+ * seventh week for the three routines a starter template ships, and not for
+ * any other count. Days between New Year and the first Monday belong to the
  * previous year's week 52, so a plan drawn there opens with that trailing week.
  */
 export function seedTrainingPlan(

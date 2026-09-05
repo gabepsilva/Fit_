@@ -97,14 +97,6 @@ describe('weekday and month formatting', () => {
 	it('renders a short month and day', () => {
 		expect(monthDay('2026-01-05')).toMatch(/Jan/);
 	});
-
-	it('returns an empty short weekday for an unparseable date', () => {
-		expect(weekdayShort('nonsense')).toBeTypeOf('string');
-	});
-
-	it('returns an empty long weekday for an unparseable date', () => {
-		expect(weekdayLong('nonsense')).toBeTypeOf('string');
-	});
 });
 
 describe('round1', () => {

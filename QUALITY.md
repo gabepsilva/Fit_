@@ -32,6 +32,31 @@ duplication and complexity caps, secret scanning, SAST, bundle budgets, the prod
 build, workflow lint, report retention and branch protection are enforced and considered
 done.
 
+## Slop audit
+
+A recurring pass (#129) removes what the gates cannot see: a test that cannot fail for a
+reason anyone cares about — it asserts a constant, mirrors the implementation, mocks the
+unit under test, or exists only to move coverage; a wrapper with one caller that adds no
+name, no type narrowing and no boundary; dead indirection such as a single-key config
+object, a `$derived` that copies a prop, a `{@const}` used once, or a re-export nobody
+imports; two formatters of the same thing; and a comment that restates the code or, worse,
+describes code that no longer exists. Not slop: a test that kills a mutant, a boundary at
+the auth or server edge, and a domain explanation a reader needs.
+
+The bar is the same as for any other change here — **the finding is not the proof.** A test
+is only useless if deleting it leaves the owning file's _killed_ count unchanged: run the
+lane on the file before and after and quote both numbers. A wrapper is only needless if
+inlining it leaves `check`, `lint` and `knip` clean with no behavior test touched. And a
+comment is only wrong once it has been read against the code, because the fix for a wrong
+comment is a correct sentence, not a deletion — the first pass found one that described a
+`NaN` guard `portions.ts` did not have, which was a defect and not a comment problem at all.
+
+One pass is one directory or lane, so the pull request stays reviewable, and each finding
+is a row in its table: what, why it is slop, and the proof. Whole-file mutation strict
+applies as everywhere else, and it decides what a pass may touch: a file already carrying
+survivors, uncovered mutants or a timeout cannot be edited without paying that debt first,
+so a pass leaves it alone and says so rather than dragging the lane red behind it.
+
 ## Gate operation
 
 Every tier runs to completion rather than stopping at the first failure, and writes
