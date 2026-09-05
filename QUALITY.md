@@ -107,6 +107,14 @@ already allows, pin it in the `overrides` block of `package.json` and drop the o
 the tree resolves to a patched version by itself. Do not force an override across a major
 boundary a direct dependency declares against; record why here instead.
 
+## Bundle budget
+
+`bun run bundle:headroom` builds the current tree the same way `check:bundle` does and
+prints JS, CSS and largest-asset bytes against the budgets in `quality/bundle-budgets.json`,
+never against a stale report; add `--against <ref>` (default `origin/main`) to also print the
+delta and the top five changed chunks against another ref. A proposal to raise a budget in
+`quality/bundle-budgets.json` must quote this command's output as evidence.
+
 ## Mutation lanes
 
 Pull requests run one lane, and it blocks: the complete Node-only server security closure.
