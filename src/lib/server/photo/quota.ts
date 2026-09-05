@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import { integer } from '../users/rows';
 
 /**
@@ -50,49 +50,69 @@ export function msUntilNextUtcDay(now: Date): number {
 	return Math.max(1, midnight - now.getTime());
 }
 
-function callsSoFar(db: DatabaseSync, scope: string, holder: string, day: string): number {
+/**
+ * Add one to a counter and report what it now stands at.
+ *
+ * `returning` is what makes this a reservation rather than a read: the count
+ * that comes back is the one this call created, so two callers incrementing the
+ * same row are handed different numbers and cannot both believe they were
+ * under the ceiling.
+ */
+function countOne(db: DatabaseSync, scope: string, holder: string, day: string): number {
 	const row = db
-		.prepare('select calls from photo_quota where scope = ? and holder = ? and day = ?')
-		.get(scope, holder, day);
-	return row === undefined ? 0 : integer(row, 'calls');
-}
-
-function countOne(db: DatabaseSync, scope: string, holder: string, day: string): void {
-	db.prepare(
-		`insert into photo_quota (scope, holder, day, calls)
-		 values (?, ?, ?, 1)
-		 on conflict (scope, holder, day) do update set calls = calls + 1`
-	).run(scope, holder, day);
+		.prepare(
+			`insert into photo_quota (scope, holder, day, calls)
+			 values (?, ?, ?, 1)
+			 on conflict (scope, holder, day) do update set calls = calls + 1
+			 returning calls`
+		)
+		.get(scope, holder, day) as Record<string, SQLOutputValue>;
+	// The statement either inserts or updates, so SQLite always returns its one
+	// row — asserted the way `db.ts` asserts the `user_version` pragma's.
+	return integer(row, 'calls');
 }
 
 /**
- * Whether this account may spend another call. Both ceilings are consulted:
- * one account cannot exhaust the deployment, and the deployment being busy
- * still stops an account that has had its share.
+ * Take one call out of the day's allowance, before it is spent.
+ *
+ * This is a reservation and not a check, because a check is a lie the moment
+ * the caller awaits anything: the vision call takes up to twenty seconds, and
+ * forty overlapping requests from one account would all read the same zero and
+ * all be allowed. Counting first is what makes the ceiling a ceiling.
+ *
+ * Both counters move together inside one transaction, and a reservation that
+ * breaches either ceiling is rolled back whole — so a refused caller leaves no
+ * increment behind, and an account that is over its own limit cannot spend the
+ * deployment's allowance by hammering the endpoint.
+ *
+ * The reservation is not given back when the call fails upstream: a request
+ * that timed out was still paid for.
  */
-export function checkPhotoQuota(
+export function reservePhotoCall(
 	db: DatabaseSync,
 	accountId: string,
 	now = new Date()
 ): QuotaDecision {
 	const day = utcDay(now);
-	const mine = callsSoFar(db, 'account', accountId, day);
-	const everyone = callsSoFar(db, 'global', EVERYONE, day);
-	if (mine < ACCOUNT_DAILY_LIMIT && everyone < GLOBAL_DAILY_LIMIT) return { allowed: true };
-	return { allowed: false, retryAfterMs: msUntilNextUtcDay(now) };
-}
-
-/**
- * Count one call against both ceilings. Called at the moment the request goes
- * out, so a failure upstream is still spend that happened.
- */
-export function recordPhotoCall(db: DatabaseSync, accountId: string, now = new Date()): void {
-	const day = utcDay(now);
-	countOne(db, 'account', accountId, day);
-	countOne(db, 'global', EVERYONE, day);
-	// Swept on the write, as the sign-in throttle is: this is the only moment
-	// the table grows.
-	prunePhotoQuota(db, now);
+	// `immediate` takes the write lock up front, so two connections cannot both
+	// read their counters and then discover the conflict at commit.
+	db.exec('begin immediate');
+	try {
+		const mine = countOne(db, 'account', accountId, day);
+		const everyone = countOne(db, 'global', EVERYONE, day);
+		if (mine > ACCOUNT_DAILY_LIMIT || everyone > GLOBAL_DAILY_LIMIT) {
+			db.exec('rollback');
+			return { allowed: false, retryAfterMs: msUntilNextUtcDay(now) };
+		}
+		// Swept on the write, as the sign-in throttle is: this is the only moment
+		// the table grows.
+		prunePhotoQuota(db, now);
+		db.exec('commit');
+		return { allowed: true };
+	} catch (error) {
+		db.exec('rollback');
+		throw error;
+	}
 }
 
 /** Drop the rows for days that have already turned over. */

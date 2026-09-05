@@ -4,8 +4,8 @@ import type { Meal } from '$lib/domain/types';
 import { apiError } from '../api';
 import { searchFoods, type CatalogFood } from '../catalog/foods';
 import { readPhotoBody } from './request';
-import { checkPhotoQuota, recordPhotoCall } from './quota';
-import { readPlate, visionModel, type PlateItem, type PlateReading } from './vision';
+import { reservePhotoCall } from './quota';
+import { readPlate, visionApiKey, visionModel, type PlateItem, type PlateReading } from './vision';
 
 /**
  * `POST /api/meals/photo`: what the vision model saw, resolved against the food
@@ -40,6 +40,8 @@ export type PhotoItem = {
 const CANDIDATES = 3;
 
 export type PhotoDependencies = {
+	/** Whether this deployment has a key at all. Asked before anything is reserved. */
+	configured: () => boolean;
 	/** Injected so every request shape and every upstream failure is testable without a network. */
 	read: (image: string, meal: Meal) => Promise<PlateReading>;
 	now: () => Date;
@@ -48,6 +50,7 @@ export type PhotoDependencies = {
 };
 
 export const photoDependencies: PhotoDependencies = {
+	configured: () => visionApiKey() !== null,
 	read: (image, meal) => readPlate(image, meal),
 	now: () => new Date(),
 	log: (line) => console.info(line)
@@ -74,15 +77,23 @@ function overQuota(retryAfterMs: number): Response {
 	return apiError('too-many-attempts', {}, { 'retry-after': String(seconds) });
 }
 
+/** What the audit line says about a call that did not come back. */
+function upstreamOf(reading: PlateReading & { ok: false }): string {
+	if (reading.reason === 'not-configured') return 'not-configured';
+	// `null` is a timeout or a dropped connection: no status ever arrived.
+	return reading.status === null ? 'timeout' : String(reading.status);
+}
+
 /**
  * Read a plate.
  *
  * The order of the refusals is the order of what they cost: a session first,
  * then the body, then the catalog without which a reading would resolve to
- * nothing, then the day's allowance — and only then is anything sent to a paid
- * API. Nothing about the upstream reaches the caller: every way the model can
- * fail is one 503 with one code, because there is nothing the client could do
- * differently about any of them.
+ * nothing, then the key without which nothing can be read at all — and only
+ * then is the day's allowance spent, before the request goes out rather than
+ * after it comes back. Nothing about the upstream reaches the caller: every way
+ * the model can fail is one 503 with one code, because there is nothing the
+ * client could do differently about any of them.
  */
 export async function readMealPhoto(
 	db: DatabaseSync,
@@ -101,22 +112,21 @@ export async function readMealPhoto(
 	// `/api/foods` gives a deployment that has no catalog file.
 	if (catalog === null) return apiError('catalog-unavailable');
 
+	// Asked before the allowance is touched: with no key nothing can be sent, so
+	// nothing should be reserved or logged as spend.
+	if (!dependencies.configured()) return apiError('photo-unavailable');
+
 	const accountId = auth.account.id;
 	const now = dependencies.now();
-	const allowance = checkPhotoQuota(db, accountId, now);
+	// Reserved rather than checked, and reserved before the call rather than
+	// counted after it: `reservePhotoCall` says why.
+	const allowance = reservePhotoCall(db, accountId, now);
 	if (!allowance.allowed) return overQuota(allowance.retryAfterMs);
 
 	const reading = await dependencies.read(parsed.image, parsed.meal);
-	// Nothing was sent, so nothing is counted and nothing is logged as spend.
-	if (!reading.ok && reading.reason === 'not-configured') return apiError('photo-unavailable');
-
-	// Counted at the moment the request went out: a call that failed upstream was
-	// still paid for.
-	recordPhotoCall(db, accountId, now);
-
 	if (!reading.ok) {
 		dependencies.log(
-			`photo: account=${accountId} model=${visionModel()} upstream=${reading.status ?? 'timeout'}`
+			`photo: account=${accountId} model=${visionModel()} upstream=${upstreamOf(reading)}`
 		);
 		return apiError('photo-unavailable');
 	}

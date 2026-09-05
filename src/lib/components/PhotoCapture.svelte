@@ -48,6 +48,7 @@
 	const REFUSED = {
 		none: 'Couldn’t recognise any food in that photo. Try closer, or type it.',
 		unauthenticated: 'Reading a photo needs you to be signed in. You can still type it.',
+		'too-large': 'That photo is too large to read.',
 		unavailable: 'Photo logging isn’t available right now. You can still type it.',
 		quota: 'That’s all the photos this app can read today. You can still type it.',
 		offline: 'The photo couldn’t be sent. You can still type it.'

@@ -27,6 +27,8 @@ export type PhotoOutcome =
 	| { kind: 'ok'; foods: PhotoFood[] }
 	/** Reading a photo needs a session this device does not have. */
 	| { kind: 'unauthenticated' }
+	/** The still was bigger than the endpoint, or the server in front of it, will take. */
+	| { kind: 'too-large' }
 	/** No key, no catalog, or the model refused, timed out or failed. */
 	| { kind: 'unavailable' }
 	/** The day's allowance is spent. */
@@ -55,6 +57,21 @@ function foodOf(value: unknown): PhotoFood | null {
 	return { label, grams, food: catalogFoodToFood(found) };
 }
 
+/**
+ * The outcome a status alone decides, or `null` when the body still has to be
+ * read to know.
+ */
+function refusalFor(status: number): PhotoOutcome | null {
+	if (status === 401) return { kind: 'unauthenticated' };
+	if (status === 429) return { kind: 'quota' };
+	// 413 is `adapter-node` refusing the body before the endpoint sees it, and
+	// 400 is the endpoint's own ceiling. Nothing else can produce a 400 from
+	// here: this module always sends a JPEG data URL and one of the four meals,
+	// so the size is the only thing about the request that can be wrong.
+	if (status === 400 || status === 413) return { kind: 'too-large' };
+	return null;
+}
+
 /** What the vision model made of this plate. */
 export async function readPhoto(
 	image: string,
@@ -72,8 +89,8 @@ export async function readPhoto(
 		// A dropped connection is not an answer about this photo.
 		return { kind: 'offline' };
 	}
-	if (response.status === 401) return { kind: 'unauthenticated' };
-	if (response.status === 429) return { kind: 'quota' };
+	const refused = refusalFor(response.status);
+	if (refused !== null) return refused;
 	// 503 is the server with no key, no catalog or no answer from the model, and
 	// anything else unexpected reads the same: none of them is a plate.
 	if (!response.ok) return UNAVAILABLE;

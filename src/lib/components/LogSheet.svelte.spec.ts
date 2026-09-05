@@ -582,10 +582,8 @@ describe('LogSheet reading a plate from a photo', () => {
 		);
 	}
 
-	/** Reach the still without a camera: the upload tab decodes a real picture. */
-	async function chooseAPicture() {
-		await openSheet();
-		await page.getByRole('button', { name: 'Upload' }).click();
+	/** Hand the already-open picker a real picture, and wait for the still. */
+	async function givePicture() {
 		const canvas = document.createElement('canvas');
 		canvas.width = 64;
 		canvas.height = 64;
@@ -603,6 +601,13 @@ describe('LogSheet reading a plate from a photo', () => {
 		input.files = data.files;
 		input.dispatchEvent(new Event('change', { bubbles: true }));
 		await expect.element(page.getByRole('button', { name: 'Read this plate' })).toBeInTheDocument();
+	}
+
+	/** Reach the still without a camera: the upload tab decodes a real picture. */
+	async function chooseAPicture() {
+		await openSheet();
+		await page.getByRole('button', { name: 'Upload' }).click();
+		await givePicture();
 	}
 
 	async function readThePlate(items: unknown) {
@@ -655,6 +660,48 @@ describe('LogSheet reading a plate from a photo', () => {
 		]);
 		await page.getByRole('button', { name: 'Add to today' }).click();
 		expect(add.mock.calls[0]?.[0]).toHaveLength(1);
+	});
+
+	it('adds to what was already parsed rather than replacing it', async () => {
+		// Regression: reading a plate assigned over `proposals`, so anything already
+		// typed on the Type tab disappeared without a word.
+		await openSheet();
+		await page.getByLabelText('What you ate').fill('two eggs');
+		await page.getByRole('button', { name: 'Parse' }).click();
+		await expect.element(page.getByText('Egg, large').first()).toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Upload' }).click();
+		await givePicture();
+		plateAnswers([{ label: 'a bowl of cereal', grams: 74, food: CEREAL, alternatives: [] }]);
+		await page.getByRole('button', { name: 'Read this plate' }).click();
+
+		await expect.element(page.getByText('HONEY NUT CHEERIOS').first()).toBeInTheDocument();
+		await expect.element(page.getByText('Egg, large').first()).toBeInTheDocument();
+	});
+
+	it('says so rather than guessing when the catalog serving weighs nothing', async () => {
+		// A serving of no weight gives the estimate nothing to divide by, so
+		// `resolveQuantity` declines it and records one serving. The row has to say
+		// that happened rather than present the one as a reading of the photo.
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		const weightless = { ...CEREAL, serving: { label: 'serving', grams: 0 } };
+		await readThePlate([
+			{ label: 'a bowl of cereal', grams: 74, food: weightless, alternatives: [] }
+		]);
+		await expect.element(page.getByText(/Couldn’t use “74 g”/)).toBeInTheDocument();
+
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add.mock.calls[0]?.[0]?.[0]).toMatchObject({
+			servings: 1,
+			note: 'Portion unknown, set the servings'
+		});
+	});
+
+	it('carries no such note when the estimate was read against a real serving', async () => {
+		const add = vi.spyOn(tend, 'addLogItems').mockImplementation(() => undefined);
+		await readThePlate([{ label: 'a bowl of cereal', grams: 74, food: CEREAL, alternatives: [] }]);
+		await page.getByRole('button', { name: 'Add to today' }).click();
+		expect(add.mock.calls[0]?.[0]?.[0]?.note).toBeUndefined();
 	});
 
 	it('stays on the photo tab when the photo held no food', async () => {

@@ -11,12 +11,16 @@ import { MEALS, type Meal } from '$lib/domain/types';
 
 /**
  * A 720 px JPEG at quality 0.82 — what `src/lib/ui/camera.ts` produces — is
- * tens of kilobytes of base64. 600 KB is an order of magnitude of headroom for
- * a device whose camera is larger than the one measured, and still small
- * enough that a hostile caller cannot make the server hold a megabyte per
- * request.
+ * tens of kilobytes of base64, so 450 KB is an order of magnitude of headroom
+ * for a device whose camera is larger than the one measured.
+ *
+ * It is under `adapter-node`'s `BODY_SIZE_LIMIT`, which defaults to 512 KB and
+ * which nothing in this repository sets. A ceiling above that would be a
+ * ceiling this handler never reaches: the server would answer 413 before the
+ * request arrived here, and the caller would be told the wrong thing about a
+ * body this code had never seen.
  */
-export const MAX_PHOTO_BODY_BYTES = 600 * 1024;
+export const MAX_PHOTO_BODY_BYTES = 450 * 1024;
 
 /**
  * Only JPEG, and only base64. The capture path emits exactly this prefix, so

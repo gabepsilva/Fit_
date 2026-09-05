@@ -4,7 +4,7 @@ import { createFixtureCatalog } from '../../../../tests/catalog-fixture';
 import { openDatabase } from '../db';
 import type { Auth } from '../users/types';
 import { photoDependencies, readMealPhoto, type PhotoEvent, type PhotoItem } from './endpoints';
-import { ACCOUNT_DAILY_LIMIT, GLOBAL_DAILY_LIMIT, recordPhotoCall } from './quota';
+import { ACCOUNT_DAILY_LIMIT, GLOBAL_DAILY_LIMIT, reservePhotoCall } from './quota';
 import type { PlateReading } from './vision';
 
 const SIGNED_IN = {
@@ -54,7 +54,25 @@ let catalog: DatabaseSync;
 let log: ReturnType<typeof vi.fn<(line: string) => void>>;
 
 function deps(reading: PlateReading) {
-	return { read: vi.fn(() => Promise.resolve(reading)), now: () => NOON, log };
+	return {
+		configured: () => true,
+		read: vi.fn(() => Promise.resolve(reading)),
+		now: () => NOON,
+		log
+	};
+}
+
+/** Dependencies whose reading is held open until the returned `release` is called. */
+function holding(reading: PlateReading) {
+	let release = () => undefined as void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const read = vi.fn(async () => {
+		await held;
+		return reading;
+	});
+	return { dependencies: { configured: () => true, read, now: () => NOON, log }, read, release };
 }
 
 async function bodyOf(response: Response): Promise<Record<string, unknown>> {
@@ -118,7 +136,7 @@ describe('what it accepts', () => {
 	});
 
 	it('refuses a body past the ceiling', async () => {
-		const huge = eventFor({ image: `${IMAGE}${'A'.repeat(600 * 1024)}`, meal: 'lunch' });
+		const huge = eventFor({ image: `${IMAGE}${'A'.repeat(450 * 1024)}`, meal: 'lunch' });
 		const response = await readMealPhoto(db, catalog, huge, deps(found('milk')));
 		expect(response.status).toBe(400);
 	});
@@ -132,14 +150,20 @@ describe('what it accepts', () => {
 
 describe('when the server cannot read a photo', () => {
 	it('says so, and spends nothing, when no key is configured', async () => {
-		const dependencies = deps({ ok: false, reason: 'not-configured' });
+		const dependencies = { ...deps(found('milk')), configured: () => false };
 		const response = await readMealPhoto(db, catalog, plate(), dependencies);
 		expect(response.status).toBe(503);
 		expect(await bodyOf(response)).toEqual({ error: { code: 'photo-unavailable' } });
 		expect(db.prepare('select count(*) as n from photo_quota').get()?.['n']).toBe(0);
+		expect(dependencies.read).not.toHaveBeenCalled();
 	});
 
-	it('says so when the model refused, and counts the call anyway', async () => {
+	it('logs a key that went missing between the check and the call', async () => {
+		await readMealPhoto(db, catalog, plate(), deps({ ok: false, reason: 'not-configured' }));
+		expect(log.mock.calls[0]?.[0]).toContain('upstream=not-configured');
+	});
+
+	it('says so when the model refused, and keeps the reservation', async () => {
 		const dependencies = deps({ ok: false, reason: 'unavailable', status: 429 });
 		const response = await readMealPhoto(db, catalog, plate(), dependencies);
 		expect(response.status).toBe(503);
@@ -184,7 +208,7 @@ describe('when the server cannot read a photo', () => {
 
 describe('the spend guard', () => {
 	it('refuses once the account has spent its day', async () => {
-		for (let index = 0; index < ACCOUNT_DAILY_LIMIT; index += 1) recordPhotoCall(db, 'a1', NOON);
+		for (let index = 0; index < ACCOUNT_DAILY_LIMIT; index += 1) reservePhotoCall(db, 'a1', NOON);
 		const dependencies = deps(found('milk'));
 		const response = await readMealPhoto(db, catalog, plate(), dependencies);
 		expect(response.status).toBe(429);
@@ -193,14 +217,14 @@ describe('the spend guard', () => {
 	});
 
 	it('says how long the caller has to wait, in whole seconds to the next UTC midnight', async () => {
-		for (let index = 0; index < ACCOUNT_DAILY_LIMIT; index += 1) recordPhotoCall(db, 'a1', NOON);
+		for (let index = 0; index < ACCOUNT_DAILY_LIMIT; index += 1) reservePhotoCall(db, 'a1', NOON);
 		const response = await readMealPhoto(db, catalog, plate(), deps(found('milk')));
 		expect(response.headers.get('retry-after')).toBe(String(12 * 60 * 60));
 	});
 
 	it('refuses once the deployment has spent its day, whoever is asking', async () => {
 		for (let index = 0; index < GLOBAL_DAILY_LIMIT; index += 1)
-			recordPhotoCall(db, `a${index}`, NOON);
+			reservePhotoCall(db, `a${index}`, NOON);
 		const response = await readMealPhoto(db, catalog, plate(), deps(found('milk')));
 		expect(response.status).toBe(429);
 	});
@@ -212,6 +236,36 @@ describe('the spend guard', () => {
 			{ scope: 'account', holder: 'a1', calls: 1 },
 			{ scope: 'global', holder: '', calls: 1 }
 		]);
+	});
+
+	it('leaves no increment behind when it refuses', async () => {
+		for (let index = 0; index < ACCOUNT_DAILY_LIMIT; index += 1) reservePhotoCall(db, 'a1', NOON);
+		await readMealPhoto(db, catalog, plate(), deps(found('milk')));
+		const rows = db.prepare('select scope, calls from photo_quota order by scope').all();
+		expect(rows).toEqual([
+			{ scope: 'account', calls: ACCOUNT_DAILY_LIMIT },
+			{ scope: 'global', calls: ACCOUNT_DAILY_LIMIT }
+		]);
+	});
+
+	it('reserves the allowance before the call rather than counting it after', async () => {
+		// Regression: the ceiling used to be read before a twenty-second await and
+		// written after it, so every request in flight read the same count and
+		// every one of them was allowed. Forty-five at once must still be forty.
+		const { dependencies, read, release } = holding(found('milk'));
+		const inFlight = Array.from({ length: ACCOUNT_DAILY_LIMIT + 5 }, () =>
+			readMealPhoto(db, catalog, plate(), dependencies)
+		);
+		// One turn of the timer queue is enough for every handler to reach its
+		// held reading, because the reservation before it is synchronous.
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(read).toHaveBeenCalledTimes(ACCOUNT_DAILY_LIMIT);
+
+		release();
+		const answers = await Promise.all(inFlight);
+		expect(answers.filter((answer) => answer.status === 200)).toHaveLength(ACCOUNT_DAILY_LIMIT);
+		expect(answers.filter((answer) => answer.status === 429)).toHaveLength(5);
+		expect(read).toHaveBeenCalledTimes(ACCOUNT_DAILY_LIMIT);
 	});
 });
 
@@ -301,6 +355,14 @@ describe('the production wiring', () => {
 			ok: false,
 			reason: 'not-configured'
 		});
+		vi.unstubAllEnvs();
+	});
+
+	it('reads whether a key is configured from the environment', () => {
+		vi.stubEnv('OPENAI_API_KEY', '');
+		expect(photoDependencies.configured()).toBe(false);
+		vi.stubEnv('OPENAI_API_KEY', 'sk-configured');
+		expect(photoDependencies.configured()).toBe(true);
 		vi.unstubAllEnvs();
 	});
 });

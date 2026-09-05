@@ -113,6 +113,17 @@ describe('when there is no plate to read', () => {
 		expect(await readPhoto(IMAGE, 'lunch', answering({}, 429))).toEqual({ kind: 'quota' });
 	});
 
+	it('says the photo is too large when the server in front refuses the body', async () => {
+		expect(await readPhoto(IMAGE, 'lunch', answering({}, 413))).toEqual({ kind: 'too-large' });
+	});
+
+	it('says the photo is too large when the endpoint refuses the body itself', async () => {
+		// This module only ever sends a JPEG data URL and one of the four meals, so
+		// the size is the only thing about its own request that can be wrong.
+		const refused = answering({ error: { code: 'invalid-body' } }, 400);
+		expect(await readPhoto(IMAGE, 'lunch', refused)).toEqual({ kind: 'too-large' });
+	});
+
 	it('says unavailable for the server that cannot read photos', async () => {
 		expect(await readPhoto(IMAGE, 'lunch', answering({}, 503))).toEqual({ kind: 'unavailable' });
 	});

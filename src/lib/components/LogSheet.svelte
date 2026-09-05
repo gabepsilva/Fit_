@@ -182,19 +182,26 @@
 			};
 		}
 		remember(found.food);
+		const resolved = resolveQuantity(quantity, found.food);
 		return {
 			...base,
 			foodId: found.food.id,
 			name: found.food.name,
-			servings: resolveQuantity(quantity, found.food).servings
+			servings: resolved.servings,
+			// A catalog row whose serving weighs nothing gives the estimate nothing
+			// to divide by, so `resolveQuantity` declines it and records one serving.
+			// Saying so is the difference between a guess and a silent one.
+			...(resolved.declined ? { note: 'Portion unknown, set the servings' } : {})
 		};
 	}
 
 	/** Take what the photo was read as, and leave the person on the list to correct. */
 	function addPhotoFoods(foods: PhotoFood[]) {
 		const added = foods.map(photoProposal);
-		proposals = added;
-		fromPhoto = new Set(added.map((p) => p.id));
+		// Appended, not assigned: whatever was already parsed or picked is still
+		// waiting to be committed, and a photo is another way of adding to it.
+		proposals = [...proposals, ...added];
+		fromPhoto = new Set([...fromPhoto, ...added.map((p) => p.id)]);
 		matchId = null;
 		logUi.tab = 'type';
 		toast(`Found ${added.length} ${added.length === 1 ? 'food' : 'foods'} in the photo.`);

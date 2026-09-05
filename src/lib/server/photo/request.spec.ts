@@ -93,8 +93,9 @@ describe('readPhotoBody', () => {
 		expect(await readPhotoBody(streaming(huge))).toEqual(REFUSED);
 	});
 
-	it('allows six hundred kilobytes, an order of magnitude over a 720 px still', () => {
-		expect(MAX_PHOTO_BODY_BYTES).toBe(600 * 1024);
+	it('stays under adapter-node’s own 512 KB body limit, so this ceiling is reachable', () => {
+		expect(MAX_PHOTO_BODY_BYTES).toBe(450 * 1024);
+		expect(MAX_PHOTO_BODY_BYTES).toBeLessThan(512 * 1024);
 	});
 
 	it('refuses text that is not JSON', async () => {

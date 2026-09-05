@@ -354,6 +354,14 @@ describe('PhotoCapture, sending the still to be read', () => {
 			.toBeInTheDocument();
 	});
 
+	it('says the photo is too large when the body is refused', async () => {
+		serverAnswers(413, {});
+		await camera();
+		await shoot();
+		await readButton().click();
+		await expect.element(page.getByText('That photo is too large to read.')).toBeInTheDocument();
+	});
+
 	it('names the session when reading needs one', async () => {
 		serverAnswers(401, { error: { code: 'unauthenticated' } });
 		await camera();
