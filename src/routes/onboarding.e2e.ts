@@ -189,4 +189,28 @@ test.describe('once onboarded', () => {
 		await page.reload();
 		await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
 	});
+
+	test('day strip scrolls on its own, centers Today, and reveals dated pills further back', async ({
+		page
+	}) => {
+		const strip = page.locator('[aria-pressed]').first().locator('xpath=..');
+		const stripMetrics = await strip.evaluate((el) => ({
+			scrollWidth: el.scrollWidth,
+			clientWidth: el.clientWidth
+		}));
+		expect(stripMetrics.scrollWidth).toBeGreaterThan(stripMetrics.clientWidth);
+
+		const viewportWidth = page.viewportSize()?.width ?? 0;
+		const docScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+		expect(docScrollWidth).toBeLessThanOrEqual(viewportWidth);
+
+		const todayBox = await page.getByRole('button', { name: /^Today/ }).boundingBox();
+		expect(todayBox).not.toBeNull();
+		const todayCenterX =
+			(todayBox as { x: number; width: number }).x + (todayBox as { width: number }).width / 2;
+		expect(Math.abs(todayCenterX - viewportWidth / 2)).toBeLessThanOrEqual(8);
+
+		await strip.evaluate((el) => el.scrollTo({ left: 0, behavior: 'instant' }));
+		await expect(strip.getByText(/^\w{3} \d{1,2}$/).first()).toBeVisible();
+	});
 });

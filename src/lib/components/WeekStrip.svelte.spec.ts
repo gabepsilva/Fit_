@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
-import { addDaysISO, todayISO, weekdayShort } from '$lib/domain/utils';
+import { addDaysISO, todayISO } from '$lib/domain/utils';
+import { dayStripLabel } from '$lib/domain/week-strip';
 import WeekStrip from './WeekStrip.svelte';
 
 const empty = () => new Set<string>();
 
 describe('WeekStrip', () => {
-	it('shows seven days', async () => {
+	it('shows the full 38-day range', async () => {
 		await render(WeekStrip, {
 			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
 		});
 		await expect.element(page.getByRole('button').first()).toBeInTheDocument();
-		expect(document.querySelectorAll('button')).toHaveLength(7);
+		expect(document.querySelectorAll('button')).toHaveLength(38);
 	});
 
 	it('labels the current day "Today" rather than by weekday', async () => {
@@ -27,7 +28,9 @@ describe('WeekStrip', () => {
 		await render(WeekStrip, {
 			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
 		});
-		await expect.element(page.getByText(weekdayShort(yesterday))).toBeInTheDocument();
+		await expect
+			.element(page.getByText(dayStripLabel(yesterday), { exact: true }))
+			.toBeInTheDocument();
 	});
 
 	it('marks the selected day as pressed', async () => {
@@ -48,7 +51,9 @@ describe('WeekStrip', () => {
 			selected: todayISO()
 		});
 		await render(WeekStrip, { props });
-		await page.getByRole('button', { name: new RegExp(weekdayShort(yesterday)) }).click();
+		await page
+			.getByRole('button', { name: `${dayStripLabel(yesterday)} nothing logged`, exact: true })
+			.click();
 		expect(props.selected).toBe(yesterday);
 	});
 

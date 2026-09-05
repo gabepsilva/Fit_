@@ -2,8 +2,8 @@
 	import Dumbbell from '@lucide/svelte/icons/dumbbell';
 	import Utensils from '@lucide/svelte/icons/utensils';
 	import Weight from '@lucide/svelte/icons/weight';
-	import { loggedMarksText } from '$lib/domain/week-strip';
-	import { lastNDates, todayISO, weekdayShort } from '$lib/domain/utils';
+	import { dayStripLabel, dayStripRange, loggedMarksText } from '$lib/domain/week-strip';
+	import { todayISO } from '$lib/domain/utils';
 	import { cn } from '$lib/ui/cn';
 	import ToggleButton from '$lib/ui/ToggleButton.svelte';
 
@@ -20,7 +20,7 @@
 	} = $props();
 
 	const today = todayISO();
-	const days = lastNDates(7, today);
+	const days = dayStripRange(today);
 
 	let todayEl = $state<HTMLButtonElement>();
 
@@ -42,7 +42,7 @@
 </script>
 
 <div
-	class="scrollbar-none flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth px-[calc(50%-2rem)]"
+	class="scrollbar-none flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth px-[calc(50%-2.5rem)]"
 >
 	{#each days as iso (iso)}
 		{@const isSelected = iso === selected}
@@ -53,14 +53,14 @@
 			pressed={isSelected}
 			onclick={() => (selected = iso)}
 			resting="bg-card text-foreground"
-			class="relative flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-2 snap-center transition-colors duration-150"
+			class="relative flex h-16 w-20 shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-2 snap-center transition-colors duration-150"
 			{@attach iso === today &&
 				((el: HTMLButtonElement) => {
 					todayEl = el;
 				})}
 		>
 			<span class={cn('text-xs', isSelected ? 'opacity-80' : 'text-muted-foreground')}>
-				{iso === today ? 'Today' : weekdayShort(iso)}
+				{dayStripLabel(iso, today)}
 			</span>
 			<span class="flex items-center gap-1.5">
 				<Utensils
