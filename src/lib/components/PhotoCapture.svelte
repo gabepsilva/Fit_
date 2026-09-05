@@ -210,10 +210,14 @@
 				type="button"
 				onclick={shoot}
 				disabled={videoWidth === 0}
+				aria-busy={videoWidth === 0}
 				aria-label="Take photo"
-				class="absolute bottom-4 left-1/2 size-16 -translate-x-1/2 rounded-full bg-white shadow-lg active:scale-[0.96] disabled:opacity-50"
+				class="absolute bottom-4 left-1/2 size-16 -translate-x-1/2 rounded-full bg-white shadow-lg ring ring-white/80 ring-offset-4 ring-offset-black/40 active:not-disabled:scale-[0.96] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
 			></button>
 		</div>
+		<p class="text-muted-foreground text-sm">
+			{videoWidth === 0 ? 'Waking the camera…' : ''}
+		</p>
 	{:else if phase === 'shot' && shot}
 		<img
 			src={shot}
