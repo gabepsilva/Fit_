@@ -1,56 +1,69 @@
 {
-	"when": "2026-09-05T07:05:13.866Z",
+	"when": "2026-09-05T07:12:10.589Z",
 	"bundle": {
-		"javascriptBytes": 428139,
+		"javascriptBytes": 428151,
 		"cssBytes": 50680,
 		"largestAsset": {
-			"bytes": 76871,
-			"file": "nodes/0.D1wYjPrv.js"
+			"bytes": 76879,
+			"file": "nodes/0.B4lmDWhB.js"
 		}
 	},
 	"phonePaint": {
 		"routes": [
 			{
 				"route": "/today",
-				"domContentLoadedMs": 15.799999997019768,
-				"lcpMs": 15.899999991059303,
+				"domContentLoadedMs": 17,
+				"lcpMs": 17.100000008940697,
 				"transferredBytes": 870
 			},
 			{
 				"route": "/journal",
-				"domContentLoadedMs": 15.299999997019768,
-				"lcpMs": 15.399999991059303,
+				"domContentLoadedMs": 15.399999991059303,
+				"lcpMs": 15.599999994039536,
 				"transferredBytes": 870
 			},
 			{
 				"route": "/progress",
-				"domContentLoadedMs": 31.899999991059303,
-				"lcpMs": 32.70000000298023,
+				"domContentLoadedMs": 24.799999997019768,
+				"lcpMs": 25.5,
 				"transferredBytes": 8166
 			},
 			{
 				"route": "/plan",
-				"domContentLoadedMs": 30.200000002980232,
-				"lcpMs": 30.799999997019768,
+				"domContentLoadedMs": 30.5,
+				"lcpMs": 31.299999997019768,
 				"transferredBytes": 7926
 			},
 			{
 				"route": "/you",
-				"domContentLoadedMs": 33,
-				"lcpMs": 33.6000000089407,
+				"domContentLoadedMs": 37.79999999701977,
+				"lcpMs": 38.8999999910593,
 				"transferredBytes": 7645
 			}
 		],
-		"logSheetOpenMs": 99,
-		"catalogSearchMs": null,
-		"catalogSearchSkipReason": "no catalog file at data/db/fit-food-core.sqlite — the catalog is not in the repository or in CI"
+		"logSheetOpenMs": 100,
+		"catalogSearchMs": 2030,
+		"catalogSearchSkipReason": null
 	},
 	"serverLatency": {
-		"rows": null,
-		"skipReason": "no catalog file at data/db/fit-food-core.sqlite — /api/foods and /api/foods/barcode need one"
+		"rows": [
+			{
+				"endpoint": "GET /api/foods",
+				"samples": 88,
+				"p50Ms": 50.95442600000024,
+				"p95Ms": 246.77681099999973
+			},
+			{
+				"endpoint": "GET /api/foods/barcode",
+				"samples": 2,
+				"p50Ms": 2.202452000004996,
+				"p95Ms": 8.45836799999961
+			}
+		],
+		"skipReason": null
 	},
 	"sqlPlans": {
-		"catalogSource": "fixture",
+		"catalogSource": "live",
 		"statementCount": 21,
 		"unresolvedCount": 2
 	}

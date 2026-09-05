@@ -21,6 +21,23 @@ export interface PerfReport {
 	sqlPlans: { catalogSource: 'live' | 'fixture'; statementCount: number; unresolvedCount: number };
 }
 
+/**
+ * Pure: a one-line hint naming `FIT_CATALOG_PATH`, printed alongside the
+ * report whenever this machine had no catalog to measure instrument 2's
+ * search sub-metric or instrument 3 against — `null` when it did.
+ * `sqlPlans.catalogSource` is instrument 4's own record of the same fact, so
+ * it is the one place this checks rather than re-deriving it from the other
+ * two instruments' skip reasons.
+ */
+export function catalogHint(report: PerfReport): string | null {
+	if (report.sqlPlans.catalogSource === 'live') return null;
+	return (
+		'Hint: no catalog file was found on this machine. Set FIT_CATALOG_PATH to one ' +
+		'(e.g. FIT_CATALOG_PATH=/path/to/fit-food-full.sqlite bun run perf:measure --baseline) ' +
+		'to record real numbers for the catalog search round trip and instrument 3.'
+	);
+}
+
 /** Pure: the whole human report, `latest.md`. */
 export function formatReport(report: PerfReport): string {
 	return [

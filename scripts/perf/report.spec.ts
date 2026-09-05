@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatReport } from './report';
+import { catalogHint, formatReport } from './report';
 import type { PerfReport } from './report';
 
 const base: PerfReport = {
@@ -41,5 +41,18 @@ describe('formatReport', () => {
 		});
 		expect(text).toContain('Every statement the parser looked for was resolved.');
 		expect(text).toContain('5 statements plotted against the live catalog');
+	});
+});
+
+describe('catalogHint', () => {
+	it('names FIT_CATALOG_PATH when this run had no catalog', () => {
+		const hint = catalogHint(base);
+		expect(hint).toContain('FIT_CATALOG_PATH');
+	});
+
+	it('is null once instrument 4 ran against the live catalog', () => {
+		expect(
+			catalogHint({ ...base, sqlPlans: { ...base.sqlPlans, catalogSource: 'live' } })
+		).toBeNull();
 	});
 });

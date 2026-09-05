@@ -9,7 +9,7 @@ import { medianRouteMetrics } from './phone-paint-metrics.ts';
 import type { PhonePaintReport, RouteSample } from './phone-paint-metrics.ts';
 import { measureServerLatency } from './server-latency.ts';
 import { formatPlans, planStatements } from './sql-plans.ts';
-import { formatReport } from './report.ts';
+import { catalogHint, formatReport } from './report.ts';
 import type { PerfReport } from './report.ts';
 import { compareReports, formatCompare } from './compare.ts';
 import { formatCommitted } from './prettier-format.ts';
@@ -134,6 +134,8 @@ async function main(): Promise<void> {
 
 	console.log('');
 	console.log(formatReport(report));
+	const hint = catalogHint(report);
+	if (hint !== null) console.log(`\n${hint}`);
 	console.log(
 		`\nWritten to ${path.relative(projectRoot, path.join(reportDirectory, 'latest.md'))}`
 	);
