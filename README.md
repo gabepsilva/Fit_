@@ -289,3 +289,5 @@ hosted `CI / Quality and security` check, which passes only when every parallel 
 Repository-specific agent and review rules live in `AGENTS.md`. `QUALITY.md` is the control
 inventory: what each area currently enforces, what is deliberately absent, and the gate and
 mutation-lane policy behind the numbers.
+
+<!-- throwaway: proving the mutation self-test skip path for PR #134, safe to delete -->
