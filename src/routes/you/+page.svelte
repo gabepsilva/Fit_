@@ -2,7 +2,6 @@
 	import { toast } from 'svelte-sonner';
 	import { resolve } from '$app/paths';
 	import { exportCsv, exportJson, mfpRowsToLogItems, parseMfpCsv } from '$lib/domain/export-data';
-	import { emptyProfile } from '$lib/domain/profile';
 	import { computeTargets } from '$lib/domain/tdee';
 	import type { Injection, LoadUnit, UnitSystem } from '$lib/domain/types';
 	import { heightFromFeetInches, heightToFeetInches } from '$lib/domain/units';
@@ -77,12 +76,6 @@
 		}));
 	}
 
-	function addPerson() {
-		const p = emptyProfile({ name: 'New person' });
-		tend.addProfile(p);
-		tend.setActive(p.id);
-	}
-
 	function saveDose() {
 		tend.addInjection({
 			date: todayISO(),
@@ -128,30 +121,7 @@
 		<PageHeader kicker="On this device" title="You" />
 
 		<section class="bg-card rounded-3xl p-4 shadow-border">
-			<h2 class="font-display text-xl tracking-tight">Household</h2>
-			<div class="mt-3 flex flex-wrap gap-2">
-				{#each tend.state.profiles as p (p.id)}
-					<ToggleButton
-						pressed={p.id === profile.id}
-						onclick={() => tend.setActive(p.id)}
-						resting="bg-secondary"
-						class="h-10 rounded-full px-4 text-sm"
-					>
-						{p.name}
-					</ToggleButton>
-				{/each}
-				<button
-					type="button"
-					class="bg-secondary h-10 rounded-full px-4 text-sm"
-					onclick={addPerson}
-				>
-					Add
-				</button>
-			</div>
-			<p class="text-muted-foreground mt-3 text-xs">
-				Shared meal plans honor every profile’s restrictions. Logs stay separate.
-			</p>
-			<form class="mt-4" onsubmit={saveHeight}>
+			<form onsubmit={saveHeight}>
 				<p class="text-muted-foreground text-sm font-medium">Height</p>
 				{#if tend.state.units === 'imperial'}
 					{@const feetInches = heightToFeetInches(profile.heightCm)}

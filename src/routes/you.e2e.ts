@@ -55,4 +55,9 @@ test.describe('height on the You screen', () => {
 		await expect(page.getByLabel('Height, feet')).toHaveValue('5');
 		await expect(page.getByLabel('Height, inches')).toHaveValue('9');
 	});
+
+	test('hides the household feature', async ({ page }) => {
+		await openYou(page);
+		await expect(page.getByRole('heading', { name: 'Household' })).toHaveCount(0);
+	});
 });

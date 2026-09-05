@@ -58,9 +58,8 @@
 </svelte:head>
 
 <div class="flex flex-col gap-5 pb-10">
-	<PageHeader kicker="Household table" title="Plan">
-		One list, {profiles.length}
-		{profiles.length === 1 ? 'person' : 'people'}{restrictions.length
+	<PageHeader kicker="This week" title="Plan">
+		Meals and groceries for the week{restrictions.length
 			? ` · honors ${restrictions.join(', ')}`
 			: ''}.
 	</PageHeader>
