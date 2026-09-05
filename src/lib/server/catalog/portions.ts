@@ -1,5 +1,6 @@
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
 import { parsePortionLabel, type Portion } from '$lib/domain/portions';
+import { prepared } from './statements';
 
 /**
  * The household measures the catalog holds for a food, as weights the client
@@ -55,9 +56,9 @@ function servingsSql(foods: number): string {
 function volumesByFood(catalog: DatabaseSync, ids: readonly number[]): Map<number, Portion[]> {
 	const byFood = new Map<number, Portion[]>();
 	if (ids.length === 0) return byFood;
-	const rows: Record<string, SQLOutputValue>[] = catalog
-		.prepare(servingsSql(ids.length))
-		.all(...ids);
+	const rows: Record<string, SQLOutputValue>[] = prepared(catalog, servingsSql(ids.length)).all(
+		...ids
+	);
 	for (const row of rows) {
 		const portion = parsePortionLabel(String(row['label']), Number(row['grams']));
 		if (portion === null) continue;

@@ -4,6 +4,7 @@ import { text } from '../users/rows';
 import { withPortions } from './portions';
 import { searchTerms, singular } from './query';
 import { searchSql } from './ranking';
+import { prepared } from './statements';
 
 /** Default page size for a search; the client shows a handful and scrolls. */
 const DEFAULT_LIMIT = 20;
@@ -92,8 +93,7 @@ export function pageSize(requested: string | null): number {
 export function searchFoods(db: DatabaseSync, typed: string, limit: number): CatalogFood[] {
 	const terms = searchTerms(typed);
 	if (terms === null) return [];
-	const found = db
-		.prepare(searchSql(FOOD_COLUMNS))
+	const found = prepared(db, searchSql(FOOD_COLUMNS))
 		.all({
 			match: terms.match,
 			text: terms.text,
@@ -111,8 +111,10 @@ export function searchFoods(db: DatabaseSync, typed: string, limit: number): Cat
  * wrong food silently. The caller is handed all of them and has to choose.
  */
 export function foodsByBarcode(db: DatabaseSync, barcode: string): CatalogFood[] {
-	const found = db
-		.prepare(`select ${FOOD_COLUMNS} from food f where f.gtin14 = ? order by f.quality desc`)
+	const found = prepared(
+		db,
+		`select ${FOOD_COLUMNS} from food f where f.gtin14 = ? order by f.quality desc`
+	)
 		.all(barcode)
 		.map(toFood);
 	return withPortions(db, found);
