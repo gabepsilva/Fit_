@@ -11,8 +11,9 @@
 	import { logFromCatalogFood, logFromFood } from '$lib/domain/log-entry';
 	import { guessMeal, hydrateProposal, parseLocalText } from '$lib/domain/parse-text';
 	import { defaultServings, servingStep } from '$lib/domain/profile';
-	import { matchToFood, type QuantifiedItem } from '$lib/domain/quantity';
+	import { matchToFood, resolveQuantity, type QuantifiedItem } from '$lib/domain/quantity';
 	import { nextProposalId, type Proposal } from '$lib/domain/proposal-id';
+	import type { PhotoFood } from '$lib/photo/photo-log';
 	import type { Food, Meal } from '$lib/domain/types';
 	import { MEALS } from '$lib/domain/types';
 	import { todayISO } from '$lib/domain/utils';
@@ -50,6 +51,13 @@
 	 * which is every result search now returns beyond the bundled 96.
 	 */
 	let fromCatalog = $state<Record<string, Food>>({});
+	/**
+	 * The proposals a photo put here, by id. `commit` reads it to file them under
+	 * the `photo` source instead of `text`; a set rather than a field on the
+	 * proposal, because `matchToFood` rebuilds a proposal from its own fields and
+	 * would drop anything it does not know about.
+	 */
+	let fromPhoto = $state<Set<string>>(new Set());
 
 	const step = $derived(servingStep(tend.profile));
 	const servings = $derived(defaultServings(tend.profile));
@@ -60,6 +68,7 @@
 		matchId = null;
 		listening = false;
 		fromCatalog = {};
+		fromPhoto = new Set();
 		logUi.tab = 'type';
 	}
 
@@ -135,6 +144,62 @@
 		propose(food, 1);
 	}
 
+	/**
+	 * How sure a proposal read off a photo is. Lower than a scan or a search,
+	 * which are the person naming the food themselves, and lower than a parsed
+	 * line, which is their own words: this one is a guess about a picture, and
+	 * the number is what tells them to look before they tap.
+	 */
+	const PHOTO_CONFIDENCE = 0.6;
+
+	/**
+	 * One proposal per food the photo held.
+	 *
+	 * The weight the model estimated is carried as the proposal's `quantity`
+	 * rather than converted here, so the servings come out of the same
+	 * `resolveQuantity` a typed "150 g chicken" goes through -- and are computed
+	 * again against the new food if the person matches the row to something
+	 * else. A food the catalog could not match keeps its label and its estimate
+	 * and arrives unmatched, so the person sees what was skipped rather than a
+	 * shorter list than the photo held.
+	 */
+	function photoProposal(found: PhotoFood): Proposal {
+		const quantity = { amount: found.grams, unit: 'g', kind: 'mass' as const };
+		const base = {
+			id: nextProposalId(),
+			query: found.label,
+			meal,
+			confidence: PHOTO_CONFIDENCE,
+			quantity
+		};
+		if (!found.food) {
+			return {
+				...base,
+				foodId: null,
+				name: found.label,
+				note: 'Not found in the catalog',
+				servings: 1
+			};
+		}
+		remember(found.food);
+		return {
+			...base,
+			foodId: found.food.id,
+			name: found.food.name,
+			servings: resolveQuantity(quantity, found.food).servings
+		};
+	}
+
+	/** Take what the photo was read as, and leave the person on the list to correct. */
+	function addPhotoFoods(foods: PhotoFood[]) {
+		const added = foods.map(photoProposal);
+		proposals = added;
+		fromPhoto = new Set(added.map((p) => p.id));
+		matchId = null;
+		logUi.tab = 'type';
+		toast(`Found ${added.length} ${added.length === 1 ? 'food' : 'foods'} in the photo.`);
+	}
+
 	function commit() {
 		const date = todayISO();
 		// Drop unmatched proposals: with no catalog food there is no nutrition to log.
@@ -144,7 +209,7 @@
 				servings: p.servings,
 				meal: p.meal,
 				date,
-				source: 'text' as const,
+				source: fromPhoto.has(p.id) ? ('photo' as const) : ('text' as const),
 				note: p.note
 			};
 			if (FOOD_BY_ID[p.foodId]) return [logFromFood({ foodId: p.foodId, ...context })];
@@ -214,9 +279,19 @@
 				<Button onclick={() => runText(text)} disabled={!text.trim()}>Parse</Button>
 			</div>
 		{:else if logUi.tab === 'photo'}
-			<PhotoCapture route="camera" ontype={() => (logUi.tab = 'type')} />
+			<PhotoCapture
+				route="camera"
+				{meal}
+				ontype={() => (logUi.tab = 'type')}
+				onfoods={addPhotoFoods}
+			/>
 		{:else if logUi.tab === 'upload'}
-			<PhotoCapture route="file" ontype={() => (logUi.tab = 'type')} />
+			<PhotoCapture
+				route="file"
+				{meal}
+				ontype={() => (logUi.tab = 'type')}
+				onfoods={addPhotoFoods}
+			/>
 		{:else if logUi.tab === 'voice'}
 			<div class="bg-background flex flex-col items-center gap-3 rounded-3xl px-4 py-8 text-center">
 				<Mic class="size-8 {listening ? 'text-primary' : 'text-muted-foreground'}" />
@@ -252,7 +327,9 @@
 								// food arrives here too and has to be remembered the same way.
 								remember(food);
 								proposals = proposals.map((x) =>
-									x.id === p.id ? { ...matchToFood(x, food), id: x.id } : x
+									// The note is dropped: the only one anything sets is “not found in
+									// the catalog”, which this tap has just made untrue.
+									x.id === p.id ? { ...matchToFood(x, food), id: x.id, note: undefined } : x
 								);
 								matchId = null;
 							}}

@@ -112,6 +112,22 @@ describe('migrate', () => {
 		expect(tableNames(db)).toContain('household_state');
 	});
 
+	it('creates the photo quota table the spend guard counts in', () => {
+		const db = new DatabaseSync(':memory:');
+		migrate(db);
+		expect(tableNames(db)).toContain('photo_quota');
+	});
+
+	it('refuses a photo quota row filed under a scope nothing counts', () => {
+		const db = new DatabaseSync(':memory:');
+		migrate(db);
+		expect(() =>
+			db
+				.prepare('insert into photo_quota (scope, holder, day, calls) values (?, ?, ?, ?)')
+				.run('household', 'h1', '2026-09-04', 1)
+		).toThrow();
+	});
+
 	it('cascades household deletion onto its stored state document', () => {
 		const db = openDatabase(':memory:');
 		const stamp = '2026-08-29T00:00:00.000Z';

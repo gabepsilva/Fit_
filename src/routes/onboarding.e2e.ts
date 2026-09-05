@@ -156,10 +156,10 @@ test.describe('once onboarded', () => {
 		await expect(page.getByRole('button', { name: 'Choose a picture' })).toBeVisible();
 	});
 
-	test('says on the photo tab that a still cannot be read yet', async ({ page }) => {
+	test('offers typing as the way out of the photo tab', async ({ page }) => {
 		await page.getByRole('button', { name: 'Log food' }).click();
 		await page.getByRole('button', { name: 'Photo', exact: true }).click();
-		await expect(page.getByText(/needs the server, which isn’t built yet/)).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Type it instead' })).toBeVisible();
 	});
 
 	test('opens the sheet on the meal named by its own heading button', async ({ page }) => {

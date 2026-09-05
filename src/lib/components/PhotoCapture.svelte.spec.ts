@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import PhotoCapture from './PhotoCapture.svelte';
@@ -46,9 +46,34 @@ function failing(name: string) {
 }
 
 const shutter = () => page.getByRole('button', { name: 'Take the picture' });
+const readButton = () => page.getByRole('button', { name: 'Read this plate' });
 
-const camera = () => render(PhotoCapture, { props: { route: 'camera', ontype: vi.fn() } });
-const upload = () => render(PhotoCapture, { props: { route: 'file', ontype: vi.fn() } });
+/** One row of `/api/meals/photo`'s answer, for a food the catalog could not match. */
+const EGG = { label: 'fried egg', grams: 60, food: null, alternatives: [] };
+
+/** What `readPhoto` makes of that row: the wire's `alternatives` are not carried. */
+const EGG_FOOD = { label: 'fried egg', grams: 60, food: null };
+
+/** Stubs the endpoint, the way `FoodSearch.svelte.spec.ts` stubs the catalog. */
+function serverAnswers(status: number, body: unknown = {}) {
+	return vi
+		.spyOn(globalThis, 'fetch')
+		.mockImplementation(() => Promise.resolve(new Response(JSON.stringify(body), { status })));
+}
+
+const props = {
+	route: 'camera' as const,
+	meal: 'lunch' as const,
+	ontype: vi.fn(),
+	onfoods: vi.fn()
+};
+
+const camera = () =>
+	render(PhotoCapture, { props: { ...props, ontype: vi.fn(), onfoods: vi.fn() } });
+const upload = () =>
+	render(PhotoCapture, {
+		props: { ...props, route: 'file' as const, ontype: vi.fn(), onfoods: vi.fn() }
+	});
 
 async function shoot() {
 	await expect.element(shutter(), FRAME).toBeEnabled();
@@ -116,17 +141,25 @@ describe('PhotoCapture, pointed at the camera', () => {
 		expect(src.startsWith('data:image/jpeg;base64,')).toBe(true);
 	});
 
-	it('says up front that nothing leaves the device', async () => {
+	it('says nothing about a photo leaving the device until there is one', async () => {
 		openable();
 		await camera();
-		expect(document.body.textContent).toContain('nothing leaves this device');
+		expect(document.body.textContent).not.toContain('goes to OpenAI');
 	});
 
-	it('says plainly that reading the still needs a server that does not exist', async () => {
+	it('says where the still goes, before offering to send it', async () => {
 		openable();
 		await camera();
 		await shoot();
-		expect(document.body.textContent).toContain('needs the server, which isn’t built yet');
+		expect(document.body.textContent).toContain('The photo goes to OpenAI to be read.');
+		expect(document.body.textContent).toContain('It isn’t stored.');
+	});
+
+	it('offers to read the plate once there is a still', async () => {
+		openable();
+		await camera();
+		await shoot();
+		await expect.element(readButton()).toBeInTheDocument();
 	});
 
 	it('lets go of the camera as soon as there is a still', async () => {
@@ -157,7 +190,7 @@ describe('PhotoCapture, pointed at the camera', () => {
 	it('sends the user to typing when they ask for it', async () => {
 		openable();
 		const ontype = vi.fn();
-		await render(PhotoCapture, { props: { route: 'camera', ontype } });
+		await render(PhotoCapture, { props: { ...props, ontype, onfoods: vi.fn() } });
 		await page.getByRole('button', { name: 'Type it instead' }).click();
 		expect(ontype).toHaveBeenCalled();
 	});
@@ -238,15 +271,124 @@ describe('PhotoCapture, pointed at the pictures already on the device', () => {
 		await expect.element(page.getByText(/couldn’t be read/)).toBeInTheDocument();
 	});
 
-	it('says here too that nothing leaves the device', async () => {
+	it('says here too where the picture goes, once one is chosen', async () => {
 		await upload();
-		expect(document.body.textContent).toContain('nothing leaves this device');
+		choose(await pictureFile());
+		await expect.element(readButton()).toBeInTheDocument();
+		expect(document.body.textContent).toContain('The photo goes to OpenAI to be read.');
 	});
 
 	it('sends the user to typing when they ask for it', async () => {
 		const ontype = vi.fn();
-		await render(PhotoCapture, { props: { route: 'file', ontype } });
+		await render(PhotoCapture, {
+			props: { ...props, route: 'file' as const, ontype, onfoods: vi.fn() }
+		});
 		await page.getByRole('button', { name: 'Type it instead' }).click();
 		expect(ontype).toHaveBeenCalled();
+	});
+});
+
+describe('PhotoCapture, sending the still to be read', () => {
+	beforeEach(() => {
+		openable();
+	});
+
+	it('hands the foods it was told about to the sheet', async () => {
+		serverAnswers(200, { items: [EGG] });
+		const onfoods = vi.fn();
+		await render(PhotoCapture, { props: { ...props, ontype: vi.fn(), onfoods } });
+		await shoot();
+		await readButton().click();
+		await vi.waitFor(() => expect(onfoods).toHaveBeenCalledWith([EGG_FOOD]));
+	});
+
+	it('sends the still and the meal it belongs to', async () => {
+		const fetching = serverAnswers(200, { items: [EGG] });
+		await render(PhotoCapture, {
+			props: { ...props, meal: 'breakfast' as const, ontype: vi.fn(), onfoods: vi.fn() }
+		});
+		await shoot();
+		await readButton().click();
+		await vi.waitFor(() => expect(fetching).toHaveBeenCalled());
+		const init = (fetching.mock.calls[0] ?? [])[1] as RequestInit;
+		const body = init.body;
+		expect(typeof body).toBe('string');
+		const sent = JSON.parse(typeof body === 'string' ? body : '{}') as {
+			image: string;
+			meal: string;
+		};
+		expect(sent.image.startsWith('data:image/jpeg;base64,')).toBe(true);
+		expect(sent.meal).toBe('breakfast');
+	});
+
+	it('says so when the model recognised no food, and keeps the picture on screen', async () => {
+		serverAnswers(200, { items: [] });
+		const onfoods = vi.fn();
+		await render(PhotoCapture, { props: { ...props, ontype: vi.fn(), onfoods } });
+		await shoot();
+		await readButton().click();
+		await expect
+			.element(page.getByText(/Couldn’t recognise any food in that photo/))
+			.toBeInTheDocument();
+		await expect.element(page.getByAltText('What the camera just saw')).toBeInTheDocument();
+		expect(onfoods).not.toHaveBeenCalled();
+	});
+
+	it('says photo logging is off right now when the server cannot read it', async () => {
+		serverAnswers(503, { error: { code: 'photo-unavailable' } });
+		await camera();
+		await shoot();
+		await readButton().click();
+		await expect
+			.element(page.getByText(/Photo logging isn’t available right now/))
+			.toBeInTheDocument();
+	});
+
+	it('says the day’s photos are spent when the allowance runs out', async () => {
+		serverAnswers(429, { error: { code: 'too-many-attempts' } });
+		await camera();
+		await shoot();
+		await readButton().click();
+		await expect
+			.element(page.getByText(/all the photos this app can read today/))
+			.toBeInTheDocument();
+	});
+
+	it('names the session when reading needs one', async () => {
+		serverAnswers(401, { error: { code: 'unauthenticated' } });
+		await camera();
+		await shoot();
+		await readButton().click();
+		await expect.element(page.getByText(/needs you to be signed in/)).toBeInTheDocument();
+	});
+
+	it('says the photo could not be sent when nothing answered', async () => {
+		vi.spyOn(globalThis, 'fetch').mockImplementation(() =>
+			Promise.reject(new TypeError('Failed to fetch'))
+		);
+		await camera();
+		await shoot();
+		await readButton().click();
+		await expect.element(page.getByText(/photo couldn’t be sent/)).toBeInTheDocument();
+	});
+
+	it('says it is reading while the still is with the server', async () => {
+		vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => undefined));
+		await camera();
+		await shoot();
+		await readButton().click();
+		await expect.element(page.getByRole('button', { name: 'Reading the plate…' })).toBeDisabled();
+	});
+
+	it('clears the last refusal when the picture is retaken', async () => {
+		serverAnswers(503, { error: { code: 'photo-unavailable' } });
+		await camera();
+		await shoot();
+		await readButton().click();
+		await expect
+			.element(page.getByText(/Photo logging isn’t available right now/))
+			.toBeInTheDocument();
+		await page.getByRole('button', { name: 'Retake' }).click();
+		expect(document.body.textContent).not.toContain('Photo logging isn’t available');
 	});
 });
