@@ -45,6 +45,15 @@ client code changed, and `Closes #n` when the slice finishes the issue.
 If the problem turns out to need a product decision or a paid service, stop and say so;
 that is Gabriel's call, not yours.
 
+**Paying down mutation debt.** When your brief is the daily debt routine (QUALITY.md,
+"Paying down mutation debt"): run `bun run debt:pay`, take the three worst files it names,
+and kill their surviving mutants with tests that assert behavior a person cares about — never
+a suppression, never a threshold change, never written backwards from the mutant description
+just to kill it while testing nothing real. Run the mutation lane that owns whichever files
+you touched and paste its per-file verdict. Open one pull request whose body carries a
+per-file before/after table; put any equivalent-mutant call in that body for Gabriel to
+decide, since you never edit `quality/mutation-equivalents.json` yourself.
+
 Report in under 300 words, evidence never cut for brevity: cause, change, files, test added,
 gate result from `reports/quality/gate-<tier>.json` with its per-file mutation verdict, and
 open questions.

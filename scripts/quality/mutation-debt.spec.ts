@@ -151,6 +151,113 @@ describe('scheduled mutation debt report', () => {
 		expect(lines.join('\n')).not.toContain('Killed');
 	});
 
+	it('reports debt for a lane that passes its own threshold but still has survivors (#87 option 1)', async () => {
+		const report = await collectMutationDebt(
+			'reports/mutation',
+			['full'],
+			reader({
+				'full/verdict.json': {
+					ok: true,
+					killedScore: 96.68,
+					mutationScore: 96.68,
+					survived: 131,
+					timeout: 7,
+					noCoverage: 5,
+					failures: []
+				},
+				'full/mutation.json': strykerReport(2)
+			})
+		);
+
+		expect(report.debt).toBe(true);
+		expect(report.survivorCount).toBe(143);
+		expect(report.body).toContain('Passes its own threshold');
+		expect(report.warnings).toEqual([
+			'full reported 143 surviving mutant(s) despite passing its own threshold'
+		]);
+	});
+
+	it('states the old aggregate-only rule and the new every-survivor rule in the header', async () => {
+		const report = await collectMutationDebt('reports/mutation', ['changed-client'], reader({}));
+
+		expect(report.body).toContain('Old rule:');
+		expect(report.body).toContain('New rule (2026-09-05, #87):');
+	});
+
+	it('sums survivors across lanes and flags a crash separately from survivor debt', async () => {
+		const report = await collectMutationDebt(
+			'reports/mutation',
+			['changed-node', 'full'],
+			reader({
+				'changed-node/verdict.json': failingVerdict,
+				'changed-node/mutation.json': strykerReport(2),
+				'full/crash.json': {
+					missingArtifact: 'reports/mutation/full/mutation.json',
+					strykerExitCode: 1,
+					error: 'vitest failed to start'
+				}
+			})
+		);
+
+		expect(report.crashed).toBe(true);
+		expect(report.survivorCount).toBe(3);
+	});
+
+	it('lists files with survivors worst-first and describes mutants for the worst files', async () => {
+		const source = 'const total = a + b;\nconst other = 1;\nconst third = 1;\n';
+		const report = await collectMutationDebt(
+			'reports/mutation',
+			['changed-node'],
+			reader({
+				'changed-node/verdict.json': failingVerdict,
+				'changed-node/mutation.json': {
+					files: {
+						'src/lib/domain/tdee.ts': {
+							source,
+							mutants: [
+								{
+									status: 'Survived',
+									mutatorName: 'ArithmeticOperator',
+									replacement: 'a - b',
+									location: { start: { line: 1, column: 14 }, end: { line: 1, column: 19 } }
+								},
+								{
+									status: 'Survived',
+									mutatorName: 'M',
+									replacement: 'x',
+									location: { start: { line: 2, column: 0 } }
+								},
+								{
+									status: 'Killed',
+									mutatorName: 'M',
+									replacement: 'x',
+									location: { start: { line: 3, column: 0 } }
+								}
+							]
+						},
+						'src/lib/domain/quiet.ts': {
+							source: 'const x = 1;\n',
+							mutants: [
+								{
+									status: 'NoCoverage',
+									mutatorName: 'M',
+									replacement: '2',
+									location: { start: { line: 1, column: 10 } }
+								}
+							]
+						}
+					}
+				}
+			})
+		);
+
+		expect(report.body).toContain('Files with survivors, worst first:');
+		expect(report.body.indexOf('src/lib/domain/tdee.ts')).toBeLessThan(
+			report.body.indexOf('src/lib/domain/quiet.ts')
+		);
+		expect(report.body).toContain('ArithmeticOperator line 1: a + b → a - b');
+	});
+
 	it('derives every scheduled lane directory from the tier itself', () => {
 		expect(tiers.audit.map(laneOf)).toEqual(['changed-node', 'changed-client', 'full']);
 	});

@@ -25,6 +25,14 @@ on:
   schedule:
     - cron: '41 4 * * *'
   workflow_dispatch:
+    inputs:
+      refresh_ledger_only:
+        description: >-
+          Skip the mutation lanes and just refresh the ledger issue from the
+          most recent successful run's artifacts (for an on-demand nudge, not
+          a fresh measurement).
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,6 +49,7 @@ jobs:
     permissions:
       contents: read
       issues: write
+      actions: read
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,13 +77,37 @@ jobs:
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
 
+      # A manual dispatch may ask to skip straight to refreshing the ledger
+      # issue from the last successful run's evidence instead of paying for a
+      # fresh measurement. A scheduled run never sets this input, so the
+      # comparison below is false there and every lane still runs.
+      - name: Download the latest audit artifacts
+        if: github.event.inputs.refresh_ledger_only == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id="$(gh run list --workflow mutation-audit.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          if [[ -z "$run_id" ]]; then
+            echo "::error::No successful mutation-audit.yml run found to refresh the ledger from."
+            exit 1
+          fi
+          artifact_name="$(gh api "repos/${{ github.repository }}/actions/runs/$run_id/artifacts" --jq '.artifacts[0].name')"
+          if [[ -z "$artifact_name" ]]; then
+            echo "::error::Run $run_id has no mutation-evidence artifact to download."
+            exit 1
+          fi
+          gh run download "$run_id" -n "$artifact_name" -D reports/mutation
+
       - name: Restore Playwright browser cache
+        if: github.event.inputs.refresh_ledger_only != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-chromium-${{ hashFiles('bun.lock') }}
 
       - name: Install Chromium
+        if: github.event.inputs.refresh_ledger_only != 'true'
         run: bunx playwright install --with-deps chromium
 
       # "Changed" is defined against a diff, and a scheduled run on `main` has no
@@ -92,6 +125,7 @@ jobs:
       # and fails here.
       - name: Resolve the changed-lane base
         id: base
+        if: github.event.inputs.refresh_ledger_only != 'true'
         run: |
           set -euo pipefail
           window='24 hours ago'
@@ -111,14 +145,14 @@ jobs:
           fi
 
       - name: Run the changed Node lane over the last day
-        if: steps.base.outputs.changed == 'true'
+        if: steps.base.outputs.changed == 'true' && github.event.inputs.refresh_ledger_only != 'true'
         continue-on-error: true
         env:
           MUTATION_BASE: ${{ steps.base.outputs.base }}
         run: bun run test:mutation:changed:node
 
       - name: Run the changed client lane over the last day
-        if: steps.base.outputs.changed == 'true'
+        if: steps.base.outputs.changed == 'true' && github.event.inputs.refresh_ledger_only != 'true'
         continue-on-error: true
         env:
           MUTATION_BASE: ${{ steps.base.outputs.base }}
@@ -127,7 +161,7 @@ jobs:
       # Always cold. No cache is restored for it, so the daily answer is a fresh
       # measurement of the whole tree rather than an increment on top of one.
       - name: Run the forced-cold full audit
-        if: '!cancelled()'
+        if: "!cancelled() && github.event.inputs.refresh_ledger_only != 'true'"
         continue-on-error: true
         run: bun run test:mutation:full -- --force-cold
 
@@ -141,7 +175,7 @@ jobs:
         run: bun run report:mutation-debt
 
       - name: Upload full mutation evidence
-        if: always()
+        if: always() && github.event.inputs.refresh_ledger_only != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: scheduled-mutation-${{ github.run_id }}-${{ github.run_attempt }}
@@ -149,20 +183,57 @@ jobs:
           retention-days: 14
           path: reports/mutation/
 
-      # The only way this debt reaches a person. One issue per marker, commented
-      # on rather than reopened, so a lane that stays red for a week does not
-      # file seven issues. The body is the report the step above wrote, survivor
-      # list included, so the issue is actionable without opening the artifacts.
-      - name: Raise an issue when a lane reports mutation debt
-        if: steps.debt.outputs.debt == 'true'
+      # Issue #87, option 1: every survivor is debt, and the daily audit routine
+      # needs one living place to read it rather than a growing pile of issues.
+      # This edits a single issue's body to the fresh report each day -- never
+      # comments -- and only closes it once the report shows zero survivors of
+      # any kind. It opens the issue the first time there is something to say;
+      # a ledger with nothing owed does not need to exist yet.
+      - name: Update the mutation debt ledger issue
+        if: '!cancelled()'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { readFileSync } = require('node:fs');
-            const marker = '<!-- scheduled-mutation-audit -->';
+            const marker = '<!-- mutation-debt-ledger -->';
             const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const report = readFileSync('reports/mutation/debt.md', 'utf8');
-            const body = `${marker}\n${report}\n\nMeasured on \`${context.sha}\`; full Stryker reports are attached to ${run}. These lanes report, they do not gate, so nothing is blocked and nothing else will tell you. Kill the surviving mutants or record a reviewed exception in \`quality/mutation-equivalents.json\`. Do not lower a threshold: that would make this report understate the debt.`;
+            const survivors = Number('${{ steps.debt.outputs.survivors }}' || '0');
+            const body = `${marker}\n${report}\n\nMeasured on \`${context.sha}\`; full Stryker reports are attached to ${run}. These lanes report, they do not gate, so nothing is blocked and nothing else will tell you. Kill the surviving mutants or record a reviewed exception in \`quality/mutation-equivalents.json\` (an agent proposes, Gabriel approves). Do not lower a threshold: that would make this report understate the debt.`;
+            const { owner, repo } = context.repo;
+            const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, state: 'all', labels: 'mutation-debt' });
+            const previous = issues.find((issue) => issue.body?.includes(marker));
+            const desiredState = survivors === 0 ? 'closed' : 'open';
+
+            if (previous) {
+              const changes = { body };
+              if (previous.state !== desiredState) changes.state = desiredState;
+              await github.rest.issues.update({ owner, repo, issue_number: previous.number, ...changes });
+            } else if (survivors > 0) {
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title: 'Mutation debt ledger',
+                body,
+                labels: ['quality', 'mutation-debt']
+              });
+            }
+
+      # The ledger above only speaks to survivors. A lane that crashed measured
+      # nothing at all, which is a different and rarer failure -- so it keeps
+      # the old per-run behaviour: one issue per marker, commented on rather
+      # than reopened, so a crash that repeats for a week does not file seven
+      # issues.
+      - name: Raise an issue when a lane crashes without a verdict
+        if: steps.debt.outputs.crashed == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { readFileSync } = require('node:fs');
+            const marker = '<!-- scheduled-mutation-audit-crash -->';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const report = readFileSync('reports/mutation/debt.md', 'utf8');
+            const body = `${marker}\n${report}\n\nMeasured on \`${context.sha}\`; full Stryker reports are attached to ${run}. A lane crashed before reaching a verdict, which says nothing about the tree either way -- it is not the same as a surviving mutant, and the run needs a look.`;
             const { owner, repo } = context.repo;
             const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'quality' });
             const previous = issues.find((issue) => issue.body?.includes(marker));
@@ -170,7 +241,7 @@ jobs:
             if (previous) {
               await github.rest.issues.createComment({ owner, repo, issue_number: previous.number, body });
             } else {
-              await github.rest.issues.create({ owner, repo, title: 'Mutation debt from the daily audit', body, labels: ['quality'] });
+              await github.rest.issues.create({ owner, repo, title: 'Mutation lane crashed during the daily audit', body, labels: ['quality'] });
             }
 
   # The gate self-test's `mutation` group moved off the pull-request path on

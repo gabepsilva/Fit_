@@ -233,9 +233,12 @@ pay debt daily." A red daily lane that nobody is waiting on stops being a gate a
 report, so it is written as one: each lane runs under `continue-on-error`, and
 `scripts/quality/mutation-debt.ts` reads every `verdict.json` and `crash.json` afterwards and
 turns them into one Markdown report naming the mutants that were not killed. That report
-becomes warning annotations, the job summary, and — when there is debt — a single
-`quality`-labelled GitHub issue, opened once and commented on thereafter. A lane that
-swallowed its exit code and printed nothing would be worth less than not running it at all.
+becomes warning annotations, the job summary, and, per file below on the debt rule and the
+ledger issue it feeds, a `mutation-debt`-labelled issue that is edited in place rather than
+reopened daily. A lane that crashed rather than reaching a verdict raises a separate,
+`quality`-labelled issue in the older comment-per-run style, because a crash measured
+nothing and is not the same thing as a surviving mutant. A lane that swallowed its exit code
+and printed nothing would be worth less than not running it at all.
 
 **"Changed" on a schedule.** The changed lanes are defined against a diff, and a scheduled
 run on `main` has no base ref. Left alone, `resolveMutationBase` falls through to
@@ -284,3 +287,43 @@ pull request from `Gate self-test (mutation)` (~300s) to the `mobile-safari` end
 shard (~200-235s). Nothing is removed: the group still runs every day regardless of what
 changed, as `scheduled-self-test-mutation` in `mutation-audit.yml`, which is why this PR
 (it touches `.github/workflows/**`) is itself proof the trigger fires when it should.
+
+### Paying down mutation debt
+
+Decided 2026-09-05 (issue #87, option 1, Gabriel's call): **every survivor is debt,
+regardless of aggregate score.** The full lane's own aggregate score can clear 80% while
+carrying well over a hundred surviving, uncovered or timed-out mutants underneath it — that
+was the gap #87 found, and the old debt rule only looked at whether a lane's own verdict had
+failed, so it never noticed. `scripts/quality/mutation-debt.ts` now flags debt the moment
+`Survived + NoCoverage + Timeout` is non-zero for any scheduled lane, whether or not that
+lane's own threshold still passes, and its report ranks files by survivor count within each
+lane, worst first, with full mutant descriptions for the worst three.
+
+That report lives in one GitHub issue, marked `<!-- mutation-debt-ledger -->`, titled
+"Mutation debt ledger", labelled `quality` and `mutation-debt`. Each scheduled run replaces
+its body with the fresh report rather than commenting, so a week of debt reads as one
+current state, not seven stale updates; the issue closes itself once a run reports zero
+survivors and reopens the moment one appears again. A lane that crashes instead of reaching
+a verdict is a different failure — nothing was measured, which is not the same as a
+surviving mutant — and still raises the older comment-per-run `quality`-labelled issue,
+because a crash is worth a longer trail, not a body that gets overwritten.
+
+`bun run debt:pay` (`scripts/quality/debt-pay.ts`) turns the latest evidence into a plan an
+agent can start from: it reads whichever of `reports/mutation/{full,changed-node,changed-client}/mutation.json`
+exist (preferring the full lane, since it already covers everything the changed lanes would
+otherwise double-count), ranks files the same way the ledger does, and writes the three
+worst with every surviving mutant's mutator, line and a one-line original-to-mutated
+snippet to `reports/mutation/debt-plan.md`. Pass `--from-ci` to pull the most recent
+successful scheduled run's artifacts first, for a machine that has not just run
+`test:mutation:full` itself.
+
+**The daily routine.** An agent runs `debt:pay`, takes the three worst files it names, and
+kills their surviving mutants with tests that assert behavior a person cares about — never a
+suppression, never a threshold change. It runs the mutation lane that owns whichever files it
+touched, opens one pull request whose body carries a per-file before/after table, and a
+reviewer checks the new tests are not written backwards from the mutant description to kill
+it while testing nothing real. An equivalent-mutant call goes in that pull request's body for
+Gabriel to decide; the agent never edits `quality/mutation-equivalents.json` itself. The
+`mutation-audit.yml` workflow also accepts a manual `refresh_ledger_only` dispatch input, to
+pull the ledger issue back up to date from the last successful run's artifacts without
+paying for a fresh measurement.
