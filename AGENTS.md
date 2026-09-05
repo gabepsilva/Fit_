@@ -60,15 +60,21 @@ tokens on every wake, and usually has to be taken over. Report a verdict, not a 
 
 ## Worktree isolation
 
-Every agent works in its own git worktree. Create one at the start of the task
-(`git worktree add /tmp/fit-wt-<slug> -b <branch> main`) and work only there. The shared
-checkout at the repo root is not yours; another agent's uncommitted work may be sitting in
-it. Never run `git clean`, `git stash`, `git reset`, `git checkout -- .`, `git checkout
-<branch>`, or `prettier --write .` across a tree you did not create — uncommitted work
-destroyed this way is not recoverable, and that has already happened here. Deploys also run
-from a throwaway worktree, because the deploy script requires a fully clean tree and
-in-flight work must never be an obstacle to shipping or be endangered by it. Remove your
-worktree when the task ends.
+Every agent works in its own git worktree. Create one at the start of the task with
+`bun run worktree:new <slug>` (add `--base <ref>` to branch from something other than
+`origin/main`), which fetches, adds the worktree under `.claude/worktrees/<slug>`, runs
+`bun install --frozen-lockfile` inside it, and prints its absolute path on the last line —
+`scripts/dev/worktree.ts` is the source of truth if a caller needs the plumbing directly.
+Work only there. The shared checkout at the repo root is not yours; another agent's
+uncommitted work may be sitting in it. Never run `git clean`, `git stash`, `git reset`, `git
+checkout -- .`, `git checkout <branch>`, or `prettier --write .` across a tree you did not
+create — uncommitted work destroyed this way is not recoverable, and that has already
+happened here. Deploys also run from a throwaway worktree, because the deploy script
+requires a fully clean tree and in-flight work must never be an obstacle to shipping or be
+endangered by it. Remove your worktree when the task ends: `bun run worktree:done
+<slug-or-path>` refuses if it has uncommitted changes or commits `origin/main` has never
+seen (`--force` overrides both), otherwise removes it and deletes the branch if it is
+merged.
 
 ## Svelte
 
