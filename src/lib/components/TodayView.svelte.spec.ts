@@ -6,7 +6,7 @@ import { logFromFood } from '$lib/domain/log-entry';
 import { emptyProfile } from '$lib/domain/profile';
 import type { LogSource, Meal, Workout } from '$lib/domain/types';
 import { addDaysISO, todayISO, weekdayLong } from '$lib/domain/utils';
-import { dayStripLabel } from '$lib/domain/week-strip';
+import { dayStripAccessibleLabel } from '$lib/domain/week-strip';
 import { logUi } from '$lib/state/log-ui.svelte';
 import { tend } from '$lib/state/tend.svelte';
 import TodayView from './TodayView.svelte';
@@ -195,7 +195,10 @@ describe('TodayView', () => {
 		const yesterday = addDaysISO(todayISO(), -1);
 		await render(TodayView);
 		await page
-			.getByRole('button', { name: `${dayStripLabel(yesterday)} nothing logged`, exact: true })
+			.getByRole('button', {
+				name: dayStripAccessibleLabel(yesterday, 'nothing logged', false),
+				exact: true
+			})
 			.click();
 		await expect
 			.element(page.getByText(weekdayLong(yesterday).toUpperCase(), { exact: false }))
@@ -286,9 +289,11 @@ describe('TodayView', () => {
 			tend.addWeight(80, yesterday);
 			tend.state.workouts.push(finishedWorkout(twoDaysAgo));
 			await render(TodayView);
-			await expect.element(page.getByText('food logged')).toBeInTheDocument();
-			await expect.element(page.getByText('weight logged')).toBeInTheDocument();
-			await expect.element(page.getByText('exercise logged')).toBeInTheDocument();
+			await expect.element(page.getByRole('button', { name: /food logged/ })).toBeInTheDocument();
+			await expect.element(page.getByRole('button', { name: /weight logged/ })).toBeInTheDocument();
+			await expect
+				.element(page.getByRole('button', { name: /exercise logged/ }))
+				.toBeInTheDocument();
 		});
 
 		it('keeps the day log within the first phone-sized viewport', async () => {
