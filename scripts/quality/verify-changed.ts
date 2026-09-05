@@ -8,6 +8,7 @@
  * gate tier does.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -147,6 +148,19 @@ function projectFor(spec: string): 'server' | 'client' {
 	return spec.startsWith('scripts/') || isServerSource(spec) ? 'server' : 'client';
 }
 
+/**
+ * A log filename derived from a possibly diff-sized list of paths (a spec
+ * group, an e2e file list, a mutation lane's changed files) must never embed
+ * that list directly — a large diff can touch dozens of files and blow past
+ * filesystem name limits (`ENAMETOOLONG`, issue #141). Name the log after the
+ * step instead, plus a short stable hash of the list so repeat runs over the
+ * same input land on the same filename.
+ */
+export function logFileName(step: string, items: readonly string[]): string {
+	const hash = createHash('sha1').update(items.join('\n')).digest('hex').slice(0, 8);
+	return `${step.replace(/[/:]/g, '-')}-${hash}`;
+}
+
 function vitestProjectArgs(project: 'server' | 'client', spec: string): string[] {
 	if (project === 'server') return ['--project', 'server'];
 	// A client spec is either DOM-free (client-node) or needs the real browser
@@ -162,7 +176,8 @@ async function runCommand(
 	command: string,
 	args: string[],
 	logDirectory: string,
-	extraEnv: NodeJS.ProcessEnv = {}
+	extraEnv: NodeJS.ProcessEnv = {},
+	logName: string = name
 ): Promise<{
 	ok: boolean;
 	outcome: StepOutcome;
@@ -170,7 +185,7 @@ async function runCommand(
 	durationMs: number;
 	log: string;
 }> {
-	const logPath = path.join(logDirectory, `${name.replace(/[/:]/g, '-')}.log`);
+	const logPath = path.join(logDirectory, `${logName.replace(/[/:]/g, '-')}.log`);
 	const startedAt = Date.now();
 	const { exitCode, output } = await captureStatus(command, args, {
 		env: { ...process.env, ...extraEnv, FORCE_COLOR: '0' }
@@ -296,7 +311,9 @@ async function main(): Promise<void> {
 				name,
 				'bunx',
 				['vitest', 'run', ...projectArgs, ...files],
-				logDirectory
+				logDirectory,
+				{},
+				logFileName('specs', files)
 			);
 			results.push({
 				name,
@@ -315,7 +332,7 @@ async function main(): Promise<void> {
 				: { E2E_PROJECT: 'mobile-chrome' };
 		const name =
 			e2eSteps[0]?.name === 'full suite' ? 'e2e: full suite' : `e2e: ${files.join(', ')}`;
-		const run = await runCommand(name, 'bunx', args, logDirectory, env);
+		const run = await runCommand(name, 'bunx', args, logDirectory, env, logFileName('e2e', files));
 		results.push({ name, command: `bunx ${args.join(' ')}`, ...run });
 	}
 	for (const step of resolvedPlan.steps) {
