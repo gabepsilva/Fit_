@@ -17,6 +17,9 @@ Never suppress a diagnostic, lower a threshold, skip a test, or update a snapsho
 an entry to `quality/mutation-equivalents.json`. Never raise a bundle budget yourself — trim
 if a check is over, or say a raise looks needed and let the brief decide.
 
+When the brief names no tier, run `verify:changed`; run a wider tier only when the brief
+asks.
+
 When asked to run a gate, run the named tier in the foreground — block until it exits in the
 same turn, never leave it going in the background (AGENTS.md, "Never end your turn waiting
 on a gate") — and report from `reports/quality/gate-<tier>.json`: each failing step with its

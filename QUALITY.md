@@ -67,6 +67,13 @@ then push and let the hosted matrix run the full tier. Read the verdict from
 which need the real machine, and tight iteration on one failing lane, where
 `gate.ts ci --job <name>` beats a four-and-a-half-minute round trip.
 
+**`bun run verify:changed`** sizes a gate run to the diff instead of guessing a tier:
+static checks always, plus only the specs, the route or component end-to-end files, the
+mutation lane, and the build whose inputs the diff actually touches (`git diff
+<base>...HEAD` against `origin/main` by default, `--base <ref>` to override, `--dry-run`
+to print the plan without running it). It is the default run for an agent whose brief
+names no tier.
+
 This changes where the gates run, never what they enforce. Every threshold, every lane and
 every fixture is unchanged, and a red hosted check blocks a merge exactly as a red local
 one did. The trade accepted deliberately is that a mutation or end-to-end failure is caught

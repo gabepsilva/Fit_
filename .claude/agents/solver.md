@@ -18,6 +18,9 @@ agent's uncommitted work, and destructive git commands there are unrecoverable (
 the reading and editing through Bash instead — `cat`, `sed`, heredocs — rather than stopping
 to ask.
 
+When the brief names no tier, run `verify:changed`; run a wider tier only when the brief
+asks.
+
 Write the regression test that would have caught the defect, run the gate tier the change
 warrants under `AGENTS.md` working rules, in the foreground — block until it exits, then
 report the result line, never leave it running (AGENTS.md, "Never end your turn waiting on a
