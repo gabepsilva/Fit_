@@ -98,6 +98,56 @@ function standaloneSelfTestGroups(sections: ReadonlyMap<string, string>): Set<st
 	return groups;
 }
 
+interface ConditionalSelfTestJob {
+	name: string;
+	scopeJob: string;
+	scopeOutput: string;
+}
+
+/**
+ * A standalone self-test job whose own `if:` reads another job's output --
+ * `self-test-mutation` reading `needs.self-test-scope.outputs.mutation-needed`
+ * -- so it can report `skipped` for a legitimate reason. `all-green` has to
+ * tell that apart from a `skipped` for any other reason (the scope job
+ * itself failing, say), which the check below proves it does.
+ */
+function conditionalSelfTestJobs(sections: ReadonlyMap<string, string>): ConditionalSelfTestJob[] {
+	const jobs: ConditionalSelfTestJob[] = [];
+	for (const [name, body] of sections) {
+		if (name === 'self-test' || name === 'all-green') continue;
+		if (!/gate\.ts ci --job self-test\b/.test(body)) continue;
+		const conditional = /^ {4}if:.*needs\.([a-z][a-z0-9-]*)\.outputs\.([a-zA-Z0-9_-]+)/m.exec(body);
+		const scopeJob = conditional?.[1];
+		const scopeOutput = conditional?.[2];
+		if (scopeJob !== undefined && scopeOutput !== undefined)
+			jobs.push({ name, scopeJob, scopeOutput });
+	}
+	return jobs;
+}
+
+/**
+ * `all-green` may only accept a conditional self-test job's `skipped` result
+ * when it also reads the same scope output the job's own `if:` reads, next to
+ * the literal word `skipped` -- proof it is comparing the result, not merely
+ * mentioning the job. Anything less would let a `skipped` through for any
+ * reason, including the scope job itself failing.
+ */
+function ungatedConditionalSkips(
+	allGreenBody: string,
+	jobs: readonly ConditionalSelfTestJob[]
+): string[] {
+	return jobs
+		.filter(
+			(job) =>
+				!(
+					allGreenBody.includes(`needs.${job.name}.result`) &&
+					allGreenBody.includes(`needs.${job.scopeJob}.outputs.${job.scopeOutput}`) &&
+					/skipped/.test(allGreenBody)
+				)
+		)
+		.map((job) => job.name);
+}
+
 const expected = Object.keys(ciJobs).sort();
 const workflowJobs = referencedJobs(workflow);
 const makeJobs = referencedJobs(makefile);
@@ -125,6 +175,9 @@ const wronglySetUpGroups = selfTestGroupNames
 		const needed = groupRequirements(fixtures, group);
 		return declared.docker !== needed.docker || declared.browser !== needed.browser;
 	});
+const allGreenJob = workflowSections.get('all-green') ?? '';
+const conditionalJobs = conditionalSelfTestJobs(workflowSections);
+const ungatedSkips = ungatedConditionalSkips(allGreenJob, conditionalJobs);
 const failures = [
 	...(missingWorkflow.length === 0
 		? []
@@ -145,6 +198,11 @@ const failures = [
 		? []
 		: [
 				`Gate self-test matrix declares the wrong setup for: ${wronglySetUpGroups.join(', ')}. Compare scripts/quality/self-test-groups.ts.`
+			]),
+	...(ungatedSkips.length === 0
+		? []
+		: [
+				`all-green does not gate the following conditional self-test jobs' skipped result on their own scope output: ${ungatedSkips.join(', ')}`
 			])
 ];
 

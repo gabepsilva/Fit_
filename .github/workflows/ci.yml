@@ -687,12 +687,42 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every gate to pass
+      # self-test-mutation is the one job allowed to be `skipped`: it is
+      # skipped only when self-test-scope found nothing that could break the
+      # mutation self-test group (mutation-needed == 'false'). A skip for any
+      # other reason -- self-test-scope itself failing, say -- must still fail
+      # the merge gate, so this is checked explicitly against the scope
+      # output rather than by loosening the general loop below for everyone.
+      - name: Require self-test-mutation to have succeeded, or been correctly skipped
         env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+          RESULT: ${{ needs.self-test-mutation.result }}
+          MUTATION_NEEDED: ${{ needs.self-test-scope.outputs.mutation-needed }}
         run: |
-          echo "Gate results: $RESULTS"
-          for result in $RESULTS; do
+          echo "self-test-mutation: $RESULT (self-test-scope mutation-needed=$MUTATION_NEEDED)"
+          if [[ "$RESULT" == "success" ]]; then
+            exit 0
+          fi
+          if [[ "$RESULT" == "skipped" && "$MUTATION_NEEDED" == "false" ]]; then
+            echo "Skipped correctly: self-test-scope found nothing that could break the mutation self-test group."
+            exit 0
+          fi
+          echo "::error::self-test-mutation is $RESULT but self-test-scope reports mutation-needed=$MUTATION_NEEDED; it must succeed, or be skipped only when not needed."
+          exit 1
+
+      - name: Require every other gate to pass
+        env:
+          STATIC: ${{ needs.static.result }}
+          UNIT: ${{ needs.unit.result }}
+          MUTATION: ${{ needs.mutation.result }}
+          BUILD: ${{ needs.build.result }}
+          E2E: ${{ needs.e2e.result }}
+          E2E_REPORT: ${{ needs.e2e-report.result }}
+          SECURITY: ${{ needs.security.result }}
+          SELF_TEST: ${{ needs.self-test.result }}
+          SELF_TEST_SCOPE: ${{ needs.self-test-scope.result }}
+        run: |
+          echo "Gate results: static=$STATIC unit=$UNIT mutation=$MUTATION build=$BUILD e2e=$E2E e2e-report=$E2E_REPORT security=$SECURITY self-test=$SELF_TEST self-test-scope=$SELF_TEST_SCOPE"
+          for result in "$STATIC" "$UNIT" "$MUTATION" "$BUILD" "$E2E" "$E2E_REPORT" "$SECURITY" "$SELF_TEST" "$SELF_TEST_SCOPE"; do
             if [[ "$result" != "success" ]]; then
               echo "::error::A required gate did not succeed."
               exit 1

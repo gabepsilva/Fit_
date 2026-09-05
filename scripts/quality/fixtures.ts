@@ -305,6 +305,42 @@ export const fixtures: GateFixture[] = [
 			)
 	},
 	{
+		// self-test-mutation is allowed to report `skipped`, but only when
+		// self-test-scope says the group was not needed -- otherwise a scope
+		// job that itself failed (or any other cause of a skip) would sail
+		// through all-green disguised as "nothing to run here". This fixture
+		// removes the step that tells those apart and proves the general
+		// `success`-only loop below it is not enough on its own.
+		name: 'ungated-conditional-self-test-skip',
+		gate: 'check:ci-contract',
+		failureIncludes:
+			"all-green does not gate the following conditional self-test jobs' skipped result on their own scope output: self-test-mutation",
+		description: "all-green no longer checks self-test-mutation's skip against its scope output.",
+		apply: (root) =>
+			edit(root, '.github/workflows/ci.yml', (content) =>
+				content.replace(
+					`      - name: Require self-test-mutation to have succeeded, or been correctly skipped
+        env:
+          RESULT: \${{ needs.self-test-mutation.result }}
+          MUTATION_NEEDED: \${{ needs.self-test-scope.outputs.mutation-needed }}
+        run: |
+          echo "self-test-mutation: $RESULT (self-test-scope mutation-needed=$MUTATION_NEEDED)"
+          if [[ "$RESULT" == "success" ]]; then
+            exit 0
+          fi
+          if [[ "$RESULT" == "skipped" && "$MUTATION_NEEDED" == "false" ]]; then
+            echo "Skipped correctly: self-test-scope found nothing that could break the mutation self-test group."
+            exit 0
+          fi
+          echo "::error::self-test-mutation is $RESULT but self-test-scope reports mutation-needed=$MUTATION_NEEDED; it must succeed, or be skipped only when not needed."
+          exit 1
+
+`,
+					''
+				)
+			)
+	},
+	{
 		name: 'oversized-bundle',
 		gate: 'check:bundle',
 		prepare: ['build'],
