@@ -250,7 +250,10 @@ export const fixtures: GateFixture[] = [
 		description: 'A non-blocking scheduled lane reporting on a job failure that cannot happen.',
 		apply: (root) =>
 			edit(root, '.github/workflows/mutation-audit.yml', (content) =>
-				content.replace("if: steps.debt.outputs.debt == 'true'", 'if: failure()')
+				content.replace(
+					"- name: Update the mutation debt ledger issue\n        if: '!cancelled()'",
+					'- name: Update the mutation debt ledger issue\n        if: failure()'
+				)
 			)
 	},
 	{
