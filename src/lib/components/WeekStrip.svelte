@@ -22,6 +22,12 @@
 	const today = todayISO();
 	const days = lastNDates(7, today);
 
+	let todayEl = $state<HTMLButtonElement>();
+
+	$effect(() => {
+		todayEl?.scrollIntoView?.({ inline: 'center', block: 'nearest', behavior: 'instant' });
+	});
+
 	function markClass(isSelected: boolean, has: boolean) {
 		return cn(
 			has
@@ -35,7 +41,9 @@
 	}
 </script>
 
-<div class="flex gap-1">
+<div
+	class="scrollbar-none flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth px-[calc(50%-2rem)]"
+>
 	{#each days as iso (iso)}
 		{@const isSelected = iso === selected}
 		{@const hasFood = food.has(iso)}
@@ -45,29 +53,33 @@
 			pressed={isSelected}
 			onclick={() => (selected = iso)}
 			resting="bg-card text-foreground"
-			class="flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-2xl px-0 transition-colors duration-150"
+			class="relative flex h-16 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg px-2 snap-center transition-colors duration-150"
+			{@attach iso === today &&
+				((el: HTMLButtonElement) => {
+					todayEl = el;
+				})}
 		>
 			<span class={cn('text-xs', isSelected ? 'opacity-80' : 'text-muted-foreground')}>
 				{iso === today ? 'Today' : weekdayShort(iso)}
 			</span>
-			<span class="flex items-center gap-0.5">
+			<span class="flex items-center gap-1.5">
 				<Utensils
 					aria-hidden="true"
-					size={14}
+					size={16}
 					stroke-width={2.25}
-					class={cn('size-3.5 shrink-0', markClass(isSelected, hasFood))}
+					class={cn('size-4 shrink-0', markClass(isSelected, hasFood))}
 				/>
 				<Dumbbell
 					aria-hidden="true"
-					size={14}
+					size={16}
 					stroke-width={2.25}
-					class={cn('size-3.5 shrink-0', markClass(isSelected, hasExercise))}
+					class={cn('size-4 shrink-0', markClass(isSelected, hasExercise))}
 				/>
 				<Weight
 					aria-hidden="true"
-					size={14}
+					size={16}
 					stroke-width={2.25}
-					class={cn('size-3.5 shrink-0', markClass(isSelected, hasWeight))}
+					class={cn('size-4 shrink-0', markClass(isSelected, hasWeight))}
 				/>
 			</span>
 			<span class="sr-only">{loggedMarksText(hasFood, hasExercise, hasWeight)}</span>
