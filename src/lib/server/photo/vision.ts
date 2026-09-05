@@ -195,7 +195,7 @@ function itemOf(value: unknown): PlateItem | null {
 /** The parsed text, or `null` for text that is not JSON. */
 function parsedJson(text: string): unknown {
 	try {
-		return JSON.parse(text);
+		return JSON.parse(text) as unknown;
 	} catch {
 		return null;
 	}
@@ -211,7 +211,8 @@ function parsedJson(text: string): unknown {
  */
 export function itemsFrom(body: Record<string, unknown>): PlateItem[] {
 	const choices = body['choices'];
-	const first = Array.isArray(choices) ? choices[0] : null;
+	// `unknown`, because `Array.isArray` narrows an `unknown` to `any[]`.
+	const first: unknown = Array.isArray(choices) ? choices[0] : null;
 	const content = fieldsOf(fieldsOf(first)['message'])['content'];
 	// `JSON.parse` coerces its argument, so an array holding the answer's text
 	// would parse into real items no model sent. Only text is read.
