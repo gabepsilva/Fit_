@@ -150,4 +150,100 @@ describe('WeekStrip', () => {
 		);
 		expect(document.activeElement).toBe(buttons[todayIndex + 1]);
 	});
+
+	it('moves focus to the previous pill on ArrowLeft', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const buttons = Array.from(document.querySelectorAll('button'));
+		const todayIndex = buttons.indexOf(
+			page.getByRole('button', { name: /^Today/ }).element() as HTMLButtonElement
+		);
+		const todayButton = buttons[todayIndex];
+		expect(todayButton).toBeDefined();
+		todayButton?.focus();
+		todayButton?.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true })
+		);
+		expect(document.activeElement).toBe(buttons[todayIndex - 1]);
+	});
+
+	it('keeps focus on the first pill when ArrowLeft is pressed there', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const buttons = Array.from(document.querySelectorAll('button'));
+		const firstButton = buttons[0];
+		expect(firstButton).toBeDefined();
+		firstButton?.focus();
+		firstButton?.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true })
+		);
+		expect(document.activeElement).toBe(firstButton);
+	});
+
+	it('keeps focus on the last pill when ArrowRight is pressed there', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const buttons = Array.from(document.querySelectorAll('button'));
+		const lastButton = buttons[buttons.length - 1];
+		expect(lastButton).toBeDefined();
+		lastButton?.focus();
+		lastButton?.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true })
+		);
+		expect(document.activeElement).toBe(lastButton);
+	});
+
+	it('moves focus to the first pill on Home', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const buttons = Array.from(document.querySelectorAll('button'));
+		const todayButton =
+			buttons[
+				buttons.indexOf(page.getByRole('button', { name: /^Today/ }).element() as HTMLButtonElement)
+			];
+		expect(todayButton).toBeDefined();
+		todayButton?.focus();
+		todayButton?.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true })
+		);
+		expect(document.activeElement).toBe(buttons[0]);
+	});
+
+	it('moves focus to the last pill on End', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const buttons = Array.from(document.querySelectorAll('button'));
+		const todayButton =
+			buttons[
+				buttons.indexOf(page.getByRole('button', { name: /^Today/ }).element() as HTMLButtonElement)
+			];
+		expect(todayButton).toBeDefined();
+		todayButton?.focus();
+		todayButton?.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true })
+		);
+		expect(document.activeElement).toBe(buttons[buttons.length - 1]);
+	});
+
+	it('ignores an unrelated key and leaves focus where it was', async () => {
+		await render(WeekStrip, {
+			props: { food: empty(), exercise: empty(), weight: empty(), selected: todayISO() }
+		});
+		const buttons = Array.from(document.querySelectorAll('button'));
+		const todayButton =
+			buttons[
+				buttons.indexOf(page.getByRole('button', { name: /^Today/ }).element() as HTMLButtonElement)
+			];
+		expect(todayButton).toBeDefined();
+		todayButton?.focus();
+		todayButton?.dispatchEvent(
+			new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true })
+		);
+		expect(document.activeElement).toBe(todayButton);
+	});
 });

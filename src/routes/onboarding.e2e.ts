@@ -100,6 +100,11 @@ test.describe('once onboarded', () => {
 	});
 
 	test('has no detectable accessibility violations with the menu open', async ({ page }) => {
+		// The sample journal seeded in beforeEach triggers a sync save, and
+		// SyncStatusBadge fades its "Saving..." status in and out over 150ms.
+		// A scan mid-fade can catch its text at a partially transparent, low
+		// contrast opacity rather than its resting color, so settle it first.
+		await expect(page.getByRole('status')).toHaveText('');
 		await page.getByRole('button', { name: 'Open menu' }).click();
 		await expect(page.getByRole('dialog')).toBeVisible();
 		const results = await new AxeBuilder({ page })
