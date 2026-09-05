@@ -45,7 +45,7 @@ function failing(name: string) {
 	});
 }
 
-const shutter = () => page.getByRole('button', { name: 'Take the picture' });
+const shutter = () => page.getByRole('button', { name: 'Take photo' });
 const readButton = () => page.getByRole('button', { name: 'Read this plate' });
 
 /** One row of `/api/meals/photo`'s answer, for a food the catalog could not match. */
@@ -124,6 +124,52 @@ describe('PhotoCapture, pointed at the camera', () => {
 		openable();
 		await camera();
 		await expect.element(shutter(), FRAME).toBeEnabled();
+	});
+
+	it('disables the shutter before the stream reports a size', async () => {
+		openable();
+		await camera();
+		await expect.element(page.getByLabelText('Camera viewfinder')).toBeInTheDocument();
+		await expect.element(shutter()).toBeDisabled();
+	});
+
+	it('marks the shutter busy until the stream reports a size', async () => {
+		openable();
+		await camera();
+		await expect.element(page.getByLabelText('Camera viewfinder')).toBeInTheDocument();
+		expect(
+			document.querySelector('button[aria-label="Take photo"]')?.getAttribute('aria-busy')
+		).toBe('true');
+		await expect.element(shutter(), FRAME).toBeEnabled();
+		expect(
+			document.querySelector('button[aria-label="Take photo"]')?.getAttribute('aria-busy')
+		).toBe('false');
+	});
+
+	it('says the camera is waking up until the stream reports a size, then stops', async () => {
+		openable();
+		await camera();
+		await expect.element(page.getByText('Waking the camera…')).toBeInTheDocument();
+		await expect.element(shutter(), FRAME).toBeEnabled();
+		expect(document.body.textContent).not.toContain('Waking the camera…');
+	});
+
+	it('is the only capture control below the preview', async () => {
+		openable();
+		await camera();
+		await expect.element(shutter(), FRAME).toBeEnabled();
+		expect(page.getByRole('button', { name: 'Take the picture' }).query()).toBeNull();
+	});
+
+	it('renders as a sibling of the video inside the preview wrapper', async () => {
+		openable();
+		await camera();
+		await expect.element(shutter(), FRAME).toBeEnabled();
+		const video = document.querySelector('video[aria-label="Camera viewfinder"]');
+		const button = document.querySelector('button[aria-label="Take photo"]');
+		expect(video).not.toBeNull();
+		expect(button).not.toBeNull();
+		expect(button?.parentElement).toBe(video?.parentElement);
 	});
 
 	it('shows what the camera saw after the shutter', async () => {
