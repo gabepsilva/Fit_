@@ -1,0 +1,57 @@
+{
+	"when": "2026-09-05T07:05:13.866Z",
+	"bundle": {
+		"javascriptBytes": 428139,
+		"cssBytes": 50680,
+		"largestAsset": {
+			"bytes": 76871,
+			"file": "nodes/0.D1wYjPrv.js"
+		}
+	},
+	"phonePaint": {
+		"routes": [
+			{
+				"route": "/today",
+				"domContentLoadedMs": 15.799999997019768,
+				"lcpMs": 15.899999991059303,
+				"transferredBytes": 870
+			},
+			{
+				"route": "/journal",
+				"domContentLoadedMs": 15.299999997019768,
+				"lcpMs": 15.399999991059303,
+				"transferredBytes": 870
+			},
+			{
+				"route": "/progress",
+				"domContentLoadedMs": 31.899999991059303,
+				"lcpMs": 32.70000000298023,
+				"transferredBytes": 8166
+			},
+			{
+				"route": "/plan",
+				"domContentLoadedMs": 30.200000002980232,
+				"lcpMs": 30.799999997019768,
+				"transferredBytes": 7926
+			},
+			{
+				"route": "/you",
+				"domContentLoadedMs": 33,
+				"lcpMs": 33.6000000089407,
+				"transferredBytes": 7645
+			}
+		],
+		"logSheetOpenMs": 99,
+		"catalogSearchMs": null,
+		"catalogSearchSkipReason": "no catalog file at data/db/fit-food-core.sqlite — the catalog is not in the repository or in CI"
+	},
+	"serverLatency": {
+		"rows": null,
+		"skipReason": "no catalog file at data/db/fit-food-core.sqlite — /api/foods and /api/foods/barcode need one"
+	},
+	"sqlPlans": {
+		"catalogSource": "fixture",
+		"statementCount": 21,
+		"unresolvedCount": 2
+	}
+}

@@ -91,6 +91,7 @@
 		"nologin",
 		"nosniff",
 		"nosuid",
+		"notused",
 		"nums",
 		"NXDOMAIN",
 		"Oatly",
