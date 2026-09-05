@@ -113,8 +113,11 @@ async function sampleCatalogSearch(
 	// paid that cost once; timing a search this run has already asked once
 	// before is what makes the sample below the client's own round trip
 	// rather than a replay of the server's cold start.
+	const warmUpResponse = page.waitForResponse((candidate) =>
+		candidate.url().includes('/api/foods?')
+	);
 	await box.fill('milk');
-	await page.waitForResponse((candidate) => candidate.url().includes('/api/foods?'));
+	await warmUpResponse;
 	await box.fill('');
 	const started = Date.now();
 	const response = page.waitForResponse((candidate) => candidate.url().includes('/api/foods?'));
