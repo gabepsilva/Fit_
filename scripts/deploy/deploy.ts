@@ -22,6 +22,7 @@ import {
 	UNIT_FILE
 } from './config';
 import { activationScript } from './activation';
+import { assertMainCiGreen } from './main-ci-gate';
 import { currentReleaseVersion } from './release-version';
 import { activateAndPrune, describeActivationFailure } from './rollout';
 import { ASSET_GENERATIONS, pruneReleasesScript, retainAssetsScript } from './retention';
@@ -305,6 +306,11 @@ export async function deploy(argv: string[]): Promise<boolean> {
 	const host = deployHost();
 	const version = pinnedNodeVersion();
 	const release = await releaseCommit();
+	// Before the build and before anything touches the VM: a commit whose own
+	// CI run on main is not green should never become a release. See
+	// `main-ci-gate.ts` for why, and `FIT_DEPLOY_ALLOW_RED_MAIN` for the escape
+	// hatch on the day this check itself is broken.
+	await assertMainCiGreen(release);
 	// Before the build, because the build is what bakes the version in: the tag
 	// for the merge being deployed is usually seconds old and this checkout has
 	// never fetched it. `release-version.ts` has how long it waits and why.
