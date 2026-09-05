@@ -3,6 +3,7 @@ import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import { emptyProfile } from '$lib/domain/profile';
 import { FOOD_BY_BARCODE } from '$lib/domain/foods';
+import { guessMeal } from '$lib/domain/parse-text';
 import { logUi } from '$lib/state/log-ui.svelte';
 import { tend } from '$lib/state/tend.svelte';
 import LogSheet from './LogSheet.svelte';
@@ -63,6 +64,7 @@ beforeEach(() => {
 	localStorage.clear();
 	logUi.open = false;
 	logUi.tab = 'type';
+	logUi.meal = null;
 	vi.restoreAllMocks();
 	onboard();
 });
@@ -259,6 +261,22 @@ describe('LogSheet', () => {
 		const chip = page.getByRole('button', { name: 'dinner' });
 		await expect.element(chip).toHaveClass(/bg-primary/);
 		await expect.element(chip).not.toHaveClass(/bg-foreground/);
+	});
+
+	it('opens with the meal chip named by whoever asked for it', async () => {
+		await render(LogSheet);
+		logUi.show('type', 'snack');
+		await expect
+			.element(page.getByRole('button', { name: 'snack' }))
+			.toHaveAttribute('aria-pressed', 'true');
+	});
+
+	it('falls back to the guessed meal when none was named', async () => {
+		await render(LogSheet);
+		logUi.show();
+		await expect
+			.element(page.getByRole('button', { name: guessMeal() }))
+			.toHaveAttribute('aria-pressed', 'true');
 	});
 
 	it('commits proposals to the log', async () => {

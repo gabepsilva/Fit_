@@ -1,12 +1,21 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { logUi } from './log-ui.svelte';
 
 beforeEach(() => {
 	logUi.open = false;
 	logUi.tab = 'type';
+	logUi.meal = null;
 });
 
 describe('logUi', () => {
+	it('is closed, on the typing tab, with no meal, before anything asks it to open', async () => {
+		vi.resetModules();
+		const fresh = await import('./log-ui.svelte');
+		expect(fresh.logUi.open).toBe(false);
+		expect(fresh.logUi.tab).toBe('type');
+		expect(fresh.logUi.meal).toBeNull();
+	});
+
 	it('starts closed', () => {
 		expect(logUi.open).toBe(false);
 	});
@@ -41,5 +50,27 @@ describe('logUi', () => {
 		logUi.open = false;
 		logUi.show();
 		expect(logUi.tab).toBe('type');
+	});
+
+	it('defaults the meal to null when none is named', () => {
+		logUi.show();
+		expect(logUi.meal).toBeNull();
+	});
+
+	it('defaults the meal to null even when a tab is named', () => {
+		logUi.show('photo');
+		expect(logUi.meal).toBeNull();
+	});
+
+	it('sets the meal alongside the tab when both are named', () => {
+		logUi.show('search', 'lunch');
+		expect(logUi.tab).toBe('search');
+		expect(logUi.meal).toBe('lunch');
+	});
+
+	it('clears a previous meal when show is called again without one', () => {
+		logUi.show('search', 'lunch');
+		logUi.show();
+		expect(logUi.meal).toBeNull();
 	});
 });

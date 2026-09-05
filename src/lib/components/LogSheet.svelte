@@ -68,6 +68,10 @@
 		reset();
 	}
 
+	$effect(() => {
+		if (logUi.open) meal = logUi.meal ?? guessMeal();
+	});
+
 	function propose(food: Food, confidence: number) {
 		proposals = [
 			...proposals,
